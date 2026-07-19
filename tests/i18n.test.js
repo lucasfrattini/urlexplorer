@@ -151,3 +151,60 @@ test('IDIOMAS declara exactamente los diccionarios que existen', () => {
   assert.deepStrictEqual([...i18n.IDIOMAS].sort(), ['en', 'es']);
   assert.strictEqual(i18n.IDIOMA_POR_DEFECTO, 'en');
 });
+
+test('las claves de los presets de extension existen en los diccionarios', async () => {
+  const { PRESETS_EXTENSION } = await import(
+    pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'views', 'explorerOptions.js')).href
+  );
+
+  for (const preset of PRESETS_EXTENSION) {
+    assert.ok(preset.etiquetaKey in es, `falta ${preset.etiquetaKey} en es`);
+    assert.ok(preset.etiquetaKey in en, `falta ${preset.etiquetaKey} en en`);
+  }
+});
+
+test('toda clave usada en el frontend existe en los diccionarios', () => {
+  // Barrido del codigo real: es lo que convierte un error tipografico en una
+  // clave —que en pantalla se veria como texto crudo— en un test en rojo.
+  const fs = require('node:fs');
+  const raiz = path.join(__dirname, '..', 'public', 'js');
+
+  const ficheros = [];
+  (function recorrer(dir) {
+    for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+      const completo = path.join(dir, entrada.name);
+      if (entrada.isDirectory()) recorrer(completo);
+      else if (entrada.name.endsWith('.js') && !completo.includes(`${path.sep}i18n${path.sep}`)) {
+        ficheros.push(completo);
+      }
+    }
+  })(raiz);
+
+  const desconocidas = new Set();
+  for (const fichero of ficheros) {
+    const codigo = fs.readFileSync(fichero, 'utf8');
+    // t('clave'), texto(nodo, 'clave'), atributo(nodo, 'attr', 'clave')
+    for (const m of codigo.matchAll(/\bt\(\s*'([\w.]+)'/g)) {
+      if (!(m[1] in es)) desconocidas.add(`${path.basename(fichero)}: ${m[1]}`);
+    }
+    for (const m of codigo.matchAll(/\btexto\([^,]+,\s*'([\w.]+)'/g)) {
+      if (!(m[1] in es)) desconocidas.add(`${path.basename(fichero)}: ${m[1]}`);
+    }
+    for (const m of codigo.matchAll(/\batributo\([^,]+,\s*'[^']+',\s*'([\w.]+)'/g)) {
+      if (!(m[1] in es)) desconocidas.add(`${path.basename(fichero)}: ${m[1]}`);
+    }
+  }
+
+  assert.deepStrictEqual([...desconocidas], [], 'claves usadas que no existen');
+});
+
+test('el HTML estatico solo referencia claves que existen', () => {
+  const fs = require('node:fs');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+
+  const faltan = [];
+  for (const m of html.matchAll(/data-i18n="([\w.]+)"/g)) {
+    if (!(m[1] in es)) faltan.push(m[1]);
+  }
+  assert.deepStrictEqual(faltan, []);
+});

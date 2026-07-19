@@ -1,6 +1,7 @@
 /** Cliente de la API de URL Explorer. */
 
 import { getAdminToken } from './admin.js';
+import { t } from './i18n/index.js';
 
 const BASE = '/api';
 
@@ -24,7 +25,7 @@ async function request(path, options = {}) {
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
   } catch (error) {
-    throw new ApiError(`No se pudo contactar con el servidor: ${error.message}`, 'NETWORK', 0);
+    throw new ApiError(t('api.sinConexion', { mensaje: error.message }), 'NETWORK', 0);
   }
 
   let payload = null;
@@ -36,7 +37,7 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     throw new ApiError(
-      payload?.error || `Error ${response.status}`,
+      payload?.error || t('api.errorHttp', { status: response.status }),
       payload?.code || 'HTTP_ERROR',
       response.status
     );
@@ -127,7 +128,7 @@ export function openScrapeStream(params, handlers = {}) {
     source.close();
     handlers.onEvent?.({
       type: 'error',
-      message: 'Se perdió la conexión con el servidor durante la búsqueda.',
+      message: t('api.sseCaida'),
       code: 'STREAM_DISCONNECTED',
     });
   };

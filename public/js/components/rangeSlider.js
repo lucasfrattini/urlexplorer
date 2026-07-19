@@ -1,4 +1,5 @@
 import { el } from '../dom.js';
+import { t, alCambiarIdioma } from '../i18n/index.js';
 
 /**
  * Filtro de rango con dos manijas, sin dependencias.
@@ -46,11 +47,11 @@ export function formatBytes(bytes) {
 
 /**
  * @param {object} opciones
- * @param {string} opciones.label      Título del filtro
+ * @param {string} opciones.labelKey   Clave del título del filtro
  * @param {(v:number)=>string} opciones.format  Cómo se lee un valor
  * @param {()=>void} opciones.onChange Se llama en cada movimiento
  */
-export function createRangeFilter({ label, format, onChange }) {
+export function createRangeFilter({ labelKey, format, onChange }) {
   /** Valores únicos ordenados presentes en los resultados. */
   let valores = [];
   let loIndex = 0;
@@ -64,7 +65,6 @@ export function createRangeFilter({ label, format, onChange }) {
       max: '0',
       value: '0',
       step: '1',
-      'aria-label': `${label}, mínimo`,
     },
     on: {
       input: () => {
@@ -84,7 +84,6 @@ export function createRangeFilter({ label, format, onChange }) {
       max: '0',
       value: '0',
       step: '1',
-      'aria-label': `${label}, máximo`,
     },
     on: {
       input: () => {
@@ -96,6 +95,7 @@ export function createRangeFilter({ label, format, onChange }) {
   });
 
   const salida = el('span', { className: 'range__value', text: '—' });
+  const etiqueta = el('span', { className: 'range__label' });
   const relleno = el('span', { className: 'range__fill' });
 
   const pista = el('span', {
@@ -108,16 +108,25 @@ export function createRangeFilter({ label, format, onChange }) {
     children: [
       el('div', {
         className: 'range__head',
-        children: [el('span', { className: 'range__label', text: label }), salida],
+        children: [etiqueta, salida],
       }),
       el('div', { className: 'range__body', children: [pista, lo, hi] }),
     ],
   });
 
+  // El titulo entra en las dos aria-label, asi que las tres se rehacen
+  // juntas al cambiar de idioma.
+  alCambiarIdioma(() => {
+    etiqueta.textContent = t(labelKey);
+    lo.setAttribute('aria-label', t('rango.minimo', { label: t(labelKey) }));
+    hi.setAttribute('aria-label', t('rango.maximo', { label: t(labelKey) }));
+    sync(false);
+  });
+
   /** Refresca el texto, la barra coloreada y avisa a quien filtra. */
   function sync(notificar = true) {
     if (valores.length === 0) {
-      salida.textContent = 'sin datos';
+      salida.textContent = t('rango.sinDatos');
       relleno.style.left = '0%';
       relleno.style.right = '0%';
       if (notificar) onChange?.();

@@ -1,3 +1,5 @@
+import { t, atributo } from './i18n/index.js';
+
 /**
  * Helpers de DOM.
  *
@@ -175,21 +177,25 @@ export async function copyToClipboard(text) {
  * `aria-label` y `title`: un botón sin texto accesible no lo anuncia ningún
  * lector de pantalla.
  */
-export function copyIconButton(value, { label = 'Copiar esta URL' } = {}) {
-  return el('button', {
+export function copyIconButton(value, { labelKey = 'copiar.estaUrl' } = {}) {
+  const boton = el('button', {
     className: 'button button--secondary button--icon',
     text: '⧉',
-    attrs: { type: 'button', 'aria-label': label, title: label },
+    attrs: { type: 'button' },
     on: {
       click: async clickEvent => {
         // La fila entera puede ser clicable en el futuro; copiar no navega.
         clickEvent.preventDefault();
         clickEvent.stopPropagation();
         const ok = await copyToClipboard(value);
-        toast(ok ? 'URL copiada' : 'No se pudo copiar', ok ? 'success' : 'error');
+        toast(t(ok ? 'copiar.urlCopiada' : 'copiar.fallo'), ok ? 'success' : 'error');
       },
     },
   });
+
+  atributo(boton, 'aria-label', labelKey);
+  atributo(boton, 'title', labelKey);
+  return boton;
 }
 
 /** Descarga un texto como fichero, sin pasar por el servidor. */

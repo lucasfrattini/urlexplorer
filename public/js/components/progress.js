@@ -1,4 +1,5 @@
 import { el, clear } from '../dom.js';
+import { t, tp, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
 /**
  * Panel de progreso del crawl.
@@ -8,8 +9,22 @@ import { el, clear } from '../dom.js';
  * cuando se conoce el total, y una consola con los hallazgos según aparecen.
  */
 export function createProgressPanel() {
-  const phase1Detail = el('p', { className: 'phase__detail', text: 'En espera' });
-  const phase2Detail = el('p', { className: 'phase__detail', text: 'En espera' });
+  const phase1Detail = el('p', { className: 'phase__detail' });
+  const phase2Detail = el('p', { className: 'phase__detail' });
+
+  /**
+   * El detalle de cada fase se guarda en CLAVE + params, no como texto ya
+   * escrito: es lo unico que permite repintarlo si cambian el idioma con una
+   * exploracion a medias. Guardar la frase dejaria el progreso congelado en
+   * el idioma anterior mientras sigue avanzando.
+   */
+  const detalle = new Map();
+
+  function ponerDetalle(nodo, clave, params) {
+    if (clave === undefined) return;
+    detalle.set(nodo, clave === null ? null : { clave, params });
+    nodo.textContent = clave === null ? '' : t(clave, params);
+  }
 
   const phase1 = el('div', {
     className: 'phase',
@@ -17,7 +32,7 @@ export function createProgressPanel() {
     children: [
       el('div', {
         className: 'phase__label',
-        children: [el('span', { text: '1 · Recorrer páginas' })],
+        children: [texto(el('span', {}), 'progreso.fase1')],
       }),
       phase1Detail,
     ],
@@ -29,7 +44,7 @@ export function createProgressPanel() {
     children: [
       el('div', {
         className: 'phase__label',
-        children: [el('span', { text: '2 · Buscar ficheros' })],
+        children: [texto(el('span', {}), 'progreso.fase2')],
       }),
       phase2Detail,
     ],
@@ -41,15 +56,18 @@ export function createProgressPanel() {
 
   const feed = el('div', {
     className: 'live-feed',
-    attrs: { 'aria-live': 'polite', 'aria-label': 'Ficheros encontrados' },
+    attrs: { 'aria-live': 'polite' },
   });
+  atributo(feed, 'aria-label', 'progreso.ficherosAria');
   feed.hidden = true;
 
-  const cancelButton = el('button', {
-    className: 'button button--secondary button--small',
-    text: 'Cancelar',
-    attrs: { type: 'button' },
-  });
+  const cancelButton = texto(
+    el('button', {
+      className: 'button button--secondary button--small',
+      attrs: { type: 'button' },
+    }),
+    'progreso.cancelar'
+  );
 
   const summary = el('p', { className: 'field__hint', text: '' });
 
@@ -67,10 +85,12 @@ export function createProgressPanel() {
   });
 
   let feedCount = 0;
+  /** Clave del resumen del pie, para repintarlo al cambiar de idioma. */
+  let resumenClave = null;
 
-  function setPhase(node, detailNode, state, detail) {
+  function setPhase(node, detailNode, state, clave, params) {
     node.setAttribute('data-state', state);
-    if (detail !== undefined) detailNode.textContent = detail;
+    ponerDetalle(detailNode, clave, params);
 
     const label = node.querySelector('.phase__label');
     const existingSpinner = label.querySelector('.spinner');
@@ -91,6 +111,14 @@ export function createProgressPanel() {
     barFill.style.width = `${Math.min(100, Math.max(0, ratio * 100)).toFixed(1)}%`;
   }
 
+  alCambiarIdioma(() => {
+    for (const [nodo, guardado] of detalle) {
+      if (guardado) nodo.textContent = t(guardado.clave, guardado.params);
+    }
+    if (resumenClave === 'progreso.cancelada') summary.textContent = t(resumenClave);
+    else if (resumenClave) summary.textContent = tp(resumenClave, feedCount);
+  });
+
   return {
     root,
     onCancel(handler) {
@@ -102,47 +130,51 @@ export function createProgressPanel() {
       clear(feed);
       feed.hidden = true;
       cancelButton.disabled = false;
+      resumenClave = null;
       summary.textContent = '';
-      setPhase(phase1, phase1Detail, 'idle', 'En espera');
-      setPhase(phase2, phase2Detail, 'idle', 'En espera');
+      setPhase(phase1, phase1Detail, 'idle', 'progreso.enEspera');
+      setPhase(phase2, phase2Detail, 'idle', 'progreso.enEspera');
       setProgress(0);
     },
 
     startPhase1() {
-      setPhase(phase1, phase1Detail, 'active', 'Descargando la primera página…');
+      setPhase(phase1, phase1Detail, 'active', 'progreso.descargando');
       setProgress(null);
     },
 
     updatePhase1({ currentPage, totalPages, linksFound, totalLinks }) {
       const found = totalLinks ?? linksFound ?? 0;
-      setPhase(
-        phase1,
-        phase1Detail,
-        'active',
-        `Página ${currentPage} de ${totalPages} · ${found} enlaces`
-      );
+      setPhase(phase1, phase1Detail, 'active', 'progreso.paginaDe', {
+        actual: currentPage,
+        total: totalPages,
+        enlaces: found,
+      });
       if (totalPages > 0) setProgress(currentPage / totalPages);
     },
 
     completePhase1({ totalLinks, pagesScraped, truncated }) {
-      const suffix = truncated ? ' (tope alcanzado)' : '';
       setPhase(
         phase1,
         phase1Detail,
         'done',
-        `${totalLinks} enlaces en ${pagesScraped} página${pagesScraped === 1 ? '' : 's'}${suffix}`
+        `progreso.resumenFase1.${pagesScraped === 1 ? 'uno' : 'varios'}`,
+        {
+          enlaces: totalLinks,
+          n: pagesScraped,
+          sufijo: truncated ? t('progreso.topeAlcanzado') : '',
+        }
       );
       setProgress(1);
     },
 
     startPhase2({ totalPages }) {
       feed.hidden = false;
-      setPhase(phase2, phase2Detail, 'active', `Analizando ${totalPages} páginas…`);
+      setPhase(phase2, phase2Detail, 'active', 'progreso.analizando', { total: totalPages });
       setProgress(0);
     },
 
     updatePhase2({ current, total, url }) {
-      setPhase(phase2, phase2Detail, 'active', `${current} de ${total} · ${url}`);
+      setPhase(phase2, phase2Detail, 'active', 'progreso.deTotal', { actual: current, total, url });
       if (total > 0) setProgress(current / total);
     },
 
@@ -153,9 +185,8 @@ export function createProgressPanel() {
         feed.append(el('div', { className: 'live-feed__item', text: file }));
       }
       feed.scrollTop = feed.scrollHeight;
-      summary.textContent = `${feedCount} fichero${feedCount === 1 ? '' : 's'} encontrado${
-        feedCount === 1 ? '' : 's'
-      }`;
+      resumenClave = 'progreso.hallados';
+      summary.textContent = tp(resumenClave, feedCount);
     },
 
     finish({ aborted } = {}) {
@@ -167,7 +198,10 @@ export function createProgressPanel() {
       if (phase2.getAttribute('data-state') === 'active') {
         setPhase(phase2, phase2Detail, 'done');
       }
-      if (aborted) summary.textContent = 'Búsqueda cancelada';
+      if (aborted) {
+        resumenClave = 'progreso.cancelada';
+        summary.textContent = t(resumenClave);
+      }
     },
   };
 }

@@ -1,6 +1,7 @@
 import { el, toast, copyToClipboard, show } from '../dom.js';
 import { getAdminProfiles, saveAdminProfiles } from '../api.js';
 import { isUnlocked, onAdminChange } from '../admin.js';
+import { t, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
 /**
  * Barra de configuraciones guardadas.
@@ -70,47 +71,51 @@ export function createProfileBar({ getConfig, applyConfig }) {
 
   const select = el('select', {
     className: 'input',
-    attrs: { 'aria-label': 'Configuraciones guardadas' },
     on: {
       change: () => {
         const profile = profiles.find(item => item.name === select.value);
         if (!profile) return;
         applyConfig(profile.config);
-        toast(`Configuración de "${profile.name}" cargada`);
+        toast(t('perfiles.cargada', { nombre: profile.name }));
         updateButtons();
       },
     },
   });
 
-  const saveButton = el('button', {
-    className: 'button button--secondary button--small',
-    text: 'Guardar',
-    attrs: { type: 'button' },
-    on: { click: () => saveCurrent() },
-  });
+  atributo(select, 'aria-label', 'perfiles.aria');
 
-  const deleteButton = el('button', {
-    className: 'button button--secondary button--small',
-    text: 'Borrar',
-    attrs: { type: 'button' },
-    on: { click: () => deleteCurrent() },
-  });
+  const saveButton = texto(
+    el('button', {
+      className: 'button button--secondary button--small',
+      attrs: { type: 'button' },
+      on: { click: () => saveCurrent() },
+    }),
+    'perfiles.guardar'
+  );
+
+  const deleteButton = texto(
+    el('button', {
+      className: 'button button--secondary button--small',
+      attrs: { type: 'button' },
+      on: { click: () => deleteCurrent() },
+    }),
+    'perfiles.borrar'
+  );
 
   const linkButton = el('button', {
     className: 'button button--secondary button--small',
-    text: 'Copiar enlace',
-    attrs: { type: 'button', title: 'Copia un enlace que abre la app con esta configuración' },
+    attrs: { type: 'button' },
     on: {
       click: async () => {
         const url = configToUrl(getConfig());
         const ok = await copyToClipboard(url);
-        toast(
-          ok ? 'Enlace copiado al portapapeles' : 'No se pudo copiar',
-          ok ? 'success' : 'error'
-        );
+        toast(t(ok ? 'perfiles.enlaceCopiado' : 'copiar.fallo'), ok ? 'success' : 'error');
       },
     },
   });
+
+  texto(linkButton, 'perfiles.copiarEnlace');
+  atributo(linkButton, 'title', 'perfiles.copiarEnlace.title');
 
   // Debe declararse antes de cualquier función que lo use en tiempo de
   // ejecución: con const, usarlo antes de esta línea es un error de zona
@@ -127,7 +132,7 @@ export function createProfileBar({ getConfig, applyConfig }) {
   }
 
   function refreshSelect(selected = select.value) {
-    const children = [el('option', { text: '— Elige una configuración —', attrs: { value: '' } })];
+    const children = [el('option', { text: t('perfiles.elige'), attrs: { value: '' } })];
 
     for (const profile of profiles) {
       children.push(el('option', { text: profile.name, attrs: { value: profile.name } }));
@@ -145,19 +150,19 @@ export function createProfileBar({ getConfig, applyConfig }) {
       profiles = result.profiles || [];
       return true;
     } catch (error) {
-      toast(`No se pudo guardar: ${error.message}`, 'error');
+      toast(t('perfiles.noGuardado', { mensaje: error.message }), 'error');
       return false;
     }
   }
 
   async function saveCurrent() {
     const suggested = select.value || '';
-    const name = window.prompt('Nombre para esta configuración:', suggested);
+    const name = window.prompt(t('perfiles.nombrePrompt'), suggested);
     if (name === null) return;
 
     const clean = name.trim();
     if (clean === '') {
-      toast('El nombre no puede estar vacío', 'error');
+      toast(t('perfiles.nombreVacio'), 'error');
       return;
     }
 
@@ -169,18 +174,18 @@ export function createProfileBar({ getConfig, applyConfig }) {
 
     if (await persist(next)) {
       refreshSelect(clean);
-      toast(`"${clean}" guardado`);
+      toast(t('perfiles.guardado', { nombre: clean }));
     }
   }
 
   async function deleteCurrent() {
     const name = select.value;
     if (!name) return;
-    if (!window.confirm(`¿Borrar la configuración "${name}"?`)) return;
+    if (!window.confirm(t('perfiles.confirmarBorrado', { nombre: name }))) return;
 
     if (await persist(profiles.filter(item => item.name !== name))) {
       refreshSelect('');
-      toast(`"${name}" borrado`);
+      toast(t('perfiles.borrado', { nombre: name }));
     }
   }
 
@@ -196,7 +201,7 @@ export function createProfileBar({ getConfig, applyConfig }) {
       profiles = result.profiles || [];
     } catch (error) {
       profiles = [];
-      toast(`No se pudieron cargar las configuraciones: ${error.message}`, 'error');
+      toast(t('perfiles.noCargadas', { mensaje: error.message }), 'error');
     }
     refreshSelect();
   }
@@ -208,7 +213,7 @@ export function createProfileBar({ getConfig, applyConfig }) {
   const adminControls = el('div', {
     className: 'profiles__admin',
     children: [
-      el('span', { className: 'profiles__label', text: 'Configuración' }),
+      texto(el('span', { className: 'profiles__label' }), 'perfiles.etiqueta'),
       select,
       saveButton,
       deleteButton,
@@ -222,6 +227,10 @@ export function createProfileBar({ getConfig, applyConfig }) {
 
   // Estado por defecto: bloqueado. Solo el desbloqueo lo hace aparecer.
   show(adminControls, false);
+
+  // La opcion "elige una" del desplegable es texto traducido dentro de una
+  // lista que se reconstruye: se rehace entera al cambiar de idioma.
+  alCambiarIdioma(() => refreshSelect());
 
   onAdminChange(unlocked => {
     show(adminControls, unlocked);

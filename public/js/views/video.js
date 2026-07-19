@@ -13,6 +13,7 @@ import {
   toast,
 } from '../dom.js';
 import { extractVideos } from '../api.js';
+import { t, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
 /**
  * Vista Videos: analiza una única URL y lista los videos detectados,
@@ -27,23 +28,39 @@ export function createVideoView(container) {
     attrs: {
       id: 'video-url',
       type: 'url',
-      placeholder: 'https://ejemplo.com/video/12345',
       required: true,
       spellcheck: 'false',
       autocomplete: 'url',
     },
   });
+  atributo(urlInput, 'placeholder', 'video.url.placeholder');
 
   const metadataInput = el('input', { attrs: { type: 'checkbox', id: 'video-metadata' } });
   const jsInput = el('input', { attrs: { type: 'checkbox', id: 'video-js', checked: true } });
 
-  const submitButton = el('button', {
-    className: 'button',
-    text: 'Analizar',
-    attrs: { type: 'submit' },
-  });
+  const submitButton = el('button', { className: 'button', attrs: { type: 'submit' } });
 
-  const makeSwitch = (input, title, hint) =>
+  /**
+   * El boton alterna entre "Analizar" y "Analizando…", asi que su rotulo se
+   * repinta desde una funcion que conoce el estado. Enlazarlo a secas habria
+   * devuelto el boton a "Analizar" al cambiar de idioma en mitad del
+   * analisis.
+   */
+  let analizando = false;
+  const refrescarBoton = () => {
+    setChildren(
+      submitButton,
+      analizando
+        ? [
+            el('span', { className: 'spinner', attrs: { 'aria-hidden': 'true' } }),
+            t('video.analizando'),
+          ]
+        : [t('video.analizar')]
+    );
+  };
+  alCambiarIdioma(refrescarBoton);
+
+  const makeSwitch = (input, titleKey, hintKey) =>
     el('label', {
       className: 'switch',
       attrs: { for: input.id },
@@ -52,8 +69,8 @@ export function createVideoView(container) {
         el('span', {
           className: 'switch__text',
           children: [
-            el('span', { className: 'switch__title', text: title }),
-            el('span', { className: 'switch__hint', text: hint }),
+            texto(el('span', { className: 'switch__title' }), titleKey),
+            texto(el('span', { className: 'switch__hint' }), hintKey),
           ],
         }),
       ],
@@ -66,31 +83,19 @@ export function createVideoView(container) {
       el('div', {
         className: 'field',
         children: [
-          el('label', {
-            className: 'field__label',
-            text: '¿De qué página quieres sacar los vídeos?',
-            attrs: { for: 'video-url' },
-          }),
+          texto(
+            el('label', { className: 'field__label', attrs: { for: 'video-url' } }),
+            'video.url.label'
+          ),
           urlInput,
-          el('p', {
-            className: 'field__hint',
-            text: 'Se mira una sola página, y se mira por cuatro vías: lo que se ve tras cargarla, lo que pide por la red, los reproductores incrustados y las direcciones escondidas en su código.',
-          }),
+          texto(el('p', { className: 'field__hint' }), 'video.url.hint'),
         ],
       }),
       el('div', {
         className: 'grid grid--2',
         children: [
-          makeSwitch(
-            jsInput,
-            'Abrir con navegador',
-            'Abre la página como lo haría un navegador de verdad y mira qué pide. Encuentra vídeos que no están escritos en la página.'
-          ),
-          makeSwitch(
-            metadataInput,
-            'Averiguar cuánto pesa cada archivo',
-            'Pregunta el peso de cada vídeo sin descargarlo. Va más lento.'
-          ),
+          makeSwitch(jsInput, 'video.navegador.label', 'video.navegador.hint'),
+          makeSwitch(metadataInput, 'video.peso.label', 'video.peso.hint'),
         ],
       }),
       el('div', { className: 'button-row', children: [submitButton] }),
@@ -103,15 +108,11 @@ export function createVideoView(container) {
       el('div', {
         className: 'card__header',
         children: [
-          el('h2', {
-            className: 'card__title',
-            text: 'Sacar los vídeos de una página',
-            attrs: { id: 'video-heading' },
-          }),
-          el('p', {
-            className: 'card__hint',
-            text: 'Pega una dirección y te dice qué vídeos hay en ella y por dónde los ha encontrado.',
-          }),
+          texto(
+            el('h2', { className: 'card__title', attrs: { id: 'video-heading' } }),
+            'video.titulo'
+          ),
+          texto(el('p', { className: 'card__hint' }), 'video.subtitulo'),
         ],
       }),
       el('div', { className: 'card__body', children: [form] }),
@@ -132,16 +133,12 @@ export function createVideoView(container) {
   setChildren(container, [formCard, alertSlot, statsCard, resultsCard]);
 
   function setBusy(busy) {
+    analizando = busy;
     submitButton.disabled = busy;
     urlInput.disabled = busy;
     metadataInput.disabled = busy;
     jsInput.disabled = busy;
-    setChildren(
-      submitButton,
-      busy
-        ? [el('span', { className: 'spinner', attrs: { 'aria-hidden': 'true' } }), 'Analizando…']
-        : ['Analizar']
-    );
+    refrescarBoton();
   }
 
   function showError(title, body) {
@@ -179,7 +176,10 @@ export function createVideoView(container) {
 
     if (/^https?:\/\//i.test(video.url)) {
       actions.push(
-        safeLink(video.url, { className: 'button button--secondary button--small', text: 'Abrir' })
+        safeLink(video.url, {
+          className: 'button button--secondary button--small',
+          text: t('video.abrir'),
+        })
       );
     }
 
@@ -192,12 +192,12 @@ export function createVideoView(container) {
           children: [
             // safeLink: la URL viene del sitio analizado
             safeLink(video.url, { className: 'video-card__url' }),
-            copyIconButton(video.url, { label: 'Copiar esta URL' }),
+            copyIconButton(video.url),
           ],
         }),
         el('p', {
           className: 'field__hint',
-          text: `Detectado por: ${video.element || 'desconocido'}`,
+          text: t('video.detectadoPor', { via: video.element || t('video.desconocido') }),
         }),
         el('div', { className: 'video-card__foot', children: actions }),
       ],
@@ -210,7 +210,7 @@ export function createVideoView(container) {
     const buttons = [
       el('button', {
         className: `button button--small ${activeType === 'all' ? '' : 'button--secondary'}`,
-        text: `Todos (${allVideos.length})`,
+        text: t('video.todos', { n: allVideos.length }),
         attrs: { type: 'button' },
         on: {
           click: () => {
@@ -240,12 +240,12 @@ export function createVideoView(container) {
     buttons.push(
       el('button', {
         className: 'button button--secondary button--small',
-        text: 'Descargar .txt',
+        text: t('video.descargar'),
         attrs: { type: 'button', style: 'margin-left:auto' },
         on: {
           click: () => {
             downloadText('urlexplorer-videos.txt', visible.map(v => v.url).join('\n'));
-            toast(`${visible.length} URLs descargadas`);
+            toast(t('video.descargadas', { n: visible.length }));
           },
         },
       })
@@ -263,8 +263,8 @@ export function createVideoView(container) {
         grid,
         emptyState({
           icon: '🎬',
-          title: 'No se encontraron vídeos',
-          text: 'Prueba a activar «Abrir con navegador»: muchos sitios no muestran el reproductor hasta que la página se abre de verdad.',
+          title: t('video.sinResultados.titulo'),
+          text: t('video.sinResultados.texto'),
         })
       );
       return;
@@ -279,8 +279,8 @@ export function createVideoView(container) {
       grid,
       emptyState({
         icon: '🎬',
-        title: 'Todavía no hay vídeos',
-        text: 'Pega la dirección de una página y pulsa «Analizar».',
+        title: t('video.vacio.titulo'),
+        text: t('video.vacio.texto'),
       })
     );
   }
@@ -290,13 +290,13 @@ export function createVideoView(container) {
     const url = urlInput.value.trim();
 
     if (!url) {
-      showError('Falta la dirección', 'Pega la dirección de la página que quieres analizar.');
+      showError(t('error.faltaUrl'), t('video.faltaUrl.body'));
       urlInput.focus();
       return;
     }
 
     if (!/^https?:\/\//i.test(url)) {
-      showError('Dirección no válida', 'La dirección debe empezar por http:// o https://');
+      showError(t('error.urlInvalida'), t('error.urlInvalida.body'));
       urlInput.focus();
       return;
     }
@@ -326,9 +326,9 @@ export function createVideoView(container) {
         el('div', {
           className: 'stats',
           children: [
-            stat(allVideos.length, 'Vídeos'),
-            stat(new Set(allVideos.map(v => v.type)).size, 'Formatos'),
-            stat(methods.length, 'Vías con resultados'),
+            stat(allVideos.length, t('video.stats.videos')),
+            stat(new Set(allVideos.map(v => v.type)).size, t('video.stats.formatos')),
+            stat(methods.length, t('video.stats.vias')),
           ],
         })
       );
@@ -348,7 +348,7 @@ export function createVideoView(container) {
 
       renderResults();
     } catch (error) {
-      showError('No se pudo analizar la página', error.message);
+      showError(t('video.fallo'), error.message);
       renderInitialEmpty();
     } finally {
       setBusy(false);
@@ -356,6 +356,14 @@ export function createVideoView(container) {
   });
 
   renderInitialEmpty();
+
+  // Las tarjetas, las estadisticas y los filtros se construyen con datos, asi
+  // que se rehacen enteros al cambiar de idioma. Si hay resultados se
+  // repintan; si no, el estado vacio.
+  alCambiarIdioma(() => {
+    if (allVideos.length > 0) renderResults();
+    else renderInitialEmpty();
+  });
 
   return {
     focus() {

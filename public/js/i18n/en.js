@@ -328,6 +328,7 @@ export const en = {
   'video.url.hint':
     'A single page is inspected, and in four ways: what shows up after loading it, what it requests over the network, embedded players, and addresses hidden in its code.',
   'video.url.placeholder': 'https://example.com/video/12345',
+  'video.faltaUrl.body': 'Paste the address of the page you want to analyse.',
   'video.navegador.label': 'Open with a browser',
   'video.navegador.hint':
     'Opens the page the way a real browser would and watches what it requests. Finds videos that are not written in the page.',

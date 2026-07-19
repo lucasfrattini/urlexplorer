@@ -10,6 +10,7 @@ import {
   modoAvanzadoDe,
   paginationModeDe,
 } from './explorerOptions.js';
+import { t, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
 /**
  * El último formulario usado se recuerda en `sessionStorage`, no en
@@ -42,19 +43,19 @@ const STORAGE_KEY = 'urlexplorer:explorer-form';
  * usuario en el navegador y qué tiene que rellenar en cada caso.
  */
 function paginationExamples() {
+  // `cambio` y `valor` NO se traducen: son literalmente lo que el usuario ve
+  // en la barra del navegador y lo que tiene que escribir. Traducirlos
+  // convertiría un ejemplo copiable en uno inservible.
   const CASES = [
-    { cambio: '?page=2', donde: 'Nombre del parámetro', valor: 'page' },
-    { cambio: '/page/2', donde: 'Dirección de partida', valor: '…/page/{page}' },
-    { cambio: '/01, /02', donde: 'Dirección de partida', valor: '…/{page:02}' },
+    { cambio: '?page=2', campo: 'ejemplos.campo.parametro', valor: 'page' },
+    { cambio: '/page/2', campo: 'ejemplos.campo.url', valor: '…/page/{page}' },
+    { cambio: '/01, /02', campo: 'ejemplos.campo.url', valor: '…/{page:02}' },
   ];
 
   return el('div', {
     className: 'examples',
     children: [
-      el('p', {
-        className: 'examples__title',
-        text: 'Pasa a la página 2 en el sitio y mira qué cambia en su dirección:',
-      }),
+      texto(el('p', { className: 'examples__title' }), 'ejemplos.titulo'),
       el('ul', {
         className: 'examples__list',
         children: CASES.map(item =>
@@ -67,7 +68,7 @@ function paginationExamples() {
                 text: '→',
                 attrs: { 'aria-hidden': 'true' },
               }),
-              el('span', { className: 'examples__field', text: item.donde }),
+              texto(el('span', { className: 'examples__field' }), item.campo),
               el('code', { className: 'examples__value', text: item.valor }),
             ],
           })
@@ -92,23 +93,37 @@ export function createExplorerView(container, { limits }) {
    */
   let mostrarExtensionesLibres = false;
 
-  const makeField = (name, label, hint, inputAttrs = {}) => {
+  /**
+   * Los helpers reciben CLAVES de traducción, no texto.
+   *
+   * Es lo que evita que vuelva a colarse una cadena escrita a mano: si el
+   * segundo argumento fuese una frase, escribirla directamente seguiría
+   * funcionando y nadie lo notaría hasta cambiar de idioma y ver ese trozo
+   * en español.
+   *
+   * `placeholderKey` va aparte de `inputAttrs` porque también se traduce, y
+   * `hintParams` existe para las ayudas con números (los topes vienen del
+   * servidor, no del diccionario).
+   */
+  const makeField = (name, labelKey, hintKey, inputAttrs = {}, opciones = {}) => {
+    const { placeholderKey, hintParams } = opciones;
     const input = el('input', {
       className: 'input',
       attrs: { id: `explorer-${name}`, name, ...inputAttrs },
     });
+    if (placeholderKey) atributo(input, 'placeholder', placeholderKey);
     fields[name] = input;
-    return el('div', {
-      className: 'field',
-      children: [
-        el('label', { className: 'field__label', text: label, attrs: { for: `explorer-${name}` } }),
-        input,
-        hint ? el('p', { className: 'field__hint', text: hint }) : null,
-      ],
-    });
+
+    const label = texto(
+      el('label', { className: 'field__label', attrs: { for: `explorer-${name}` } }),
+      labelKey
+    );
+    const hint = hintKey ? texto(el('p', { className: 'field__hint' }), hintKey, hintParams) : null;
+
+    return el('div', { className: 'field', children: [label, input, hint] });
   };
 
-  const makeSwitch = (name, title, hint) => {
+  const makeSwitch = (name, titleKey, hintKey) => {
     const input = el('input', { attrs: { type: 'checkbox', id: `explorer-${name}`, name } });
     fields[name] = input;
     return el('label', {
@@ -119,8 +134,8 @@ export function createExplorerView(container, { limits }) {
         el('span', {
           className: 'switch__text',
           children: [
-            el('span', { className: 'switch__title', text: title }),
-            el('span', { className: 'switch__hint', text: hint }),
+            texto(el('span', { className: 'switch__title' }), titleKey),
+            texto(el('span', { className: 'switch__hint' }), hintKey),
           ],
         }),
       ],
@@ -128,7 +143,7 @@ export function createExplorerView(container, { limits }) {
   };
 
   /** Opción con forma de tarjeta seleccionable (un radio por debajo). */
-  const makeChoice = (group, value, title, hint, { checked = false } = {}) => {
+  const makeChoice = (group, value, titleKey, hintKey, { checked = false } = {}) => {
     const id = `explorer-${group}-${value}`;
     const input = el('input', {
       attrs: { type: 'radio', name: `explorer-${group}`, id, value, checked },
@@ -143,8 +158,8 @@ export function createExplorerView(container, { limits }) {
         el('span', {
           className: 'choice__text',
           children: [
-            el('span', { className: 'choice__title', text: title }),
-            el('span', { className: 'choice__hint', text: hint }),
+            texto(el('span', { className: 'choice__title' }), titleKey),
+            texto(el('span', { className: 'choice__hint' }), hintKey),
           ],
         }),
       ],
@@ -154,8 +169,15 @@ export function createExplorerView(container, { limits }) {
   };
 
   /** Paso numerado. El número es decorativo: el título ya ordena la lectura. */
-  const makeStep = (numero, titulo, ayuda, children) =>
-    el('section', {
+  const makeStep = (numero, tituloKey, ayudaKey, children) => {
+    // El número va delante del título y se recompone al cambiar de idioma:
+    // por eso el título se registra en vez de asignarse una sola vez.
+    const titulo = el('h3', { className: 'step__title' });
+    alCambiarIdioma(() => {
+      titulo.textContent = `${numero}. ${t(tituloKey)}`;
+    });
+
+    return el('section', {
       className: 'step',
       children: [
         el('div', {
@@ -166,34 +188,31 @@ export function createExplorerView(container, { limits }) {
         el('div', {
           className: 'step__body',
           children: [
-            el('h3', { className: 'step__title', text: `${numero}. ${titulo}` }),
-            ayuda ? el('p', { className: 'step__hint', text: ayuda }) : null,
+            titulo,
+            ayudaKey ? texto(el('p', { className: 'step__hint' }), ayudaKey) : null,
             el('div', { className: 'step__fields', children }),
           ],
         }),
       ],
     });
+  };
 
   // ── Paso 1: de dónde se parte ──────────────────────────────────────
 
   const campoUrl = makeField(
     'searchUrl',
-    '¿Qué página quieres recorrer?',
-    'Pega la dirección tal cual. Si escribes {q} donde iría la palabra buscada y {page} donde va el número de página, el sitio se guarda una vez y solo cambias la palabra.',
-    {
-      type: 'url',
-      placeholder: 'https://ejemplo.com/galeria?q=gatos',
-      required: true,
-      autocomplete: 'url',
-      spellcheck: 'false',
-    }
+    'explorer.url.label',
+    'explorer.url.hint',
+    { type: 'url', required: true, autocomplete: 'url', spellcheck: 'false' },
+    { placeholderKey: 'explorer.url.placeholder' }
   );
 
   const campoTermino = makeField(
     'searchTerm',
-    '¿Buscas una palabra concreta? (opcional)',
-    'Se coloca donde la dirección tenga {q}. Si la dirección no lleva {q}, este campo no hace nada.',
-    { type: 'text', placeholder: 'argentina', spellcheck: 'false' }
+    'explorer.termino.label',
+    'explorer.termino.hint',
+    { type: 'text', spellcheck: 'false' },
+    { placeholderKey: 'explorer.termino.placeholder' }
   );
 
   // ── Paso 2: qué se quiere obtener ──────────────────────────────────
@@ -208,24 +227,24 @@ export function createExplorerView(container, { limits }) {
    */
   const campoExtensiones = makeField(
     'fileExtensions',
-    'Extensiones a buscar, separadas por comas',
-    'Con el punto delante. Por ejemplo: .pdf, .zip',
+    'explorer.extensiones.label',
+    'explorer.extensiones.hint',
     { type: 'text', placeholder: '.mp4, .webm', spellcheck: 'false' }
   );
 
   const objetivoEnlaces = makeChoice(
     'objetivo',
     'enlaces',
-    'Solo la lista de enlaces',
-    'Recorre las páginas y te da las direcciones que encuentre. Es lo más rápido.',
+    'explorer.objetivo.enlaces',
+    'explorer.objetivo.enlaces.hint',
     { checked: true }
   );
 
   const objetivoFicheros = makeChoice(
     'objetivo',
     'ficheros',
-    'Los archivos de dentro',
-    'Además entra en cada enlace y busca los archivos que haya dentro. Tarda bastante más.'
+    'explorer.objetivo.ficheros',
+    'explorer.objetivo.ficheros.hint'
   );
 
   const opcionesObjetivo = [objetivoEnlaces, objetivoFicheros];
@@ -234,7 +253,7 @@ export function createExplorerView(container, { limits }) {
   const chipsBloque = el('div', {
     className: 'chips-block',
     children: [
-      el('p', { className: 'field__label', text: '¿Qué tipo de archivo?' }),
+      texto(el('p', { className: 'field__label' }), 'explorer.tipoArchivo'),
       chipsSlot,
       campoExtensiones,
     ],
@@ -247,7 +266,7 @@ export function createExplorerView(container, { limits }) {
         className: 'chip',
         attrs: { type: 'button', 'aria-pressed': 'false' },
         children: [
-          el('span', { className: 'chip__label', text: preset.etiqueta }),
+          texto(el('span', { className: 'chip__label' }), preset.etiquetaKey),
           el('code', { className: 'chip__ext', text: preset.extensiones }),
         ],
         on: {
@@ -265,8 +284,7 @@ export function createExplorerView(container, { limits }) {
 
   const chipOtro = el('button', {
     className: 'chip chip--otro',
-    text: '+ Otro',
-    attrs: { type: 'button', 'aria-pressed': 'false', title: 'Escribir las extensiones a mano' },
+    attrs: { type: 'button', 'aria-pressed': 'false' },
     on: {
       click: () => {
         mostrarExtensionesLibres = true;
@@ -275,6 +293,8 @@ export function createExplorerView(container, { limits }) {
       },
     },
   });
+  texto(chipOtro, 'explorer.preset.otro');
+  atributo(chipOtro, 'title', 'explorer.preset.otro.title');
   uiInputs.push(chipOtro);
 
   setChildren(chipsSlot, [...chips.map(c => c.boton), chipOtro]);
@@ -290,41 +310,37 @@ export function createExplorerView(container, { limits }) {
     attrs: { type: 'hidden', name: 'paginationMode', value: 'auto' },
   });
 
-  const modoAuto = makeChoice(
-    'modo',
-    'auto',
-    'Detectar automáticamente (recomendado)',
-    'Sirve para casi todos los sitios: usa lo que ya venga en la dirección.',
-    { checked: true }
-  );
+  const modoAuto = makeChoice('modo', 'auto', 'explorer.modo.auto', 'explorer.modo.auto.hint', {
+    checked: true,
+  });
 
   const modoManual = makeChoice(
     'modo',
     'manual',
-    'Indicar los patrones a mano',
-    'Para decir exactamente qué enlaces seguir y cómo numera las páginas el sitio.'
+    'explorer.modo.manual',
+    'explorer.modo.manual.hint'
   );
 
   const modoScroll = makeChoice(
     'modo',
     'scroll',
-    'Scroll infinito',
-    'Para sitios sin botonera de páginas, que cargan más resultados al bajar. Aquí «hasta» cuenta cargas, no páginas.'
+    'explorer.modo.scroll',
+    'explorer.modo.scroll.hint'
   );
 
   const opcionesModo = [modoAuto, modoManual, modoScroll];
 
   const campoPatronEnlace = makeField(
     'linkPattern',
-    '¿Qué enlaces seguir? (patrón de enlace)',
-    'Vacío = todos. «/videos/» se queda con los que lo contengan. Entre barras y con algún símbolo es una expresión regular: /\\/videos\\/\\d+/ solo coge las fichas numeradas.',
+    'explorer.patron.label',
+    'explorer.patron.hint',
     { type: 'text', placeholder: '/videos/', spellcheck: 'false' }
   );
 
   const campoParametro = makeField(
     'pageParam',
-    '¿Cómo numera las páginas? (nombre del parámetro)',
-    'Solo el nombre, por ejemplo «page». Si el número va dentro de la dirección, no rellenes esto: escribe {page} en la dirección de partida.',
+    'explorer.parametro.label',
+    'explorer.parametro.hint',
     { type: 'text', placeholder: 'page', spellcheck: 'false' }
   );
 
@@ -345,7 +361,7 @@ export function createExplorerView(container, { limits }) {
   const resumenModo = el('p', { className: 'mode-summary' });
   show(resumenModo, false);
 
-  const campoDesde = makeField('startPage', 'Desde la página', null, {
+  const campoDesde = makeField('startPage', 'explorer.desde.label', null, {
     type: 'number',
     min: '1',
     value: '1',
@@ -353,30 +369,29 @@ export function createExplorerView(container, { limits }) {
 
   const campoHasta = makeField(
     'endPage',
-    '¿Hasta qué página?',
-    `Como mucho ${limits.maxPages} páginas de una vez.`,
-    { type: 'number', min: '1', value: '5' }
+    'explorer.hasta.label',
+    'explorer.hasta.hint',
+    { type: 'number', min: '1', value: '5' },
+    { hintParams: { max: limits.maxPages } }
   );
 
   const campoRapidez = makeField(
     'concurrency',
-    '¿Con qué rapidez? (páginas a la vez)',
-    `Entre 1 y ${limits.maxConcurrency}. Cuanto más alto, antes acaba y más carga el sitio. Por defecto ${limits.defaultConcurrency}.`,
+    'explorer.rapidez.label',
+    'explorer.rapidez.hint',
     {
       type: 'number',
       min: '1',
       max: String(limits.maxConcurrency),
       value: String(limits.defaultConcurrency),
-    }
+    },
+    { hintParams: { max: limits.maxConcurrency, defecto: limits.defaultConcurrency } }
   );
 
   const advanced = el('details', {
     className: 'disclosure',
     children: [
-      el('summary', {
-        className: 'disclosure__summary',
-        text: 'Ajustes avanzados (opcional)',
-      }),
+      texto(el('summary', { className: 'disclosure__summary' }), 'explorer.avanzados'),
       el('div', {
         className: 'disclosure__content grid',
         children: [
@@ -386,7 +401,7 @@ export function createExplorerView(container, { limits }) {
               // Va dentro del formulario, no suelto: así form.reset() lo
               // devuelve a "auto" como a cualquier otro campo.
               fields.paginationMode,
-              el('p', { className: 'field__label', text: '¿Cómo pasa de página el sitio?' }),
+              texto(el('p', { className: 'field__label' }), 'explorer.modo.pregunta'),
               el('div', {
                 className: 'choices choices--stack',
                 children: opcionesModo.map(o => o.root),
@@ -401,21 +416,9 @@ export function createExplorerView(container, { limits }) {
             children: [campoDesde, campoHasta, campoRapidez],
           }),
 
-          makeSwitch(
-            'useJavaScript',
-            'Abrir con navegador',
-            'Abre cada página como lo haría un navegador de verdad, ejecutando su JavaScript. Hace falta si el sitio no enseña nada sin él. Mucho más lento: cuenta varios segundos por enlace.'
-          ),
-          makeSwitch(
-            'withSizes',
-            'Averiguar cuánto pesa cada archivo',
-            'Pregunta el peso de cada archivo sin descargarlo. Permite ordenar por tamaño y distinguir un vídeo entero de un clip de vista previa. Va más lento.'
-          ),
-          makeSwitch(
-            'openLicenseOnly',
-            'Solo material con licencia abierta',
-            'Se queda únicamente con las páginas que declaran una licencia abierta (Creative Commons, dominio público, CC0…). Lo que no declara licencia se descarta: por defecto una obra nace con todos los derechos reservados, así que la ausencia de licencia no significa que sea libre.'
-          ),
+          makeSwitch('useJavaScript', 'explorer.navegador.label', 'explorer.navegador.hint'),
+          makeSwitch('withSizes', 'explorer.peso.label', 'explorer.peso.hint'),
+          makeSwitch('openLicenseOnly', 'explorer.licencia.label', 'explorer.licencia.hint'),
         ],
       }),
     ],
@@ -423,27 +426,35 @@ export function createExplorerView(container, { limits }) {
 
   // ── Paso 3: lanzar ─────────────────────────────────────────────────
 
-  const submitButton = el('button', {
-    className: 'button',
-    text: 'Empezar a explorar',
-    attrs: { type: 'submit' },
-  });
-
+  const submitButton = el('button', { className: 'button', attrs: { type: 'submit' } });
   const detectButton = el('button', {
     className: 'button button--secondary',
-    text: 'Que lo configure por mí',
-    attrs: {
-      type: 'button',
-      title:
-        'Abre la dirección, la analiza y rellena el formulario. Siempre es una sugerencia: revísala.',
-    },
-  });
-
-  const resetButton = el('button', {
-    className: 'button button--secondary',
-    text: 'Limpiar',
     attrs: { type: 'button' },
   });
+  const resetButton = el('button', {
+    className: 'button button--secondary',
+    attrs: { type: 'button' },
+  });
+
+  /**
+   * Los dos botones que cambian de texto mientras trabajan.
+   *
+   * No se pueden enlazar con texto() sin más: su rótulo depende del estado
+   * («Explorar» / «Explorando…»), así que se repinta desde una función que
+   * conoce ese estado y que además se registra para el cambio de idioma. Si
+   * se hubieran enlazado a secas, cambiar de idioma en mitad de una
+   * exploración habría devuelto el botón a «Explorar» estando ocupado.
+   */
+  let explorando = false;
+  let detectando = false;
+
+  const refrescarBotones = () => {
+    submitButton.textContent = t(explorando ? 'explorer.explorando' : 'explorer.explorar');
+    detectButton.textContent = t(detectando ? 'explorer.analizando' : 'explorer.detectar');
+  };
+  alCambiarIdioma(refrescarBotones);
+  atributo(detectButton, 'title', 'explorer.detectar.title');
+  texto(resetButton, 'explorer.limpiar');
 
   /** Panel con la propuesta y el porqué de cada campo. */
   const detectSlot = el('div');
@@ -453,26 +464,16 @@ export function createExplorerView(container, { limits }) {
     className: 'steps',
     attrs: { novalidate: true },
     children: [
-      makeStep(
-        1,
-        '¿Qué página quieres recorrer?',
-        'Ve a la página 2 en el sitio y copia esa dirección: así se ve cómo numera las páginas.',
-        [campoUrl, campoTermino]
-      ),
+      makeStep(1, 'explorer.paso1.titulo', 'explorer.paso1.ayuda', [campoUrl, campoTermino]),
 
-      makeStep(
-        2,
-        '¿Qué quieres obtener?',
-        'Los enlaces se recogen siempre. Los archivos obligan a entrar en cada enlace, y eso tarda.',
-        [
-          el('div', { className: 'choices', children: opcionesObjetivo.map(o => o.root) }),
-          chipsBloque,
-        ]
-      ),
+      makeStep(2, 'explorer.paso2.titulo', 'explorer.paso2.ayuda', [
+        el('div', { className: 'choices', children: opcionesObjetivo.map(o => o.root) }),
+        chipsBloque,
+      ]),
 
       advanced,
 
-      makeStep(3, 'Todo listo', null, [
+      makeStep(3, 'explorer.paso3.titulo', null, [
         el('div', { className: 'button-row', children: [submitButton, detectButton, resetButton] }),
       ]),
 
@@ -491,15 +492,11 @@ export function createExplorerView(container, { limits }) {
       el('div', {
         className: 'card__header',
         children: [
-          el('h2', {
-            className: 'card__title',
-            text: 'Recorrer un sitio página a página',
-            attrs: { id: 'explorer-heading' },
-          }),
-          el('p', {
-            className: 'card__hint',
-            text: 'Pasa por las páginas de una sección y te devuelve lo que encuentre. Tres pasos.',
-          }),
+          texto(
+            el('h2', { className: 'card__title', attrs: { id: 'explorer-heading' } }),
+            'explorer.titulo'
+          ),
+          texto(el('p', { className: 'card__hint' }), 'explorer.subtitulo'),
         ],
       }),
       el('div', { className: 'card__body', children: [profileBar.root, form] }),
@@ -521,8 +518,8 @@ export function createExplorerView(container, { limits }) {
   show(statsCard, false);
 
   const results = createResultList({
-    emptyTitle: 'Todavía no hay resultados',
-    emptyText: 'Rellena los tres pasos y pulsa «Empezar a explorar».',
+    emptyTitleKey: 'explorer.vacio.titulo',
+    emptyTextKey: 'explorer.vacio.texto',
     filename: 'urlexplorer-resultados.txt',
   });
 
@@ -575,8 +572,12 @@ export function createExplorerView(container, { limits }) {
     show(bloqueManual, modo === 'manual');
 
     const puestos = [
-      fields.linkPattern.value.trim() ? `enlaces «${fields.linkPattern.value.trim()}»` : null,
-      fields.pageParam.value.trim() ? `parámetro «${fields.pageParam.value.trim()}»` : null,
+      fields.linkPattern.value.trim()
+        ? t('explorer.modo.resumen.enlaces', { valor: fields.linkPattern.value.trim() })
+        : null,
+      fields.pageParam.value.trim()
+        ? t('explorer.modo.resumen.parametro', { valor: fields.pageParam.value.trim() })
+        : null,
     ].filter(Boolean);
 
     // Si hay patrones puestos y no se están viendo, se dice: un patrón que
@@ -585,9 +586,15 @@ export function createExplorerView(container, { limits }) {
     const ocultos = modo !== 'manual' && puestos.length > 0;
     show(resumenModo, ocultos);
     if (ocultos) {
-      resumenModo.textContent = `Sigues usando ${puestos.join(' y ')}. Pulsa «Indicar los patrones a mano» para verlos o cambiarlos.`;
+      resumenModo.textContent = t('explorer.modo.resumen', {
+        que: puestos.join(t('explorer.modo.resumen.y')),
+      });
     }
   }
+
+  // El resumen se construye con los valores del formulario, así que hay que
+  // rehacerlo al cambiar de idioma: es texto calculado, no fijo.
+  alCambiarIdioma(() => aplicarVistaModo());
 
   for (const opcion of opcionesObjetivo) {
     opcion.input.addEventListener('change', () => {
@@ -689,41 +696,84 @@ export function createExplorerView(container, { limits }) {
   }
 
   function setBusy(busy) {
+    explorando = busy;
     submitButton.disabled = busy;
-    submitButton.textContent = busy ? 'Explorando…' : 'Empezar a explorar';
+    refrescarBotones();
     for (const input of Object.values(fields)) input.disabled = busy;
     for (const input of uiInputs) input.disabled = busy;
   }
 
-  function showError(title, body) {
-    setChildren(alertSlot, alertBox({ variant: 'error', title, body }));
+  /**
+   * La alerta visible se guarda en CLAVES, no como texto ya pintado.
+   *
+   * Es lo que permite repintarla al cambiar de idioma. Guardar el nodo ya
+   * construido dejaría el aviso más importante de la pantalla —el que
+   * explica por qué no hay resultados— congelado en el idioma anterior.
+   *
+   * `bodyTexto` es la excepción: los mensajes que vienen del servidor llegan
+   * ya redactados y se muestran tal cual. Ver la limitación anotada en
+   * CLAUDE.md.
+   */
+  let ultimaAlerta = null;
+
+  function pintarAlerta() {
+    if (!ultimaAlerta) return;
+    const { variant, tituloKey, bodyKey, bodyTexto, params } = ultimaAlerta;
+    setChildren(
+      alertSlot,
+      alertBox({
+        variant,
+        title: t(tituloKey, params),
+        body: bodyTexto ?? (bodyKey ? t(bodyKey, params) : undefined),
+      })
+    );
     show(alertSlot, true);
+  }
+  alCambiarIdioma(pintarAlerta);
+
+  function mostrarAviso(variant, tituloKey, bodyKey, params, bodyTexto) {
+    ultimaAlerta = { variant, tituloKey, bodyKey, bodyTexto, params };
+    pintarAlerta();
+  }
+
+  function showError(tituloKey, bodyKey, params, bodyTexto) {
+    mostrarAviso('error', tituloKey, bodyKey, params, bodyTexto);
   }
 
   function clearAlert() {
+    ultimaAlerta = null;
     clear(alertSlot);
     show(alertSlot, false);
   }
 
+  /** Último `complete`, para poder repintar las cifras en el otro idioma. */
+  let ultimasStats = null;
+
   function renderStats(payload) {
+    if (payload) ultimasStats = payload;
+    if (!ultimasStats) return;
+
+    const datos = ultimasStats;
     const cards = [
-      stat(payload.totalLinks ?? 0, 'Enlaces'),
-      stat(payload.pagesScraped ?? 0, 'Páginas recorridas'),
+      stat(datos.totalLinks ?? 0, t('stats.enlaces')),
+      stat(datos.pagesScraped ?? 0, t('stats.paginas')),
     ];
 
-    if (payload.extensions?.length > 0) {
-      cards.push(stat(payload.totalFiles ?? 0, 'Ficheros'));
+    if (datos.extensions?.length > 0) {
+      cards.push(stat(datos.totalFiles ?? 0, t('stats.ficheros')));
     }
-    if (payload.durationMs !== undefined) {
-      cards.push(stat(`${(payload.durationMs / 1000).toFixed(1)}s`, 'Duración'));
+    if (datos.durationMs !== undefined) {
+      cards.push(stat(`${(datos.durationMs / 1000).toFixed(1)}s`, t('stats.duracion')));
     }
-    if (payload.failures?.length > 0) {
-      cards.push(stat(payload.failures.length, 'Páginas fallidas'));
+    if (datos.failures?.length > 0) {
+      cards.push(stat(datos.failures.length, t('stats.fallidas')));
     }
 
     setChildren(statsSlot, el('div', { className: 'stats', children: cards }));
     show(statsCard, true);
   }
+
+  alCambiarIdioma(() => renderStats(null));
 
   // ── Detección de configuración ─────────────────────────────────────
 
@@ -736,11 +786,13 @@ export function createExplorerView(container, { limits }) {
           className: 'propuesta__cabecera',
           children: [
             el('span', { className: 'propuesta__campo', text: campo }),
-            el('code', { className: 'propuesta__valor', text: valor || '(vacío)' }),
+            el('code', { className: 'propuesta__valor', text: valor || t('propuesta.vacio') }),
             confianza
               ? el('span', {
                   className: `badge badge--${confianza === 'alta' ? 'success' : 'accent'}`,
-                  text: `confianza ${confianza}`,
+                  // El nivel lo nombra el servidor ("alta"/"media"): se muestra
+                  // tal cual, ver la limitación anotada en CLAUDE.md.
+                  text: t('propuesta.confianza', { nivel: confianza }),
                 })
               : null,
           ],
@@ -763,31 +815,37 @@ export function createExplorerView(container, { limits }) {
 
     const filas = [
       filaPropuesta(
-        '¿Qué enlaces seguir?',
+        t('propuesta.campo.patron'),
         sugerencia.linkPattern,
         motivos.patron,
         confianza.patron
       ),
       filaPropuesta(
-        'Cómo pasa de página',
-        sugerencia.pageParam ? `parámetro "${sugerencia.pageParam}"` : sugerencia.searchUrl,
+        t('propuesta.campo.paginacion'),
+        sugerencia.pageParam
+          ? t('propuesta.parametro', { valor: sugerencia.pageParam })
+          : sugerencia.searchUrl,
         motivos.paginacion,
         confianza.paginacion
       ),
       filaPropuesta(
-        'Abrir con navegador',
-        sugerencia.useJavaScript ? 'sí' : 'no',
+        t('propuesta.campo.navegador'),
+        t(sugerencia.useJavaScript ? 'propuesta.si' : 'propuesta.no'),
         motivos.navegador
       ),
-      filaPropuesta('Qué obtener', sugerencia.fileExtensions, motivos.extensiones),
+      filaPropuesta(
+        t('propuesta.campo.extensiones'),
+        sugerencia.fileExtensions,
+        motivos.extensiones
+      ),
     ];
 
     if (alternativas?.linkPattern) {
       filas.push(
         filaPropuesta(
-          'Patrón alternativo',
+          t('propuesta.campo.alternativo'),
           alternativas.linkPattern,
-          'Más amplio que el propuesto. Úsalo si el sugerido deja fuera resultados que sí querías.'
+          t('propuesta.alternativo.motivo')
         )
       );
     }
@@ -799,10 +857,13 @@ export function createExplorerView(container, { limits }) {
           el('div', {
             className: 'card__header',
             children: [
-              el('h3', { className: 'card__title', text: 'Esto es lo que propongo' }),
+              el('h3', { className: 'card__title', text: t('propuesta.titulo') }),
               el('p', {
                 className: 'card__hint',
-                text: `Es una sugerencia, no una verdad: revísala y corrige lo que no encaje. Se han analizado ${analizado.enlacesConNavegador} enlaces con navegador y ${analizado.enlacesSinNavegador} sin él.`,
+                text: t('propuesta.hint', {
+                  conNavegador: analizado.enlacesConNavegador,
+                  sinNavegador: analizado.enlacesSinNavegador,
+                }),
               }),
             ],
           }),
@@ -810,8 +871,9 @@ export function createExplorerView(container, { limits }) {
             className: 'card__body',
             children: [
               el('ul', { className: 'propuesta__lista', children: filas }),
-              ...avisos.map(texto =>
-                alertBox({ variant: 'warning', title: 'A tener en cuenta', body: texto })
+              // El cuerpo del aviso lo redacta el servidor y se muestra tal cual
+              ...avisos.map(aviso =>
+                alertBox({ variant: 'warning', title: t('propuesta.aviso'), body: aviso })
               ),
             ],
           }),
@@ -825,16 +887,14 @@ export function createExplorerView(container, { limits }) {
     const url = fields.searchUrl.value.trim();
 
     if (!url || !/^https?:\/\//i.test(url)) {
-      showError(
-        'Falta la dirección',
-        'Escribe en el paso 1 la dirección de la página que quieres analizar.'
-      );
+      showError('error.faltaUrl', 'error.faltaUrl.detectar');
       fields.searchUrl.focus();
       return;
     }
 
     detectButton.disabled = true;
-    detectButton.textContent = 'Analizando…';
+    detectando = true;
+    refrescarBotones();
     clearAlert();
 
     try {
@@ -863,12 +923,13 @@ export function createExplorerView(container, { limits }) {
       if (aplicar.linkPattern || aplicar.pageParam) advanced.open = true;
 
       mostrarPropuesta(resultado);
-      toast('Propuesta lista: revísala antes de explorar');
+      toast(t('propuesta.lista'));
     } catch (error) {
-      showError('No se pudo analizar la página', error.message);
+      showError('propuesta.fallo', null, undefined, error.message);
     } finally {
       detectButton.disabled = false;
-      detectButton.textContent = 'Que lo configure por mí';
+      detectando = false;
+      refrescarBotones();
     }
   });
 
@@ -930,23 +991,18 @@ export function createExplorerView(container, { limits }) {
         // llegado a ver. Decirlo es obligatorio, porque los resultados
         // parecen completos y no lo son.
         const MOTIVOS_DE_TOPE = {
-          'tope-de-rondas': 'se alcanzó el número máximo de cargas',
-          'tope-de-elementos': 'se alcanzó el tope de elementos',
-          'tiempo-agotado': 'se agotó el tiempo máximo de scroll',
-          'error-de-navegador': 'el navegador dejó de responder',
+          'tope-de-rondas': 'aviso.tope.rondas',
+          'tope-de-elementos': 'aviso.tope.elementos',
+          'tiempo-agotado': 'aviso.tope.tiempo',
+          'error-de-navegador': 'aviso.tope.navegador',
         };
-        const motivoTope = MOTIVOS_DE_TOPE[collected.scroll?.motivo];
+        const claveTope = MOTIVOS_DE_TOPE[collected.scroll?.motivo];
 
-        if (motivoTope) {
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: 'El scroll se detuvo antes de agotar el listado',
-              body: `Tras ${collected.scroll.rounds} cargas, ${motivoTope}. Es muy probable que el sitio tuviera más resultados: los que ves están incompletos. Sube «¿Hasta qué página?» para pedir más cargas, o afina el patrón de enlace para traer menos por carga.`,
-            })
-          );
-          show(alertSlot, true);
+        if (claveTope) {
+          mostrarAviso('warning', 'aviso.scrollCortado', 'aviso.scrollCortado.body', {
+            cargas: collected.scroll.rounds,
+            motivo: t(claveTope),
+          });
         }
 
         // Sin extensiones no hay fase 2, y hasta ahora eso no se decía en
@@ -955,15 +1011,7 @@ export function createExplorerView(container, { limits }) {
         // rellenar un campo. Es el mismo fallo silencioso de siempre, esta
         // vez por configuración.
         if (!deepSearch && event.links.length > 0) {
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: 'Solo se han recogido enlaces, no archivos',
-              body: 'En el paso 2 está elegido «Solo la lista de enlaces», así que no se ha entrado en cada enlace. Elige «Los archivos de dentro», marca el tipo que buscas y vuelve a explorar.',
-            })
-          );
-          show(alertSlot, true);
+          mostrarAviso('warning', 'aviso.soloEnlaces', 'aviso.soloEnlaces.body');
         }
 
         // Ficheros que estaban en la ficha pero no eran suyos (anuncios,
@@ -971,74 +1019,38 @@ export function createExplorerView(container, { limits }) {
         // verificar. Callarlo era el problema original: se entregaba un clip
         // de segundos con la duración de un vídeo de veinte minutos.
         if (event.suspectFiles > 0) {
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: `${event.suspectFiles} fichero(s) sin verificar`,
-              body: 'No se pudo comprobar que pertenezcan a su página: pueden ser anuncios o vistas previas. Van marcados y SIN duración, porque la de la ficha es de otro vídeo. Compruébalos antes de descargarlos.',
-            })
-          );
-          show(alertSlot, true);
+          mostrarAviso('warning', 'aviso.sinVerificar', 'aviso.sinVerificar.body', {
+            n: event.suspectFiles,
+          });
         } else if (event.discardedFiles > 0) {
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: `${event.discardedFiles} fichero(s) descartados por no ser de su página`,
-              body: 'Eran anuncios o vistas previas de los vídeos relacionados. Los que ves sí comparten identificador con la ficha de la que salen.',
-            })
-          );
-          show(alertSlot, true);
+          mostrarAviso('warning', 'aviso.descartados', 'aviso.descartados.body', {
+            n: event.discardedFiles,
+          });
         }
 
         if (event.truncated) {
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: 'Resultados truncados',
-              body: `Se alcanzó el tope de la aplicación (${event.limits?.maxLinks ?? '?'} enlaces / ${
-                event.limits?.maxFiles ?? '?'
-              } ficheros). Acota el patrón de enlace o el rango de páginas para obtener menos resultados.`,
-            })
-          );
-          show(alertSlot, true);
+          mostrarAviso('warning', 'aviso.truncado', 'aviso.truncado.body', {
+            enlaces: event.limits?.maxLinks ?? '?',
+            ficheros: event.limits?.maxFiles ?? '?',
+          });
         }
 
         if (event.licenseFilter === 'open-only' && event.skippedByLicense > 0) {
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: `${event.skippedByLicense} páginas descartadas por licencia`,
-              body: 'No declaraban una licencia abierta, así que se han omitido. Recuerda que la ausencia de licencia significa "todos los derechos reservados", no "libre".',
-            })
-          );
-          show(alertSlot, true);
+          mostrarAviso('warning', 'aviso.licencia', 'aviso.licencia.body', {
+            n: event.skippedByLicense,
+          });
         } else if (event.timedOut) {
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: 'Se agotó el tiempo máximo',
-              body: `El recorrido superó los ${Math.round((event.maxDurationMs ?? 0) / 60000)} minutos y se detuvo, así que los resultados están incompletos. Con «Abrir con navegador» cada enlace tarda varios segundos: reduce el rango de páginas o afina el patrón de enlace para revisar menos enlaces.`,
-            })
-          );
-          show(alertSlot, true);
+          mostrarAviso('warning', 'aviso.tiempoAgotado', 'aviso.tiempoAgotado.body', {
+            minutos: Math.round((event.maxDurationMs ?? 0) / 60000),
+          });
         } else if (deepSearch && event.files.length === 0 && event.links.length > 0) {
           const usedBrowser = readForm().useJavaScript;
-          setChildren(
-            alertSlot,
-            alertBox({
-              variant: 'warning',
-              title: 'Se encontraron enlaces pero ningún archivo',
-              body: usedBrowser
-                ? `Se revisaron ${event.links.length} páginas con navegador sin encontrar archivos de ese tipo. Puede que los enlaces no sean páginas de detalle (por ejemplo, redirecciones a otros sitios) o que el archivo se pida por una API que no deja rastro en el HTML.`
-                : `Se revisaron ${event.links.length} páginas sin encontrar archivos de ese tipo. Prueba a activar «Abrir con navegador» en los ajustes avanzados: ahora también se aplica al entrar en cada enlace.`,
-            })
+          mostrarAviso(
+            'warning',
+            'aviso.sinFicheros',
+            usedBrowser ? 'aviso.sinFicheros.conNavegador' : 'aviso.sinFicheros.sinNavegador',
+            { n: event.links.length }
           );
-          show(alertSlot, true);
         }
 
         stopStream();
@@ -1046,7 +1058,7 @@ export function createExplorerView(container, { limits }) {
       }
 
       case 'error':
-        showError('La búsqueda falló', event.message);
+        showError('error.busquedaFallo', null, undefined, event.message);
         stopStream();
         break;
 
@@ -1060,25 +1072,19 @@ export function createExplorerView(container, { limits }) {
     const params = readForm();
 
     if (!params.searchUrl) {
-      showError(
-        'Falta la dirección',
-        'En el paso 1, escribe la página desde la que quieres empezar.'
-      );
+      showError('error.faltaUrl', 'error.faltaUrl.explorar');
       fields.searchUrl.focus();
       return;
     }
 
     if (!/^https?:\/\//i.test(params.searchUrl)) {
-      showError('Dirección no válida', 'La dirección debe empezar por http:// o https://');
+      showError('error.urlInvalida', 'error.urlInvalida.body');
       fields.searchUrl.focus();
       return;
     }
 
     if (/\{(?:q|query|termino|término)\}/i.test(params.searchUrl) && !params.searchTerm) {
-      showError(
-        'Falta la palabra a buscar',
-        'La dirección de partida lleva {q}, así que hay que indicar qué buscar en «¿Buscas una palabra concreta?».'
-      );
+      showError('error.faltaTermino', 'error.faltaTermino.body');
       fields.searchTerm.focus();
       return;
     }
@@ -1102,16 +1108,16 @@ export function createExplorerView(container, { limits }) {
       !paginaPorPlantilla &&
       params.endPage > params.startPage
     ) {
-      showError(
-        'Falta decir cómo numera las páginas',
-        `Has pedido de la ${params.startPage} a la ${params.endPage}, pero sin saber cómo pasa de página el sitio solo se descargará una. Abre «Ajustes avanzados», elige «Indicar los patrones a mano» y escribe el nombre del parámetro (por ejemplo «page»), o pon {page} en la dirección de partida.`
-      );
+      showError('error.faltaParametro', 'error.faltaParametro.body', {
+        desde: params.startPage,
+        hasta: params.endPage,
+      });
       advanced.open = true;
       return;
     }
 
     if (params.pageParam && params.endPage < params.startPage) {
-      showError('Rango de páginas inválido', 'La página final no puede ser menor que la inicial.');
+      showError('error.rangoInvalido', 'error.rangoInvalido.body');
       return;
     }
 
@@ -1119,10 +1125,11 @@ export function createExplorerView(container, { limits }) {
     // inválido llegaba al servidor y volvía como un 400 que el EventSource no
     // sabe leer.
     if (!esScroll && params.endPage - params.startPage + 1 > limits.maxPages) {
-      showError(
-        'Rango de páginas demasiado grande',
-        `Has pedido ${params.endPage - params.startPage + 1} páginas y el máximo por búsqueda es ${limits.maxPages}. Reduce «¿Hasta qué página?» a ${params.startPage + limits.maxPages - 1} o menos.`
-      );
+      showError('error.rangoGrande', 'error.rangoGrande.body', {
+        pedidas: params.endPage - params.startPage + 1,
+        max: limits.maxPages,
+        sugerido: params.startPage + limits.maxPages - 1,
+      });
       return;
     }
 

@@ -9,6 +9,7 @@ import {
   toast,
 } from '../dom.js';
 import { createRangeFilter, formatDuration, formatBytes } from './rangeSlider.js';
+import { t, tp, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
 /**
  * Lista de resultados con filtros y exportación.
@@ -41,7 +42,7 @@ function bytesDe(info) {
   return Number.isFinite(info?.sizeBytes) ? info.sizeBytes : null;
 }
 
-export function createResultList({ emptyTitle, emptyText, filename = 'urlexplorer.txt' }) {
+export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urlexplorer.txt' }) {
   let items = [];
   let filtered = [];
   // url -> { duration, durationSeconds, size, sizeBytes, sizeApproximate }
@@ -58,63 +59,58 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
 
   /* ── Cabecera: conteo y acciones ─────────────────────────────────── */
 
-  const contador = el('span', { className: 'results__count', text: '0 resultados' });
+  const contador = el('span', { className: 'results__count' });
 
   const copyButton = el('button', {
     className: 'button button--secondary button--small',
-    text: 'Copiar',
     attrs: { type: 'button' },
     on: {
       click: async () => {
         const ok = await copyToClipboard(filtered.join('\n'));
         toast(
-          ok ? `${filtered.length} enlaces copiados` : 'No se pudo copiar al portapapeles',
+          ok ? t('resultados.copiados', { n: filtered.length }) : t('resultados.noCopiado'),
           ok ? 'success' : 'error'
         );
       },
     },
   });
+  texto(copyButton, 'resultados.copiar');
 
   const downloadButton = el('button', {
     className: 'button button--secondary button--small',
-    text: 'Descargar .txt',
     attrs: { type: 'button' },
     on: {
       click: () => {
         downloadText(filename, filtered.join('\n'));
-        toast(`${filtered.length} enlaces descargados`);
+        toast(t('resultados.descargados', { n: filtered.length }));
       },
     },
   });
+  texto(downloadButton, 'resultados.descargar');
 
   /* ── Filtros de texto ────────────────────────────────────────────── */
 
   const search = el('input', {
     className: 'input',
-    attrs: {
-      type: 'search',
-      placeholder: 'Filtrar resultados…',
-      'aria-label': 'Filtrar resultados',
-    },
+    attrs: { type: 'search' },
     on: { input: () => applyFilter() },
   });
+  atributo(search, 'placeholder', 'filtros.buscar');
+  atributo(search, 'aria-label', 'filtros.buscar.aria');
 
   // En listas grandes suele ser más rápido decir qué NO quieres (240p,
   // sample, preview…) que acertar con un término que incluya justo lo bueno.
   const exclude = el('input', {
     className: 'input',
-    attrs: {
-      type: 'search',
-      placeholder: 'Ocultar los que contengan… (240p, sample)',
-      'aria-label': 'Ocultar resultados que contengan estos textos',
-      title: 'Separa varios textos con comas',
-    },
+    attrs: { type: 'search' },
     on: { input: () => applyFilter() },
   });
+  atributo(exclude, 'placeholder', 'filtros.excluir');
+  atributo(exclude, 'aria-label', 'filtros.excluir.aria');
+  atributo(exclude, 'title', 'filtros.excluir.title');
 
   const sortSelect = el('select', {
     className: 'input',
-    attrs: { 'aria-label': 'Ordenar resultados' },
     on: {
       change: () => {
         sortBy = sortSelect.value;
@@ -122,40 +118,58 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       },
     },
   });
-  sortSelect.replaceChildren(
-    el('option', { text: 'Orden de aparición', attrs: { value: 'orden' } }),
-    el('option', { text: 'Más largos primero', attrs: { value: 'duracion' } }),
-    el('option', { text: 'Más pesados primero', attrs: { value: 'tamano' } })
-  );
+  atributo(sortSelect, 'aria-label', 'filtros.ordenar.aria');
+
+  // El <select> se reconstruye entero al cambiar de idioma, conservando la
+  // opcion elegida: reescribir el texto de cada <option> por separado seria
+  // mas codigo para el mismo resultado.
+  const OPCIONES_ORDEN = [
+    { value: 'orden', clave: 'filtros.orden.aparicion' },
+    { value: 'duracion', clave: 'filtros.orden.duracion' },
+    { value: 'tamano', clave: 'filtros.orden.tamano' },
+  ];
+  alCambiarIdioma(() => {
+    const elegido = sortSelect.value || 'orden';
+    sortSelect.replaceChildren(
+      ...OPCIONES_ORDEN.map(o => el('option', { text: t(o.clave), attrs: { value: o.value } }))
+    );
+    sortSelect.value = elegido;
+  });
 
   /* ── Filtros de rango ────────────────────────────────────────────── */
 
   const filtroDuracion = createRangeFilter({
-    label: 'Duración',
+    labelKey: 'columnas.duracion',
     format: formatDuration,
     onChange: () => applyFilter(),
   });
 
   const filtroPeso = createRangeFilter({
-    label: 'Peso',
+    labelKey: 'columnas.peso',
     format: formatBytes,
     onChange: () => applyFilter(),
   });
 
   /* ── Interruptores ───────────────────────────────────────────────── */
 
-  function crearToggle(id, textoInicial, titulo, alCambiar) {
+  function crearToggle(id, etiquetaKey, tituloKey, alCambiar) {
     const input = el('input', {
       attrs: { type: 'checkbox', id },
       on: { change: () => alCambiar(input.checked) },
     });
-    const texto = el('span', { className: 'toggle__text', text: textoInicial });
+    // OJO: la etiqueta se llama `etiqueta` y no `texto` porque `texto` es el
+    // helper de i18n importado arriba, y una local con ese nombre lo taparia.
+    const etiqueta = el('span', { className: 'toggle__text' });
+    if (etiquetaKey) texto(etiqueta, etiquetaKey);
+
     const root = el('label', {
       className: 'toggle',
-      attrs: { for: id, title: titulo },
-      children: [input, texto],
+      attrs: { for: id },
+      children: [input, etiqueta],
     });
-    return { root, input, texto };
+    atributo(root, 'title', tituloKey);
+
+    return { root, input, texto: etiqueta };
   }
 
   let ocultarSinDuracion = false;
@@ -163,8 +177,8 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
 
   const toggleSinDuracion = crearToggle(
     'hide-no-duration',
-    'Ocultar sin duración',
-    'Quita los resultados de los que no se pudo averiguar la duración. El filtro de rango por sí solo NO los quita.',
+    'filtros.ocultarSinDuracion',
+    'filtros.ocultarSinDuracion.title',
     v => {
       ocultarSinDuracion = v;
       applyFilter();
@@ -173,23 +187,18 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
 
   const toggleSinPeso = crearToggle(
     'hide-no-size',
-    'Ocultar sin peso',
-    'Quita los resultados de los que no se pudo averiguar el peso. El filtro de rango por sí solo NO los quita.',
+    'filtros.ocultarSinPeso',
+    'filtros.ocultarSinPeso.title',
     v => {
       ocultarSinPeso = v;
       applyFilter();
     }
   );
 
-  const dupeToggle = crearToggle(
-    'dupe-toggle',
-    '',
-    'Agrupa los resultados que parecen el mismo contenido. Desactívalo para verlos todos.',
-    v => {
-      plegarDuplicados = v;
-      applyFilter();
-    }
-  );
+  const dupeToggle = crearToggle('dupe-toggle', null, 'filtros.agrupar.title', v => {
+    plegarDuplicados = v;
+    applyFilter();
+  });
   dupeToggle.input.checked = true;
   dupeToggle.root.hidden = true;
 
@@ -202,10 +211,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
    * interruptores deciden qué pasa con el resto. Sin decirlo, el usuario
    * mueve una manija, ve que el número no baja, y cree que está roto.
    */
-  const nota = el('p', {
-    className: 'filters__note',
-    text: 'Los rangos solo recortan entre los resultados que tienen el dato. A los que no lo tienen no los toca: para quitarlos, usa los interruptores.',
-  });
+  const nota = texto(el('p', { className: 'filters__note' }), 'filtros.nota');
 
   const avisoSinPeso = el('p', { className: 'filters__note filters__note--warn' });
   avisoSinPeso.hidden = true;
@@ -235,7 +241,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
   const cabecera = el('div', {
     className: 'results__head',
     children: [
-      el('h3', { className: 'card__title', text: 'Resultados' }),
+      texto(el('h3', { className: 'card__title' }), 'resultados.titulo'),
       contador,
       el('div', { className: 'results__actions', children: [copyButton, downloadButton] }),
     ],
@@ -247,9 +253,9 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     className: 'result-head',
     children: [
       el('span', { className: 'result-head__index', text: '#' }),
-      el('span', { text: 'Enlace' }),
-      el('span', { className: 'result-head__col', text: 'Duración' }),
-      el('span', { className: 'result-head__col', text: 'Peso' }),
+      texto(el('span', {}), 'columnas.enlace'),
+      texto(el('span', { className: 'result-head__col' }), 'columnas.duracion'),
+      texto(el('span', { className: 'result-head__col' }), 'columnas.peso'),
     ],
   });
 
@@ -270,12 +276,16 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
    * `data-label` lo usa el CSS en móvil, donde las columnas se apilan y
    * necesitan decir de qué son.
    */
-  function celda(valor, etiqueta, extra = {}) {
+  function celda(valor, etiquetaKey, extra = {}) {
+    const etiqueta = t(etiquetaKey);
     if (valor === null) {
       return el('span', {
         className: 'result-item__col result-item__col--empty',
         text: '—',
-        attrs: { title: `No se pudo obtener ${etiqueta.toLowerCase()}`, 'data-label': etiqueta },
+        attrs: {
+          title: t('resultados.noObtenido', { dato: etiqueta.toLowerCase() }),
+          'data-label': etiqueta,
+        },
       });
     }
     return el('span', {
@@ -300,10 +310,8 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
           children: [
             emptyState({
               icon: estabaFiltrado ? '🔍' : '○',
-              title: estabaFiltrado ? 'Sin coincidencias' : emptyTitle,
-              text: estabaFiltrado
-                ? 'Ningún resultado pasa los filtros actuales. Prueba a ampliar los rangos o a desactivar los interruptores.'
-                : emptyText,
+              title: t(estabaFiltrado ? 'resultados.sinCoincidencias' : emptyTitleKey),
+              text: t(estabaFiltrado ? 'resultados.sinCoincidencias.texto' : emptyTextKey),
             }),
           ],
         })
@@ -322,11 +330,12 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       const marcaDudoso = info?.suspect
         ? el('span', {
             className: 'badge badge--danger result-item__suspect',
-            text: '⚠ sin verificar',
+            text: t('resultados.dudoso'),
             attrs: {
+              // El motivo lo redacta el servidor y se inserta tal cual
               title: info.suspectReason
-                ? `${info.suspectReason}. Su duración no se muestra porque la de la ficha pertenece a otro vídeo.`
-                : 'No se pudo comprobar que este fichero sea el de la página.',
+                ? t('resultados.dudoso.titleMotivo', { motivo: info.suspectReason })
+                : t('resultados.dudoso.title'),
             },
           })
         : null;
@@ -338,9 +347,11 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
               className: 'badge badge--warning result-item__dupe',
               text: `+${grupo.miembros.length - 1}`,
               attrs: {
-                title: `Se han agrupado ${grupo.miembros.length - 1} resultado(s) más por ${
-                  grupo.motivos?.[0]?.texto || 'señales coincidentes'
-                }: ${grupo.miembros.slice(1).join(', ')}`,
+                title: t('resultados.duplicados.title', {
+                  n: grupo.miembros.length - 1,
+                  motivo: grupo.motivos?.[0]?.texto || t('resultados.duplicados.motivoPorDefecto'),
+                  miembros: grupo.miembros.slice(1).join(', '),
+                }),
               },
             })
           : null;
@@ -351,12 +362,10 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       // clip de vista previa creyendo que es el vídeo completo.
       const aproximado = info?.sizeApproximate === true;
       const celdaPeso = info?.size
-        ? celda(aproximado ? `~${info.size}` : info.size, 'Peso', {
-            title: aproximado
-              ? 'Peso aproximado, tomado de la ficha del sitio'
-              : 'Peso exacto, informado por el servidor',
+        ? celda(aproximado ? `~${info.size}` : info.size, 'columnas.peso', {
+            title: t(aproximado ? 'resultados.pesoAprox' : 'resultados.pesoExacto'),
           })
-        : celda(null, 'Peso');
+        : celda(null, 'columnas.peso');
 
       return el('li', {
         className: 'result-item',
@@ -370,10 +379,10 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
               marcaGrupo,
               // Copiar una sola línea. Los botones globales copian la lista
               // filtrada entera, que no sirve cuando solo quieres esta URL.
-              copyIconButton(url, { label: 'Copiar esta URL' }),
+              copyIconButton(url),
             ],
           }),
-          celda(info?.duration || null, 'Duración'),
+          celda(info?.duration || null, 'columnas.duracion'),
           celdaPeso,
         ],
       });
@@ -386,7 +395,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
           children: [
             el('span', {
               className: 'field__hint',
-              text: `Se muestran los primeros ${visible.length} de ${filtered.length}. Descarga el .txt para verlos todos.`,
+              text: t('resultados.primeros', { n: visible.length, total: filtered.length }),
             }),
           ],
         })
@@ -459,30 +468,25 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     const plegados = plegarDuplicados ? items.filter(url => duplicadoDe.has(url)).length : 0;
 
     if (total === 0) {
-      contador.textContent = '0 resultados';
+      contador.textContent = t('resultados.cero');
     } else if (filtered.length === total) {
-      contador.textContent = `${total} resultado${total === 1 ? '' : 's'}`;
+      contador.textContent = tp('resultados.total', total);
     } else {
-      contador.textContent = `mostrando ${filtered.length} de ${total}`;
+      contador.textContent = t('resultados.mostrando', { visibles: filtered.length, total });
     }
 
     contador.classList.toggle('results__count--filtrado', filtered.length !== total);
 
     dupeToggle.root.hidden = duplicadoDe.size === 0;
-    dupeToggle.texto.textContent = `Agrupar ${duplicadoDe.size} duplicado${
-      duplicadoDe.size === 1 ? '' : 's'
-    }`;
+    dupeToggle.texto.textContent = tp('filtros.agrupar', duplicadoDe.size);
 
     const conPeso = items.filter(url => bytesDe(meta.get(url)) !== null).length;
     const sinNingunPeso = total > 0 && conPeso === 0;
     avisoSinPeso.hidden = !sinNingunPeso;
-    if (sinNingunPeso) {
-      avisoSinPeso.textContent =
-        'Ningún resultado trae el peso. Se obtiene activando «Averiguar cuánto pesa cada archivo» en los ajustes avanzados, antes de explorar.';
-    }
+    if (sinNingunPeso) avisoSinPeso.textContent = t('filtros.sinPeso');
 
     // Los plegados tienen su propio interruptor y su propio recuento
-    if (plegados > 0) contador.title = `${plegados} plegados por duplicado`;
+    if (plegados > 0) contador.title = t('resultados.plegados', { n: plegados });
     else contador.removeAttribute('title');
   }
 
@@ -494,6 +498,15 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
 
   render();
   actualizarContador();
+
+  // Las filas y el contador se construyen con datos, no con texto fijo, asi
+  // que hay que rehacerlos enteros al cambiar de idioma. Sin esto, la lista
+  // se quedaria con las columnas y los avisos en el idioma anterior hasta la
+  // siguiente busqueda.
+  alCambiarIdioma(() => {
+    actualizarContador();
+    render();
+  });
 
   return {
     root,

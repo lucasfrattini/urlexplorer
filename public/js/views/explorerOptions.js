@@ -11,11 +11,17 @@
  * campos que viajan al servidor son exactamente los de antes.
  */
 
-/** Presets del paso 2. `extensiones` es lo que acaba en `fileExtensions`. */
+/**
+ * Presets del paso 2. `extensiones` es lo que acaba en `fileExtensions`.
+ *
+ * La etiqueta va como CLAVE de traducción, no como texto: este módulo es
+ * lógica pura y no debe conocer ningún idioma. Las extensiones, en cambio,
+ * son literales y no se traducen nunca.
+ */
 export const PRESETS_EXTENSION = [
-  { id: 'video', etiqueta: 'Vídeo', extensiones: '.mp4, .webm' },
-  { id: 'audio', etiqueta: 'Audio', extensiones: '.mp3' },
-  { id: 'imagen', etiqueta: 'Imágenes', extensiones: '.jpg, .png' },
+  { id: 'video', etiquetaKey: 'explorer.preset.video', extensiones: '.mp4, .webm' },
+  { id: 'audio', etiquetaKey: 'explorer.preset.audio', extensiones: '.mp3' },
+  { id: 'imagen', etiquetaKey: 'explorer.preset.imagen', extensiones: '.jpg, .png' },
 ];
 
 /**

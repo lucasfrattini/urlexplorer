@@ -329,6 +329,7 @@ export const es = {
   'video.url.hint':
     'Se mira una sola página, y se mira por cuatro vías: lo que se ve tras cargarla, lo que pide por la red, los reproductores incrustados y las direcciones escondidas en su código.',
   'video.url.placeholder': 'https://ejemplo.com/video/12345',
+  'video.faltaUrl.body': 'Pega la dirección de la página que quieres analizar.',
   'video.navegador.label': 'Abrir con navegador',
   'video.navegador.hint':
     'Abre la página como lo haría un navegador de verdad y mira qué pide. Encuentra vídeos que no están escritos en la página.',

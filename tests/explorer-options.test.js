@@ -102,7 +102,7 @@ test('los presets declaran extensiones con punto y separadas por comas', () => {
   const { PRESETS_EXTENSION, presetDe } = opciones;
 
   for (const preset of PRESETS_EXTENSION) {
-    assert.ok(preset.id && preset.etiqueta, `preset incompleto: ${JSON.stringify(preset)}`);
+    assert.ok(preset.id && preset.etiquetaKey, `preset incompleto: ${JSON.stringify(preset)}`);
     for (const ext of preset.extensiones.split(',')) {
       assert.match(ext.trim(), /^\.[a-z0-9]+$/, `extensión inválida en ${preset.id}: ${ext}`);
     }
