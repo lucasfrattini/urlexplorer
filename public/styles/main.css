@@ -1145,3 +1145,58 @@ a {
   color: var(--c-text-muted);
   line-height: 1.45;
 }
+
+/* ── Propuesta de configuración (autodetección) ──────────────────────── */
+
+/*
+ * El panel se queda visible DESPUÉS de rellenar el formulario, a propósito:
+ * la detección acierta la mayoría de las veces, no siempre, y el usuario
+ * necesita ver por qué se ha propuesto cada campo para poder juzgarlo.
+ */
+.propuesta {
+  margin-top: var(--space-4);
+}
+
+.propuesta__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.propuesta__item {
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--c-border);
+}
+
+.propuesta__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.propuesta__campo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.propuesta__valor {
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--c-surface-alt, rgba(127, 127, 127, 0.12));
+  word-break: break-all;
+}
+
+.propuesta__motivo {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--c-text-muted);
+}

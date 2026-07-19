@@ -6,8 +6,37 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const { parseExtensionList } = require('../lib/url');
 const { crawl, normalizeCrawlParams } = require('../services/scraper');
+const { detectConfig } = require('../services/detector');
+const { AppError } = require('../lib/errors');
 
 const router = express.Router();
+
+/**
+ * POST /api/scrape/detect — propone una configuración para una URL.
+ *
+ * Lo que devuelve es una SUGERENCIA, con el motivo de cada campo y un nivel
+ * de confianza. Cuesta una carga con navegador, así que no conviene llamarlo
+ * en cada tecla: va detrás de un botón explícito.
+ */
+router.post('/scrape/detect', async (req, res, next) => {
+  try {
+    const { searchUrl } = req.body || {};
+
+    if (typeof searchUrl !== 'string' || searchUrl.trim() === '') {
+      throw new AppError('Se requiere una URL', 400, 'URL_REQUIRED');
+    }
+
+    const controller = new AbortController();
+    res.on('close', () => {
+      if (!res.writableEnded) controller.abort();
+    });
+
+    const propuesta = await detectConfig(searchUrl.trim(), { signal: controller.signal });
+    res.json({ success: true, ...propuesta });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * POST /api/scrape — crawl completo con respuesta JSON única.

@@ -53,6 +53,11 @@ export function scrape(params) {
   return request('/scrape', { method: 'POST', body: JSON.stringify(params) });
 }
 
+/** Propone una configuración para una URL. Cuesta una carga con navegador. */
+export function detectConfig(searchUrl) {
+  return request('/scrape/detect', { method: 'POST', body: JSON.stringify({ searchUrl }) });
+}
+
 export function extractVideos(params) {
   return request('/video/extract', { method: 'POST', body: JSON.stringify(params) });
 }

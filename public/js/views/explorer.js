@@ -1,5 +1,5 @@
-import { el, setChildren, clear, alertBox, stat, show } from '../dom.js';
-import { openScrapeStream } from '../api.js';
+import { el, setChildren, clear, alertBox, stat, show, toast } from '../dom.js';
+import { openScrapeStream, detectConfig } from '../api.js';
 import { createProgressPanel } from '../components/progress.js';
 import { createResultList } from '../components/resultList.js';
 import { createProfileBar, configFromUrl } from '../components/profiles.js';
@@ -110,6 +110,19 @@ export function createExplorerView(container, { limits }) {
     attrs: { type: 'button' },
   });
 
+  const detectButton = el('button', {
+    className: 'button button--secondary',
+    text: 'Detectar configuración',
+    attrs: {
+      type: 'button',
+      title: 'Abre la URL y propone una configuración. Siempre es una sugerencia: revísala.',
+    },
+  });
+
+  /** Panel con la propuesta y el porqué de cada campo. */
+  const detectSlot = el('div');
+  show(detectSlot, false);
+
   const form = el('form', {
     className: 'grid',
     attrs: { novalidate: true },
@@ -216,7 +229,8 @@ export function createExplorerView(container, { limits }) {
         ],
       }),
 
-      el('div', { className: 'button-row', children: [submitButton, resetButton] }),
+      el('div', { className: 'button-row', children: [submitButton, detectButton, resetButton] }),
+      detectSlot,
     ],
   });
 
@@ -366,6 +380,136 @@ export function createExplorerView(container, { limits }) {
     setChildren(statsSlot, el('div', { className: 'stats', children: cards }));
     show(statsCard, true);
   }
+
+  // ── Detección de configuración ─────────────────────────────────────
+
+  /** Una fila del panel: qué se propone y por qué. */
+  function filaPropuesta(campo, valor, motivo, confianza) {
+    return el('li', {
+      className: 'propuesta__item',
+      children: [
+        el('div', {
+          className: 'propuesta__cabecera',
+          children: [
+            el('span', { className: 'propuesta__campo', text: campo }),
+            el('code', { className: 'propuesta__valor', text: valor || '(vacío)' }),
+            confianza
+              ? el('span', {
+                  className: `badge badge--${confianza === 'alta' ? 'success' : 'accent'}`,
+                  text: `confianza ${confianza}`,
+                })
+              : null,
+          ],
+        }),
+        el('p', { className: 'propuesta__motivo', text: motivo }),
+      ],
+    });
+  }
+
+  /**
+   * Muestra la propuesta.
+   *
+   * El formulario se rellena, pero el panel se queda visible con el motivo de
+   * cada campo. Presentarlo como verdad automática sería el error: acierta la
+   * mayoría de las veces, no siempre, y si no se dice, cada fallo se lee como
+   * una avería en vez de como una propuesta que había que revisar.
+   */
+  function mostrarPropuesta(resultado) {
+    const { sugerencia, motivos, confianza, avisos, analizado, alternativas } = resultado;
+
+    const filas = [
+      filaPropuesta('Patrón de enlace', sugerencia.linkPattern, motivos.patron, confianza.patron),
+      filaPropuesta(
+        'Paginación',
+        sugerencia.pageParam ? `parámetro "${sugerencia.pageParam}"` : sugerencia.searchUrl,
+        motivos.paginacion,
+        confianza.paginacion
+      ),
+      filaPropuesta(
+        'Renderizar con navegador',
+        sugerencia.useJavaScript ? 'sí' : 'no',
+        motivos.navegador
+      ),
+      filaPropuesta('Extensiones', sugerencia.fileExtensions, motivos.extensiones),
+    ];
+
+    if (alternativas?.linkPattern) {
+      filas.push(
+        filaPropuesta(
+          'Patrón alternativo',
+          alternativas.linkPattern,
+          'Más amplio que el propuesto. Úsalo si el sugerido deja fuera resultados que sí querías.'
+        )
+      );
+    }
+
+    setChildren(detectSlot, [
+      el('div', {
+        className: 'card propuesta',
+        children: [
+          el('div', {
+            className: 'card__header',
+            children: [
+              el('h3', { className: 'card__title', text: 'Propuesta de configuración' }),
+              el('p', {
+                className: 'card__hint',
+                text: `Es una sugerencia, no una verdad: revísala y corrige lo que no encaje. Se han analizado ${analizado.enlacesConNavegador} enlaces con navegador y ${analizado.enlacesSinNavegador} sin él.`,
+              }),
+            ],
+          }),
+          el('div', {
+            className: 'card__body',
+            children: [
+              el('ul', { className: 'propuesta__lista', children: filas }),
+              ...avisos.map(texto =>
+                alertBox({ variant: 'warning', title: 'A tener en cuenta', body: texto })
+              ),
+            ],
+          }),
+        ],
+      }),
+    ]);
+    show(detectSlot, true);
+  }
+
+  detectButton.addEventListener('click', async () => {
+    const url = fields.searchUrl.value.trim();
+
+    if (!url || !/^https?:\/\//i.test(url)) {
+      showError('Falta la URL', 'Escribe la URL de la página de resultados que quieres analizar.');
+      fields.searchUrl.focus();
+      return;
+    }
+
+    detectButton.disabled = true;
+    detectButton.textContent = 'Analizando…';
+    clearAlert();
+
+    try {
+      const resultado = await detectConfig(url);
+
+      // Se rellena el formulario, pero solo lo que la detección ha resuelto:
+      // un campo vacío no debe borrar lo que el usuario ya tenía escrito.
+      const { sugerencia } = resultado;
+      const aplicar = {};
+      if (sugerencia.linkPattern) aplicar.linkPattern = sugerencia.linkPattern;
+      if (sugerencia.pageParam) aplicar.pageParam = sugerencia.pageParam;
+      if (sugerencia.fileExtensions) aplicar.fileExtensions = sugerencia.fileExtensions;
+      if (sugerencia.searchUrl && sugerencia.searchUrl !== url) {
+        aplicar.searchUrl = sugerencia.searchUrl;
+      }
+      aplicar.useJavaScript = sugerencia.useJavaScript;
+      applyConfig(aplicar);
+
+      mostrarPropuesta(resultado);
+      toast('Propuesta lista: revísala antes de explorar');
+    } catch (error) {
+      showError('No se pudo analizar la página', error.message);
+    } finally {
+      detectButton.disabled = false;
+      detectButton.textContent = 'Detectar configuración';
+    }
+  });
 
   // ── Ejecución ──────────────────────────────────────────────────────
 
