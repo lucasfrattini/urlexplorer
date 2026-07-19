@@ -1981,3 +1981,118 @@ a {
   color: var(--c-danger);
   border-color: var(--c-danger);
 }
+
+/* ── Miembros de un grupo de duplicados ───────────────────────────────
+   Se despliegan bajo su representante al pulsar la fila o la insignia "+N".
+   Llevan miniatura, duración y peso porque son exactamente los tres datos
+   con los que se decide si dos resultados son el mismo vídeo; antes estaban
+   escondidos en un `title` que nadie lee. */
+.result-item--grupo {
+  cursor: pointer;
+}
+
+.result-item--expandido {
+  background: var(--c-surface-2);
+}
+
+.result-item__dupe {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* La fila del panel ocupa el ancho entero, fuera de la rejilla de columnas */
+.result-item--miembros {
+  display: block;
+  padding: 0;
+  background: var(--c-surface-2);
+}
+
+.miembros {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-left: 3px solid var(--c-warning);
+}
+
+.miembros__motivo {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.miembro {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+}
+
+.miembro__thumb {
+  width: 64px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--c-surface-3);
+  flex-shrink: 0;
+}
+
+.miembro__thumb--vacia {
+  display: block;
+}
+
+.miembro__datos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.miembro__url {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--c-text);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.miembro__url:hover {
+  color: var(--c-accent);
+  text-decoration: underline;
+}
+
+.miembro__meta {
+  display: flex;
+  gap: var(--space-3);
+  font-size: 12px;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* La etiqueta delante del dato: sin ella, dos números sueltos no dicen qué son */
+.miembro__dato::before {
+  content: attr(data-label) ': ';
+  color: var(--c-text-subtle);
+}
+
+.miembro__acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .miembro {
+    flex-wrap: wrap;
+  }
+
+  .miembro__acciones {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

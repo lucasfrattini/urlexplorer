@@ -113,6 +113,12 @@ export const es = {
   'resultados.restaurar': 'Restaurar ocultos ({n})',
   'resultados.restaurar.title': 'Devuelve todos los resultados que has quitado',
   'resultados.ocultados': '{n} quitados',
+  'resultados.grupo.desplegar': 'Ver los {n} agrupados',
+  'resultados.grupo.plegar': 'Ocultar los agrupados',
+  'resultados.grupo.noEsDuplicado': 'No es duplicado',
+  'resultados.grupo.noEsDuplicado.title': 'Sácalo del grupo y devuélvelo a la lista principal',
+  'resultados.grupo.sacado': 'Sacado del grupo',
+  'resultados.grupo.agrupadoPor': 'Agrupado por {motivo}',
   'resultados.sinCoincidencias': 'Sin coincidencias',
   'resultados.sinCoincidencias.texto':
     'Ningún resultado pasa los filtros actuales. Prueba a ampliar los rangos o a desactivar los interruptores.',

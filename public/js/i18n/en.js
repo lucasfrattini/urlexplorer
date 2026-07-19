@@ -113,6 +113,12 @@ export const en = {
   'resultados.restaurar': 'Restore removed ({n})',
   'resultados.restaurar.title': 'Brings back every result you have removed',
   'resultados.ocultados': '{n} removed',
+  'resultados.grupo.desplegar': 'Show the {n} grouped',
+  'resultados.grupo.plegar': 'Hide the grouped ones',
+  'resultados.grupo.noEsDuplicado': 'Not a duplicate',
+  'resultados.grupo.noEsDuplicado.title': 'Take it out of the group and back into the main list',
+  'resultados.grupo.sacado': 'Taken out of the group',
+  'resultados.grupo.agrupadoPor': 'Grouped by {motivo}',
   'resultados.sinCoincidencias': 'No matches',
   'resultados.sinCoincidencias.texto':
     'No result passes the current filters. Try widening the ranges or turning the switches off.',

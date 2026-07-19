@@ -71,6 +71,26 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   const tandas = [];
 
   /**
+   * Grupos desplegados, y lo que el usuario ha sacado de ellos a mano.
+   *
+   * `expandidos` es solo vista: qué grupos muestran sus miembros debajo.
+   *
+   * `desagrupados` es una CORRECCIÓN del usuario y pesa más que el algoritmo:
+   * si dice que algo no es duplicado, deja de plegarse aunque las señales
+   * digan lo contrario, y sigue así aunque se recalculen los grupos al
+   * cambiar de modo. La máquina agrupa por indicios; la persona sabe.
+   */
+  const expandidos = new Set();
+  const desagrupados = new Set();
+
+  /** Miembros de un grupo que siguen plegados bajo su representante. */
+  function miembrosPlegados(representante) {
+    const grupo = grupos.get(representante);
+    if (!grupo) return [];
+    return grupo.miembros.filter(m => m !== representante && !desagrupados.has(m));
+  }
+
+  /**
    * Agrupación de duplicados: `duplicadoDe` mapea cada URL plegada a su
    * representante. NADA se borra de `items`; plegar es solo una vista.
    */
@@ -554,18 +574,35 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
           })
         : null;
 
-      const grupo = plegarDuplicados ? grupos.get(url) : null;
+      /**
+       * Insignia "+N": ahora es un BOTÓN que despliega el grupo.
+       *
+       * Antes solo decía cuántos había escondidos y los listaba en un `title`
+       * que nadie lee. Pudiendo verlos con su miniatura, su duración y su
+       * peso, la decisión de si son o no el mismo vídeo se puede tomar
+       * mirando, que es lo único que la hace fiable.
+       */
+      const plegadosAqui = plegarDuplicados ? miembrosPlegados(url) : [];
+      const estaExpandido = expandidos.has(url);
+
       const marcaGrupo =
-        grupo && grupo.miembros.length > 1
-          ? el('span', {
+        plegadosAqui.length > 0
+          ? el('button', {
               className: 'badge badge--warning result-item__dupe',
-              text: `+${grupo.miembros.length - 1}`,
+              text: `+${plegadosAqui.length}${estaExpandido ? ' ▾' : ' ▸'}`,
               attrs: {
-                title: t('resultados.duplicados.title', {
-                  n: grupo.miembros.length - 1,
-                  motivo: grupo.motivos?.[0]?.texto || t('resultados.duplicados.motivoPorDefecto'),
-                  miembros: grupo.miembros.slice(1).join(', '),
+                type: 'button',
+                'aria-expanded': String(estaExpandido),
+                title: t(estaExpandido ? 'resultados.grupo.plegar' : 'resultados.grupo.desplegar', {
+                  n: plegadosAqui.length,
                 }),
+              },
+              on: {
+                click: clickEvent => {
+                  clickEvent.preventDefault();
+                  clickEvent.stopPropagation();
+                  alternarGrupo(url);
+                },
               },
             })
           : null;
@@ -606,8 +643,24 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
           })
         : null;
 
-      return el('li', {
-        className: miniatura ? 'result-item result-item--con-miniatura' : 'result-item',
+      const clases = ['result-item'];
+      if (miniatura) clases.push('result-item--con-miniatura');
+      if (plegadosAqui.length > 0) clases.push('result-item--grupo');
+      if (estaExpandido) clases.push('result-item--expandido');
+
+      const fila = el('li', {
+        className: clases.join(' '),
+        on:
+          plegadosAqui.length > 0
+            ? {
+                // Toda la fila despliega, salvo cuando se pulsa algo que ya
+                // hace lo suyo: el enlace, copiar, quitar.
+                click: clickEvent => {
+                  if (clickEvent.target.closest('a, button')) return;
+                  alternarGrupo(url);
+                },
+              }
+            : undefined,
         children: [
           miniatura,
           el('span', { className: 'result-item__index', text: String(index + 1) }),
@@ -640,6 +693,10 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
           celdaPeso,
         ],
       });
+
+      // Sin desplegar, la fila va sola. Desplegada, arrastra a los suyos.
+      if (!estaExpandido || plegadosAqui.length === 0) return fila;
+      return [fila, panelDeMiembros(url, plegadosAqui)];
     });
 
     if (filtered.length > visible.length) {
@@ -656,7 +713,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       );
     }
 
-    setChildren(list, nodes);
+    setChildren(list, nodes.flat());
   }
 
   /** Vuelca al estado los grupos del modo elegido. */
@@ -678,6 +735,121 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     if (agresivo) avisoModoDup.textContent = t('filtros.modoDup.aviso');
   }
 
+  /** Despliega o pliega los miembros de un grupo. */
+  function alternarGrupo(representante) {
+    if (expandidos.has(representante)) expandidos.delete(representante);
+    else expandidos.add(representante);
+    render();
+  }
+
+  /**
+   * Saca un resultado de su grupo y lo devuelve a la lista principal.
+   *
+   * Es una corrección del usuario y pesa más que el algoritmo: las señales
+   * dijeron que era el mismo vídeo y la persona, mirándolo, dice que no. A
+   * partir de aquí deja de plegarse, y sigue así aunque se recalculen los
+   * grupos al cambiar de modo.
+   */
+  function sacarDelGrupo(url) {
+    desagrupados.add(url);
+    toast(t('resultados.grupo.sacado'));
+    applyFilter();
+  }
+
+  /**
+   * Panel con los miembros plegados de un grupo.
+   *
+   * Cada uno con su miniatura, su duración y su peso: son exactamente los
+   * tres datos con los que se decide si dos resultados son el mismo vídeo, y
+   * hasta ahora estaban escondidos en un `title`.
+   */
+  function panelDeMiembros(representante, miembros) {
+    const grupo = grupos.get(representante);
+    const motivo = grupo?.motivos?.[0]?.texto || t('resultados.duplicados.motivoPorDefecto');
+
+    const filas = miembros.map(miembroUrl => {
+      const info = meta.get(miembroUrl);
+
+      const mini = info?.thumbnail
+        ? el('img', {
+            className: 'miembro__thumb',
+            attrs: {
+              src: `/api/thumbnail?url=${encodeURIComponent(info.thumbnail)}`,
+              alt: '',
+              loading: 'lazy',
+              decoding: 'async',
+              width: '64',
+              height: '36',
+            },
+          })
+        : el('span', { className: 'miembro__thumb miembro__thumb--vacia' });
+
+      const aprox = info?.sizeApproximate === true;
+
+      return el('div', {
+        className: 'miembro',
+        children: [
+          mini,
+          el('div', {
+            className: 'miembro__datos',
+            children: [
+              safeLink(miembroUrl, { className: 'miembro__url' }),
+              el('div', {
+                className: 'miembro__meta',
+                children: [
+                  el('span', {
+                    className: 'miembro__dato',
+                    text: info?.duration || '—',
+                    attrs: { 'data-label': t('columnas.duracion') },
+                  }),
+                  el('span', {
+                    className: 'miembro__dato',
+                    text: info?.size ? (aprox ? `~${info.size}` : info.size) : '—',
+                    attrs: { 'data-label': t('columnas.peso') },
+                  }),
+                ],
+              }),
+            ],
+          }),
+          el('div', {
+            className: 'miembro__acciones',
+            children: [
+              copyIconButton(miembroUrl),
+              el('button', {
+                className: 'button button--secondary button--small miembro__sacar',
+                text: t('resultados.grupo.noEsDuplicado'),
+                attrs: { type: 'button', title: t('resultados.grupo.noEsDuplicado.title') },
+                on: {
+                  click: clickEvent => {
+                    clickEvent.preventDefault();
+                    clickEvent.stopPropagation();
+                    sacarDelGrupo(miembroUrl);
+                  },
+                },
+              }),
+            ],
+          }),
+        ],
+      });
+    });
+
+    return el('li', {
+      className: 'result-item result-item--miembros',
+      children: [
+        el('div', {
+          className: 'miembros',
+          children: [
+            el('p', {
+              className: 'miembros__motivo',
+              text: t('resultados.grupo.agrupadoPor', { motivo }),
+            }),
+            ...filas,
+          ],
+        }),
+      ],
+    });
+  }
+
   /* ── Filtrado ────────────────────────────────────────────────────── */
 
   function applyFilter() {
@@ -696,7 +868,8 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       // Quitados a mano: siguen en `items`, solo no se muestran
       if (ocultos.has(url)) return false;
 
-      if (plegarDuplicados && duplicadoDe.has(url)) return false;
+      // Lo que el usuario marcó como "no es duplicado" vuelve a la lista
+      if (plegarDuplicados && duplicadoDe.has(url) && !desagrupados.has(url)) return false;
 
       const lower = url.toLowerCase();
       if (needle !== '' && !lower.includes(needle)) return false;
@@ -766,7 +939,9 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   /** "Mostrando X de Y", para que se entienda qué está recortando. */
   function actualizarContador() {
     const total = items.length;
-    const plegados = plegarDuplicados ? items.filter(url => duplicadoDe.has(url)).length : 0;
+    const plegados = plegarDuplicados
+      ? items.filter(url => duplicadoDe.has(url) && !desagrupados.has(url)).length
+      : 0;
 
     if (total === 0) {
       contador.textContent = t('resultados.cero');
@@ -787,8 +962,9 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       restoreButton.textContent = t('resultados.restaurar', { n: ocultos.size });
     }
 
-    dupeToggle.root.hidden = duplicadoDe.size === 0;
-    dupeToggle.texto.textContent = tp('filtros.agrupar', duplicadoDe.size);
+    const aunPlegados = [...duplicadoDe.keys()].filter(u => !desagrupados.has(u)).length;
+    dupeToggle.root.hidden = aunPlegados === 0;
+    dupeToggle.texto.textContent = tp('filtros.agrupar', aunPlegados);
 
     const conPeso = items.filter(url => bytesDe(meta.get(url)) !== null).length;
     const sinNingunPeso = total > 0 && conPeso === 0;
@@ -860,6 +1036,8 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       grupos = new Map();
       ocultos = new Set();
       tandas.length = 0;
+      expandidos.clear();
+      desagrupados.clear();
       gruposPorModo = { seguro: [], duracion: [] };
       modoDuplicados = 'seguro';
       dupDuracionToggle.input.checked = false;
