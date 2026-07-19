@@ -745,18 +745,251 @@ a {
   color: var(--c-text-muted);
 }
 
-.toolbar {
+/* ── Tarjeta de resultados ───────────────────────────────────────────── */
+
+/*
+ * Todo lo que vive dentro de esta tarjeta actúa sobre los resultados ya
+ * cargados y filtra en el cliente. Está separado del formulario de
+ * exploración a propósito: aquel decide QUÉ se descarga, este decide qué se
+ * MUESTRA de lo descargado. Cuando estaban mezclados no había forma de saber
+ * qué control afectaba a qué.
+ */
+
+.results__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--c-border);
 }
 
-.toolbar__search {
+.results__count {
+  font-size: 13px;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cuando hay algo recortado el conteo deja de ser un dato neutro */
+.results__count--filtrado {
+  color: var(--c-warning);
+  font-weight: 560;
+}
+
+.results__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* ── Bloque de filtros ───────────────────────────────────────────────── */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--c-surface-2);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.filters__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.filters__row--text .input[type='search'] {
   flex: 1;
   min-width: 180px;
+}
+
+/* El desplegable de orden no debe estirarse a fila completa cuando envuelve */
+.filters__row--text select.input {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 190px;
+}
+
+/* Los dos rangos comparten fila en escritorio y se apilan en móvil */
+.filters__row--ranges {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-5);
+}
+
+.filters__note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--c-text-muted);
+}
+
+.filters__note--warn {
+  color: var(--c-warning);
+}
+
+/* ── Interruptor genérico ────────────────────────────────────────────── */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle:hover {
+  border-color: var(--c-border-strong);
+}
+
+.toggle[hidden] {
+  display: none;
+}
+
+.toggle__text {
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
+/* ── Filtro de rango con dos manijas ─────────────────────────────────── */
+
+.range[hidden] {
+  display: none;
+}
+
+.range__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.range__label {
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--c-text);
+}
+
+.range__value {
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.range__body {
+  position: relative;
+  height: 24px;
+}
+
+.range__track {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+}
+
+.range__rail {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--c-surface-3);
+}
+
+/* Tramo seleccionado, entre las dos manijas */
+.range__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: var(--c-accent);
+}
+
+/*
+ * Los dos input[type=range] van superpuestos. El input entero ignora el
+ * puntero y solo la manija lo captura: si no, el de arriba se comería todos
+ * los clics y el de abajo sería inalcanzable.
+ */
+.range__input {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: none;
+  appearance: none;
+  pointer-events: none;
+}
+
+.range__input::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--c-surface);
+  background: var(--c-accent);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.range__input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--c-surface);
+  background: var(--c-accent);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.range__input:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+/* ── Lista de resultados, en rejilla para que se lea como tabla ──────── */
+
+/*
+ * Las columnas se declaran una sola vez y las comparten la fila de títulos y
+ * cada resultado, que es lo que las mantiene alineadas. Es una lista y no una
+ * <table> porque el contenido es una lista de enlaces, no datos tabulares:
+ * así los lectores de pantalla la anuncian bien y el responsive es trivial.
+ */
+.result-head,
+.result-item {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) 5.5rem 6rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+}
+
+.result-head {
+  padding-block: var(--space-2);
+  border-bottom: 1px solid var(--c-border);
+  font-size: 11.5px;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--c-text-subtle);
+  background: var(--c-surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.result-head__col {
+  text-align: right;
 }
 
 .result-list {
@@ -767,10 +1000,6 @@ a {
 }
 
 .result-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--c-border);
   transition: background var(--transition);
 }
@@ -783,8 +1012,26 @@ a {
   background: var(--c-surface-2);
 }
 
+/* Las filas que no son un resultado ocupan el ancho completo */
+.result-item--empty,
+.result-item--note {
+  display: block;
+}
+
+.result-item__index {
+  font-size: 12px;
+  color: var(--c-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.result-item__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .result-item__link {
-  flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -798,10 +1045,57 @@ a {
   text-decoration: underline;
 }
 
-.result-item__meta {
-  display: flex;
-  gap: var(--space-2);
+.result-item__dupe {
   flex-shrink: 0;
+}
+
+.result-item__col {
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* El guion dice "no se pudo obtener", que no es lo mismo que un cero */
+.result-item__col--empty {
+  color: var(--c-text-subtle);
+}
+
+/*
+ * Móvil: las columnas de duración y peso no caben junto al enlace, así que
+ * pasan debajo, alineadas a la izquierda y con su etiqueta delante. La fila
+ * de títulos se oculta porque ya no encabeza nada.
+ */
+@media (max-width: 640px) {
+  .result-head {
+    display: none;
+  }
+
+  .result-item {
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    row-gap: var(--space-1);
+  }
+
+  .result-item__main {
+    grid-column: 2;
+  }
+
+  .result-item__col {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .result-item__col::before {
+    content: attr(data-label);
+    color: var(--c-text-subtle);
+    margin-right: var(--space-2);
+  }
+
+  .results__actions {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 .badge {
@@ -1232,36 +1526,4 @@ a {
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--c-text-muted);
-}
-
-/* ── Interruptor de agrupación de duplicados ─────────────────────────── */
-
-/*
- * Va en la barra de resultados, junto al contador. Se ve siempre que haya
- * duplicados: la agrupación puede equivocarse, así que el usuario tiene que
- * saber que está activa y poder deshacerla.
- */
-.dupe-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 3px var(--space-2);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  user-select: none;
-}
-
-.dupe-toggle:hover {
-  border-color: var(--c-border-strong);
-}
-
-.dupe-toggle[hidden] {
-  display: none;
-}
-
-.dupe-toggle__text {
-  font-size: 12.5px;
-  color: var(--c-text-muted);
-  white-space: nowrap;
 }

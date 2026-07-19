@@ -7,103 +7,57 @@ import {
   downloadText,
   toast,
 } from '../dom.js';
+import { createRangeFilter, formatDuration, formatBytes } from './rangeSlider.js';
 
 /**
- * Lista de resultados con filtro, copia y descarga.
+ * Lista de resultados con filtros y exportación.
  *
  * Todas las URLs se pintan con safeLink(): texto por textContent y esquema
  * filtrado, porque provienen de HTML de terceros.
+ *
+ * ── Organización ──────────────────────────────────────────────────────
+ *
+ * Todo lo que hay dentro de esta tarjeta actúa sobre los resultados YA
+ * cargados y filtra en el cliente: nada de aquí vuelve a pedir nada al
+ * servidor. Por eso los filtros viven dentro de la tarjeta de resultados y
+ * no junto al formulario de exploración, que es lo que decide qué se
+ * descarga. Mezclar las dos cosas hacía imposible saber qué actuaba sobre
+ * qué.
  */
-/** "1:02:03" o "12:34" a segundos, para poder ordenar. */
-function segundos(info) {
+
+/** Segundos de un resultado, o null si no se conocen. */
+function segundosDe(info) {
+  if (Number.isFinite(info?.durationSeconds)) return info.durationSeconds;
+  // Respaldo para los detalles antiguos, que solo traían el texto "12:34"
   if (!info?.duration) return null;
   const partes = info.duration.split(':').map(Number);
   if (partes.some(n => !Number.isFinite(n))) return null;
   return partes.reduce((total, n) => total * 60 + n, 0);
 }
 
+/** Bytes de un resultado, o null. */
+function bytesDe(info) {
+  return Number.isFinite(info?.sizeBytes) ? info.sizeBytes : null;
+}
+
 export function createResultList({ emptyTitle, emptyText, filename = 'urlexplorer.txt' }) {
   let items = [];
   let filtered = [];
-  let hiddenCount = 0;
-  // url -> { duration, size, sizeBytes, sizeApproximate }
+  // url -> { duration, durationSeconds, size, sizeBytes, sizeApproximate }
   let meta = new Map();
   let sortBy = 'orden';
 
   /**
-   * Agrupación de duplicados.
-   *
-   * `duplicadoDe` mapea cada URL plegada al representante de su grupo, y
-   * `grupos` guarda los miembros de cada uno. NADA se borra de `items`:
-   * plegar es solo una vista, y el interruptor la deshace. Descartar en
-   * silencio haría perder resultados legítimos, porque dos vídeos distintos
-   * pueden compartir señales.
+   * Agrupación de duplicados: `duplicadoDe` mapea cada URL plegada a su
+   * representante. NADA se borra de `items`; plegar es solo una vista.
    */
   let duplicadoDe = new Map();
   let grupos = new Map();
   let plegarDuplicados = true;
 
-  const counter = el('span', { className: 'badge', text: '0' });
-  const hiddenBadge = el('span', { className: 'badge badge--warning', text: '' });
-  hiddenBadge.hidden = true;
+  /* ── Cabecera: conteo y acciones ─────────────────────────────────── */
 
-  const search = el('input', {
-    className: 'input toolbar__search',
-    attrs: {
-      type: 'search',
-      placeholder: 'Filtrar resultados…',
-      'aria-label': 'Filtrar resultados',
-    },
-    on: {
-      input: () => applyFilter(),
-    },
-  });
-
-  // Filtro de exclusión: en listas grandes suele ser más rápido decir qué NO
-  // quieres (240p, sample, preview…) que acertar con un término que incluya
-  // justo lo bueno.
-  const exclude = el('input', {
-    className: 'input toolbar__search',
-    attrs: {
-      type: 'search',
-      placeholder: 'Ocultar los que contengan… (240p, sample)',
-      'aria-label': 'Ocultar resultados que contengan estos textos',
-      title: 'Separa varios textos con comas',
-    },
-    on: {
-      input: () => applyFilter(),
-    },
-  });
-
-  /**
-   * Interruptor de agrupación.
-   *
-   * Existe porque la agrupación puede equivocarse: dos vídeos distintos
-   * pueden compartir señales. El usuario tiene que poder deshacerla y ver la
-   * lista entera, y por eso también se dice cuántos hay plegados en vez de
-   * dejar que desaparezcan sin más.
-   */
-  const dupeCheckbox = el('input', {
-    attrs: { type: 'checkbox', id: 'dupe-toggle', checked: true },
-    on: {
-      change: () => {
-        plegarDuplicados = dupeCheckbox.checked;
-        applyFilter();
-      },
-    },
-  });
-
-  const dupeLabel = el('span', { className: 'dupe-toggle__text', text: '' });
-
-  const dupeToggle = el('label', {
-    className: 'dupe-toggle',
-    attrs: {
-      for: 'dupe-toggle',
-      title: 'Agrupa los resultados que parecen el mismo contenido. Desactívalo para verlos todos.',
-    },
-    children: [dupeCheckbox, dupeLabel],
-  });
-  dupeToggle.hidden = true;
+  const contador = el('span', { className: 'results__count', text: '0 resultados' });
 
   const copyButton = el('button', {
     className: 'button button--secondary button--small',
@@ -132,6 +86,31 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     },
   });
 
+  /* ── Filtros de texto ────────────────────────────────────────────── */
+
+  const search = el('input', {
+    className: 'input',
+    attrs: {
+      type: 'search',
+      placeholder: 'Filtrar resultados…',
+      'aria-label': 'Filtrar resultados',
+    },
+    on: { input: () => applyFilter() },
+  });
+
+  // En listas grandes suele ser más rápido decir qué NO quieres (240p,
+  // sample, preview…) que acertar con un término que incluya justo lo bueno.
+  const exclude = el('input', {
+    className: 'input',
+    attrs: {
+      type: 'search',
+      placeholder: 'Ocultar los que contengan… (240p, sample)',
+      'aria-label': 'Ocultar resultados que contengan estos textos',
+      title: 'Separa varios textos con comas',
+    },
+    on: { input: () => applyFilter() },
+  });
+
   const sortSelect = el('select', {
     className: 'input',
     attrs: { 'aria-label': 'Ordenar resultados' },
@@ -148,42 +127,182 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     el('option', { text: 'Más pesados primero', attrs: { value: 'tamano' } })
   );
 
-  const toolbar = el('div', {
-    className: 'toolbar',
+  /* ── Filtros de rango ────────────────────────────────────────────── */
+
+  const filtroDuracion = createRangeFilter({
+    label: 'Duración',
+    format: formatDuration,
+    onChange: () => applyFilter(),
+  });
+
+  const filtroPeso = createRangeFilter({
+    label: 'Peso',
+    format: formatBytes,
+    onChange: () => applyFilter(),
+  });
+
+  /* ── Interruptores ───────────────────────────────────────────────── */
+
+  function crearToggle(id, textoInicial, titulo, alCambiar) {
+    const input = el('input', {
+      attrs: { type: 'checkbox', id },
+      on: { change: () => alCambiar(input.checked) },
+    });
+    const texto = el('span', { className: 'toggle__text', text: textoInicial });
+    const root = el('label', {
+      className: 'toggle',
+      attrs: { for: id, title: titulo },
+      children: [input, texto],
+    });
+    return { root, input, texto };
+  }
+
+  let ocultarSinDuracion = false;
+  let ocultarSinPeso = false;
+
+  const toggleSinDuracion = crearToggle(
+    'hide-no-duration',
+    'Ocultar sin duración',
+    'Quita los resultados de los que no se pudo averiguar la duración. El filtro de rango por sí solo NO los quita.',
+    v => {
+      ocultarSinDuracion = v;
+      applyFilter();
+    }
+  );
+
+  const toggleSinPeso = crearToggle(
+    'hide-no-size',
+    'Ocultar sin peso',
+    'Quita los resultados de los que no se pudo averiguar el peso. El filtro de rango por sí solo NO los quita.',
+    v => {
+      ocultarSinPeso = v;
+      applyFilter();
+    }
+  );
+
+  const dupeToggle = crearToggle(
+    'dupe-toggle',
+    '',
+    'Agrupa los resultados que parecen el mismo contenido. Desactívalo para verlos todos.',
+    v => {
+      plegarDuplicados = v;
+      applyFilter();
+    }
+  );
+  dupeToggle.input.checked = true;
+  dupeToggle.root.hidden = true;
+
+  /**
+   * Nota que explica la regla menos evidente de todo el panel.
+   *
+   * Un resultado del que no se conoce la duración NO desaparece al mover el
+   * slider de duración: filtrar por un dato que no se tiene solo puede
+   * equivocarse. Los rangos ordenan entre los que SÍ tienen el dato, y los
+   * interruptores deciden qué pasa con el resto. Sin decirlo, el usuario
+   * mueve una manija, ve que el número no baja, y cree que está roto.
+   */
+  const nota = el('p', {
+    className: 'filters__note',
+    text: 'Los rangos solo recortan entre los resultados que tienen el dato. A los que no lo tienen no los toca: para quitarlos, usa los interruptores.',
+  });
+
+  const avisoSinPeso = el('p', { className: 'filters__note filters__note--warn' });
+  avisoSinPeso.hidden = true;
+
+  /* ── Montaje ─────────────────────────────────────────────────────── */
+
+  const filtros = el('div', {
+    className: 'filters',
     children: [
-      counter,
-      hiddenBadge,
-      dupeToggle,
-      search,
-      exclude,
-      sortSelect,
-      copyButton,
-      downloadButton,
+      el('div', {
+        className: 'filters__row filters__row--text',
+        children: [search, exclude, sortSelect],
+      }),
+      el('div', {
+        className: 'filters__row filters__row--ranges',
+        children: [filtroDuracion.root, filtroPeso.root],
+      }),
+      el('div', {
+        className: 'filters__row filters__row--flags',
+        children: [toggleSinDuracion.root, toggleSinPeso.root, dupeToggle.root],
+      }),
+      nota,
+      avisoSinPeso,
+    ],
+  });
+
+  const cabecera = el('div', {
+    className: 'results__head',
+    children: [
+      el('h3', { className: 'card__title', text: 'Resultados' }),
+      contador,
+      el('div', { className: 'results__actions', children: [copyButton, downloadButton] }),
+    ],
+  });
+
+  // Fila de títulos de columna: es lo que hace que la lista se lea como una
+  // tabla sin serlo. Comparte el mismo grid que cada fila.
+  const columnas = el('div', {
+    className: 'result-head',
+    children: [
+      el('span', { className: 'result-head__index', text: '#' }),
+      el('span', { text: 'Enlace' }),
+      el('span', { className: 'result-head__col', text: 'Duración' }),
+      el('span', { className: 'result-head__col', text: 'Peso' }),
     ],
   });
 
   const list = el('ul', { className: 'result-list' });
 
-  const root = el('div', { className: 'card', children: [toolbar, list] });
+  const root = el('div', {
+    className: 'card results',
+    children: [cabecera, filtros, columnas, list],
+  });
+
+  /* ── Render ──────────────────────────────────────────────────────── */
+
+  /**
+   * Celda de una columna de dato.
+   *
+   * El guion explícito importa: un hueco en blanco se lee como "cero" o como
+   * un fallo de la interfaz, y aquí significa "no se pudo obtener el dato".
+   * `data-label` lo usa el CSS en móvil, donde las columnas se apilan y
+   * necesitan decir de qué son.
+   */
+  function celda(valor, etiqueta, extra = {}) {
+    if (valor === null) {
+      return el('span', {
+        className: 'result-item__col result-item__col--empty',
+        text: '—',
+        attrs: { title: `No se pudo obtener ${etiqueta.toLowerCase()}`, 'data-label': etiqueta },
+      });
+    }
+    return el('span', {
+      className: 'result-item__col',
+      text: valor,
+      attrs: { 'data-label': etiqueta, ...extra },
+    });
+  }
 
   function render() {
-    counter.textContent = String(filtered.length);
-    hiddenBadge.hidden = hiddenCount === 0;
-    hiddenBadge.textContent = `${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}`;
-    const hasResults = filtered.length > 0;
-    copyButton.disabled = !hasResults;
-    downloadButton.disabled = !hasResults;
+    const hayResultados = filtered.length > 0;
+    copyButton.disabled = !hayResultados;
+    downloadButton.disabled = !hayResultados;
+    columnas.hidden = !hayResultados;
 
-    if (!hasResults) {
-      const isFiltered = items.length > 0;
+    if (!hayResultados) {
+      const estabaFiltrado = items.length > 0;
       setChildren(
         list,
         el('li', {
+          className: 'result-item result-item--empty',
           children: [
             emptyState({
-              icon: isFiltered ? '🔍' : '○',
-              title: isFiltered ? 'Sin coincidencias' : emptyTitle,
-              text: isFiltered ? 'Ningún resultado coincide con el filtro.' : emptyText,
+              icon: estabaFiltrado ? '🔍' : '○',
+              title: estabaFiltrado ? 'Sin coincidencias' : emptyTitle,
+              text: estabaFiltrado
+                ? 'Ningún resultado pasa los filtros actuales. Prueba a ampliar los rangos o a desactivar los interruptores.'
+                : emptyText,
             }),
           ],
         })
@@ -195,51 +314,44 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     const visible = filtered.slice(0, 1000);
     const nodes = visible.map((url, index) => {
       const info = meta.get(url);
-      const badges = [];
-      if (info?.duration) {
-        badges.push(el('span', { className: 'badge badge--accent', text: info.duration }));
-      }
-      // Marca de grupo: dice cuántos se han plegado bajo este y por qué, para
-      // que el usuario pueda juzgar si la agrupación tiene sentido.
-      const grupo = plegarDuplicados ? grupos.get(url) : null;
-      if (grupo && grupo.miembros.length > 1) {
-        const otros = grupo.miembros.length - 1;
-        badges.push(
-          el('span', {
-            className: 'badge badge--warning',
-            text: `+${otros} igual${otros === 1 ? '' : 'es'}`,
-            attrs: {
-              title: `Se han agrupado ${otros} resultado${otros === 1 ? '' : 's'} más por ${
-                grupo.motivos?.[0]?.texto || 'señales coincidentes'
-              }: ${grupo.miembros.slice(1).join(', ')}`,
-            },
-          })
-        );
-      }
 
-      if (info?.size) {
-        // El tamaño sacado del HTML de la ficha se marca con "~": viene
-        // redondeado de origen y describe el vídeo, no necesariamente este
-        // fichero. Confundirlo con el exacto del HEAD llevaría a descartar
-        // un clip de vista previa creyendo que es el vídeo completo.
-        const approx = info.sizeApproximate === true;
-        badges.push(
-          el('span', {
-            className: 'badge badge--success',
-            text: approx ? `~${info.size}` : info.size,
-            attrs: approx
-              ? { title: 'Tamaño aproximado, tomado de la ficha del sitio' }
-              : { title: 'Tamaño exacto, informado por el servidor' },
+      const grupo = plegarDuplicados ? grupos.get(url) : null;
+      const marcaGrupo =
+        grupo && grupo.miembros.length > 1
+          ? el('span', {
+              className: 'badge badge--warning result-item__dupe',
+              text: `+${grupo.miembros.length - 1}`,
+              attrs: {
+                title: `Se han agrupado ${grupo.miembros.length - 1} resultado(s) más por ${
+                  grupo.motivos?.[0]?.texto || 'señales coincidentes'
+                }: ${grupo.miembros.slice(1).join(', ')}`,
+              },
+            })
+          : null;
+
+      // El tamaño sacado del HTML de la ficha se marca con "~": viene
+      // redondeado de origen y describe el vídeo, no necesariamente este
+      // fichero. Confundirlo con el exacto del HEAD llevaría a descartar un
+      // clip de vista previa creyendo que es el vídeo completo.
+      const aproximado = info?.sizeApproximate === true;
+      const celdaPeso = info?.size
+        ? celda(aproximado ? `~${info.size}` : info.size, 'Peso', {
+            title: aproximado
+              ? 'Peso aproximado, tomado de la ficha del sitio'
+              : 'Peso exacto, informado por el servidor',
           })
-        );
-      }
+        : celda(null, 'Peso');
 
       return el('li', {
         className: 'result-item',
         children: [
-          el('span', { className: 'badge', text: String(index + 1) }),
-          safeLink(url, { className: 'result-item__link' }),
-          badges.length ? el('span', { className: 'result-item__meta', children: badges }) : null,
+          el('span', { className: 'result-item__index', text: String(index + 1) }),
+          el('span', {
+            className: 'result-item__main',
+            children: [safeLink(url, { className: 'result-item__link' }), marcaGrupo],
+          }),
+          celda(info?.duration || null, 'Duración'),
+          celdaPeso,
         ],
       });
     });
@@ -247,7 +359,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     if (filtered.length > visible.length) {
       nodes.push(
         el('li', {
-          className: 'result-item',
+          className: 'result-item result-item--note',
           children: [
             el('span', {
               className: 'field__hint',
@@ -261,6 +373,8 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     setChildren(list, nodes);
   }
 
+  /* ── Filtrado ────────────────────────────────────────────────────── */
+
   function applyFilter() {
     const needle = search.value.trim().toLowerCase();
     const blocked = exclude.value
@@ -268,48 +382,116 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       .map(term => term.trim().toLowerCase())
       .filter(Boolean);
 
+    const rangoDuracion = filtroDuracion.getRange();
+    const rangoPeso = filtroPeso.getRange();
+
     filtered = items.filter(url => {
       // Los duplicados se pliegan bajo su representante, no se descartan:
       // siguen en `items` y el interruptor los devuelve a la lista.
       if (plegarDuplicados && duplicadoDe.has(url)) return false;
+
       const lower = url.toLowerCase();
       if (needle !== '' && !lower.includes(needle)) return false;
-      return !blocked.some(term => lower.includes(term));
+      if (blocked.some(term => lower.includes(term))) return false;
+
+      const info = meta.get(url);
+
+      // REGLA CENTRAL: un dato que no se conoce no lo recorta el rango.
+      // Filtrar por lo que no se sabe solo puede quitar cosas buenas, así que
+      // esa decisión es del interruptor, no del slider.
+      const segundos = segundosDe(info);
+      if (segundos === null) {
+        if (ocultarSinDuracion) return false;
+      } else if (rangoDuracion && (segundos < rangoDuracion.min || segundos > rangoDuracion.max)) {
+        return false;
+      }
+
+      const bytes = bytesDe(info);
+      if (bytes === null) {
+        if (ocultarSinPeso) return false;
+      } else if (rangoPeso && (bytes < rangoPeso.min || bytes > rangoPeso.max)) {
+        return false;
+      }
+
+      return true;
     });
 
     if (sortBy === 'duracion') {
       filtered = [...filtered].sort(
-        (a, b) => (segundos(meta.get(b)) ?? -1) - (segundos(meta.get(a)) ?? -1)
+        (a, b) => (segundosDe(meta.get(b)) ?? -1) - (segundosDe(meta.get(a)) ?? -1)
       );
     } else if (sortBy === 'tamano') {
       filtered = [...filtered].sort(
-        (a, b) => (meta.get(b)?.sizeBytes ?? -1) - (meta.get(a)?.sizeBytes ?? -1)
+        (a, b) => (bytesDe(meta.get(b)) ?? -1) - (bytesDe(meta.get(a)) ?? -1)
       );
     }
 
-    // Los plegados no cuentan como "ocultos por el filtro": tienen su propio
-    // aviso y su propio interruptor, y mezclarlos confundiría los dos.
-    const plegados = plegarDuplicados ? items.filter(url => duplicadoDe.has(url)).length : 0;
-    hiddenCount = items.length - filtered.length - plegados;
-
-    dupeToggle.hidden = duplicadoDe.size === 0;
-    dupeLabel.textContent = plegarDuplicados
-      ? `${duplicadoDe.size} duplicado${duplicadoDe.size === 1 ? '' : 's'} agrupado${duplicadoDe.size === 1 ? '' : 's'}`
-      : `${duplicadoDe.size} duplicado${duplicadoDe.size === 1 ? '' : 's'} desplegado${duplicadoDe.size === 1 ? '' : 's'}`;
-
+    actualizarContador();
     render();
   }
 
+  /** "Mostrando X de Y", para que se entienda qué está recortando. */
+  function actualizarContador() {
+    const total = items.length;
+    const plegados = plegarDuplicados ? items.filter(url => duplicadoDe.has(url)).length : 0;
+
+    if (total === 0) {
+      contador.textContent = '0 resultados';
+    } else if (filtered.length === total) {
+      contador.textContent = `${total} resultado${total === 1 ? '' : 's'}`;
+    } else {
+      contador.textContent = `mostrando ${filtered.length} de ${total}`;
+    }
+
+    contador.classList.toggle('results__count--filtrado', filtered.length !== total);
+
+    dupeToggle.root.hidden = duplicadoDe.size === 0;
+    dupeToggle.texto.textContent = `Agrupar ${duplicadoDe.size} duplicado${
+      duplicadoDe.size === 1 ? '' : 's'
+    }`;
+
+    const conPeso = items.filter(url => bytesDe(meta.get(url)) !== null).length;
+    const sinNingunPeso = total > 0 && conPeso === 0;
+    avisoSinPeso.hidden = !sinNingunPeso;
+    if (sinNingunPeso) {
+      avisoSinPeso.textContent =
+        'Ningún resultado trae el peso. Se obtiene activando «Obtener el tamaño de cada fichero» antes de explorar.';
+    }
+
+    // Los plegados tienen su propio interruptor y su propio recuento
+    if (plegados > 0) contador.title = `${plegados} plegados por duplicado`;
+    else contador.removeAttribute('title');
+  }
+
+  /** Recalcula los extremos de los rangos con los datos que hay ahora. */
+  function recalcularRangos() {
+    filtroDuracion.setValues(items.map(url => segundosDe(meta.get(url))).filter(v => v !== null));
+    filtroPeso.setValues(items.map(url => bytesDe(meta.get(url))).filter(v => v !== null));
+  }
+
   render();
+  actualizarContador();
 
   return {
     root,
+
     setItems(newItems) {
       items = [...new Set(newItems)];
+      recalcularRangos();
       applyFilter();
     },
+
+    /** Añade duración y peso de los ficheros ya conocidos. */
+    setDetails(details) {
+      for (const info of details || []) {
+        if (info?.url) meta.set(info.url, info);
+      }
+      recalcularRangos();
+      applyFilter();
+    },
+
     /**
-     * Recibe los grupos de duplicados calculados en el servidor.
+     * Grupos de duplicados calculados en el servidor.
      * No borra nada: solo marca qué se pliega bajo qué.
      */
     setDuplicateGroups(groups) {
@@ -326,13 +508,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
 
       applyFilter();
     },
-    /** Añade duración y tamaño de los ficheros ya conocidos. */
-    setDetails(details) {
-      for (const info of details || []) {
-        if (info?.url) meta.set(info.url, info);
-      }
-      applyFilter();
-    },
+
     clear() {
       items = [];
       meta = new Map();
@@ -342,6 +518,11 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       exclude.value = '';
       sortSelect.value = 'orden';
       sortBy = 'orden';
+      ocultarSinDuracion = false;
+      ocultarSinPeso = false;
+      toggleSinDuracion.input.checked = false;
+      toggleSinPeso.input.checked = false;
+      recalcularRangos();
       applyFilter();
     },
   };
