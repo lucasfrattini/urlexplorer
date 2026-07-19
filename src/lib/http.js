@@ -109,8 +109,20 @@ async function fetchHtmlWithRetry(url, { retries, signal, timeout } = {}) {
   throw lastError;
 }
 
-/** HEAD para obtener content-length. Devuelve null si no se puede. */
-async function fetchContentLength(url, { signal } = {}) {
+/**
+ * HEAD para obtener content-length. Devuelve null si no se puede.
+ *
+ * `referer` es la página donde se encontró el fichero, y NO es opcional en la
+ * práctica: muchos CDN tienen protección de hotlinking y responden 403 a un
+ * HEAD que llega sin Referer. Ese 403 se tragaba aquí en silencio, así que la
+ * casilla "Obtener el tamaño" tardaba siete veces más y devolvía cero pesos
+ * sin decir por qué. Con el Referer de la ficha, el mismo CDN responde 200 y
+ * el content-length correcto.
+ *
+ * Es además lo que haría un navegador al pedir el vídeo desde esa página, así
+ * que no es un truco: es enviar la cabecera que corresponde.
+ */
+async function fetchContentLength(url, { signal, referer } = {}) {
   try {
     await assertUrlIsSafe(url);
   } catch {
@@ -120,7 +132,18 @@ async function fetchContentLength(url, { signal } = {}) {
   try {
     return await throttle.run(url, async () => {
       const response = await axios.head(url, {
-        headers: buildHeaders(),
+        headers: buildHeaders(
+          referer
+            ? {
+                Referer: referer,
+                // Coherentes con "esto lo pide una página, no la barra de
+                // direcciones": algunos CDN también miran estas.
+                'Sec-Fetch-Dest': 'video',
+                'Sec-Fetch-Mode': 'no-cors',
+                'Sec-Fetch-Site': 'cross-site',
+              }
+            : {}
+        ),
         timeout: config.http.headTimeoutMs,
         maxRedirects: config.http.maxRedirects,
         signal,

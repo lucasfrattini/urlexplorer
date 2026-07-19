@@ -323,7 +323,9 @@ async function findFiles(urls, options) {
               // El HEAD es la fuente exacta, pero muchas URLs de fichero
               // redirigen a una dirección con token que no devuelve
               // content-length y vuelve null.
-              const bytes = await fetchContentLength(file, { signal });
+              // Se envía la ficha como Referer: sin ella los CDN con
+              // protección de hotlinking devuelven 403 y el peso se pierde.
+              const bytes = await fetchContentLength(file, { signal, referer: url });
               const meta = details.get(file);
               if (!meta) continue;
 
