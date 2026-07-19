@@ -7,10 +7,18 @@
     <meta name="description" content="Explorador de enlaces y recursos multimedia de sitios web." />
     <meta name="color-scheme" content="light dark" />
     <link rel="stylesheet" href="/styles/main.css" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>"
-    />
+
+    <!--
+      Favicons. Llevan una placa clara HORNEADA en la propia imagen, a
+      diferencia del logo de la cabecera, que va transparente: el arte es
+      azul marino y sobre la pestaña de un navegador en tema oscuro quedaría
+      casi invisible. La pestaña no es nuestra, así que no se puede resolver
+      con CSS.
+    -->
+    <link rel="icon" href="/img/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/img/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
   </head>
   <body>
     <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -18,7 +26,16 @@
     <div class="layout">
       <header class="topbar">
         <div class="topbar__brand">
-          <span class="topbar__mark" aria-hidden="true">◎</span>
+          <!--
+            OJO: `.topbar__mark` es el objetivo del gesto oculto que desbloquea
+            el modo admin (cinco pulsaciones en menos de dos segundos, ver
+            js/admin.js). La clase debe seguir AQUÍ, en el contenedor: los
+            clics sobre la imagen burbujean hasta él. Si se quita la clase o se
+            mueve al <img>, se pierde la única forma de entrar al modo admin.
+          -->
+          <span class="topbar__mark" aria-hidden="true">
+            <img class="topbar__logo" src="/img/logo.png" alt="" width="36" height="36" />
+          </span>
           <div>
             <h1 class="topbar__title">URL Explorer</h1>
             <p class="topbar__subtitle">Explora enlaces y recursos de un sitio</p>

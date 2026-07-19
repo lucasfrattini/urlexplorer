@@ -211,20 +211,53 @@ a {
   min-width: 0;
 }
 
+/*
+ * Marca de la cabecera.
+ *
+ * El logo va TRANSPARENTE y la placa la pone el CSS, en vez de hornearla en
+ * el PNG: así el mismo fichero sirve para los dos temas.
+ *
+ * La placa es clara SIEMPRE, también en tema oscuro, y eso es deliberado. El
+ * arte es azul marino: sobre el fondo oscuro (#161a21) el contraste es tan
+ * bajo que el logo casi desaparece. Sobre blanco se lee igual de bien en los
+ * dos temas, y en tema claro la placa es invisible porque coincide con el
+ * fondo de la barra.
+ *
+ * La alternativa —recolorear el logo en oscuro con un filtro CSS— se
+ * descartó: cambia los colores de la marca y ensucia el turquesa.
+ *
+ * NOTA: este elemento es el objetivo del gesto oculto de admin. No quitar la
+ * clase ni cambiar el elemento sin mirar js/admin.js.
+ */
 .topbar__mark {
   display: grid;
   place-items: center;
   width: 36px;
   height: 36px;
   flex-shrink: 0;
+  padding: 3px;
   border-radius: var(--radius);
-  background: linear-gradient(
-    135deg,
-    var(--c-accent),
-    color-mix(in srgb, var(--c-accent) 60%, #b14bff)
-  );
-  color: #fff;
-  font-size: 19px;
+  background: #fff;
+  /* En claro la placa se funde con el fondo; el borde la despega lo justo. */
+  box-shadow: inset 0 0 0 1px var(--c-border);
+}
+
+.topbar__logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* En oscuro la placa sí se ve, así que no necesita borde. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .topbar__mark {
+    box-shadow: none;
+  }
+}
+
+:root[data-theme='dark'] .topbar__mark {
+  box-shadow: none;
 }
 
 .topbar__title {
