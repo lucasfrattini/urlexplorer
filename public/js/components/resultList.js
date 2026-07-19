@@ -315,6 +315,21 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     const nodes = visible.map((url, index) => {
       const info = meta.get(url);
 
+      // Aviso de fichero no verificado. Va junto al enlace y no como una
+      // columna más porque es una advertencia sobre el resultado entero, no
+      // un dato suyo: puede ser un anuncio o una vista previa.
+      const marcaDudoso = info?.suspect
+        ? el('span', {
+            className: 'badge badge--danger result-item__suspect',
+            text: '⚠ sin verificar',
+            attrs: {
+              title: info.suspectReason
+                ? `${info.suspectReason}. Su duración no se muestra porque la de la ficha pertenece a otro vídeo.`
+                : 'No se pudo comprobar que este fichero sea el de la página.',
+            },
+          })
+        : null;
+
       const grupo = plegarDuplicados ? grupos.get(url) : null;
       const marcaGrupo =
         grupo && grupo.miembros.length > 1
@@ -348,7 +363,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
           el('span', { className: 'result-item__index', text: String(index + 1) }),
           el('span', {
             className: 'result-item__main',
-            children: [safeLink(url, { className: 'result-item__link' }), marcaGrupo],
+            children: [safeLink(url, { className: 'result-item__link' }), marcaDudoso, marcaGrupo],
           }),
           celda(info?.duration || null, 'Duración'),
           celdaPeso,

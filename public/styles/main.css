@@ -1123,6 +1123,16 @@ a {
   color: var(--c-warning);
 }
 
+.badge--danger {
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+}
+
+/* El aviso de fichero sin verificar no debe encogerse junto al enlace */
+.result-item__suspect {
+  flex-shrink: 0;
+}
+
 /* Tarjetas de video */
 .video-grid {
   display: grid;

@@ -24,6 +24,7 @@ const {
 } = require('../lib/media');
 const { groupDuplicates } = require('../lib/dedupe');
 const { findExtension } = require('./extensions');
+const { selectRelevantFiles, sizeLooksInconsistent } = require('../lib/relevance');
 const { createLinkMatcher } = require('../lib/pattern');
 const { resolveMode, ESTRATEGIAS, MODOS } = require('./pagination');
 const { fetchContentLength } = require('../lib/http');
@@ -196,6 +197,9 @@ async function findFiles(urls, options) {
   const skippedByLicense = [];
   let processed = 0;
   let truncated = false;
+  // Ficheros de la página que NO eran de la página (anuncios, previews de
+  // los relacionados). Se cuentan para que la omisión no sea silenciosa.
+  let descartados = 0;
 
   let limit = Math.min(
     Math.max(1, concurrency ?? config.crawl.defaultConcurrency),
@@ -258,9 +262,21 @@ async function findFiles(urls, options) {
         // SSRF de arriba y los topes de abajo. Una extensión no se salta los
         // límites del motor, solo sabe dónde mirar.
         const extension = findExtension(url);
-        const found = extension?.extraerFicheros
+        const candidatos = extension?.extraerFicheros
           ? extension.extraerFicheros(html, { baseUrl: url, extensions, extractFilesFromHtml })
           : extractFilesFromHtml(html, url, extensions);
+
+        // Una ficha no contiene solo su vídeo: también los clips de vista
+        // previa de los relacionados y los anuncios de terceros. Se separa
+        // el grano de la paja ANTES de estampar nada.
+        const { files: clasificados, discarded } = selectRelevantFiles(candidatos, url);
+        if (discarded.length > 0) {
+          descartados += discarded.length;
+          logger.debug(`Descartados ${discarded.length} ficheros ajenos en ${url}`);
+        }
+
+        const found = clasificados.map(f => f.url);
+        const porUrl = new Map(clasificados.map(f => [f.url, f]));
 
         if (found.length > 0) {
           // Una pagina de detalle suele ser un solo video, asi que su
@@ -283,7 +299,20 @@ async function findFiles(urls, options) {
             if (!files.has(file)) {
               files.add(file);
               added.push(file);
-              details.set(file, { url: file, duration, durationSeconds, sourceUrl: url });
+
+              // A un fichero que no se ha podido verificar NO se le pone la
+              // duración de la ficha. Es justo lo que convertía un clip de
+              // cinco segundos en "20:09": el dato era real, pero de otro
+              // vídeo. Sin duración, el usuario ve que no se sabe.
+              const info = porUrl.get(file);
+              details.set(file, {
+                url: file,
+                duration: info?.suspect ? null : duration,
+                durationSeconds: info?.suspect ? null : durationSeconds,
+                suspect: info?.suspect === true,
+                suspectReason: info?.reason || null,
+                sourceUrl: url,
+              });
             }
           }
 
@@ -302,6 +331,17 @@ async function findFiles(urls, options) {
                 meta.sizeBytes = bytes;
                 meta.size = formatFileSize(bytes);
                 meta.sizeApproximate = false;
+                // Coherencia: una ficha que anuncia minutos y un fichero
+                // que pesa como un clip no pueden ser el mismo vídeo. Se
+                // marca en vez de descartar, porque el raro podría ser el
+                // dato de la ficha.
+                if (sizeLooksInconsistent(meta.durationSeconds, bytes)) {
+                  meta.suspect = true;
+                  meta.suspectReason =
+                    'el peso no cuadra con la duración anunciada: puede ser una vista previa';
+                  meta.duration = null;
+                  meta.durationSeconds = null;
+                }
               } else if (declaredSize !== null) {
                 // Respaldo: lo que el sitio dice en la ficha. Va marcado
                 // como aproximado porque viene redondeado de origen, y
@@ -334,6 +374,7 @@ async function findFiles(urls, options) {
     processed,
     failures,
     truncated,
+    discardedFiles: descartados,
     skippedByLicense,
   };
 }
@@ -404,6 +445,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
   let failures = [];
   let filesTruncated = false;
   let skippedByLicense = [];
+  let discardedFiles = 0;
 
   if (extensions.length > 0 && links.length > 0 && !timeoutSignal.aborted) {
     emit({ type: 'phase2_start', totalPages: links.length });
@@ -424,6 +466,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     failures = result.failures;
     filesTruncated = result.truncated;
     skippedByLicense = result.skippedByLicense ?? [];
+    discardedFiles = result.discardedFiles ?? 0;
   }
 
   // Distinguir "lo canceló el usuario" de "se agotó el tiempo máximo": con
@@ -458,6 +501,9 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     truncated: linksTruncated || filesTruncated,
     licenseFilter,
     skippedByLicense: skippedByLicense.length,
+    // Ficheros que estaban en la página pero no eran suyos
+    discardedFiles,
+    suspectFiles: fileDetails.filter(d => d.suspect).length,
     aborted: cancelled,
     timedOut,
     maxDurationMs: config.crawl.maxDurationMs,

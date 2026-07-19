@@ -620,6 +620,32 @@ export function createExplorerView(container, { limits }) {
           show(alertSlot, true);
         }
 
+        // Ficheros que estaban en la ficha pero no eran suyos (anuncios,
+        // vistas previas de los relacionados), y los que no se pudieron
+        // verificar. Callarlo era el problema original: se entregaba un clip
+        // de segundos con la duración de un vídeo de veinte minutos.
+        if (event.suspectFiles > 0) {
+          setChildren(
+            alertSlot,
+            alertBox({
+              variant: 'warning',
+              title: `${event.suspectFiles} fichero(s) sin verificar`,
+              body: 'No se pudo comprobar que pertenezcan a su página: pueden ser anuncios o vistas previas. Van marcados y SIN duración, porque la de la ficha es de otro vídeo. Compruébalos antes de descargarlos.',
+            })
+          );
+          show(alertSlot, true);
+        } else if (event.discardedFiles > 0) {
+          setChildren(
+            alertSlot,
+            alertBox({
+              variant: 'warning',
+              title: `${event.discardedFiles} fichero(s) descartados por no ser de su página`,
+              body: 'Eran anuncios o vistas previas de los vídeos relacionados. Los que ves sí comparten identificador con la ficha de la que salen.',
+            })
+          );
+          show(alertSlot, true);
+        }
+
         if (event.truncated) {
           setChildren(
             alertSlot,
