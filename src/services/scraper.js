@@ -18,7 +18,7 @@ const {
   applySearchTerm,
 } = require('../lib/url');
 const { detectLicense } = require('../lib/license');
-const { extractDuration, formatFileSize } = require('../lib/media');
+const { extractDuration, extractSizeBytes, formatFileSize } = require('../lib/media');
 const { fetchContentLength } = require('../lib/http');
 
 /** Selectores donde puede aparecer una referencia a un fichero. */
@@ -276,6 +276,10 @@ async function findFiles(urls, options) {
           // Una pagina de detalle suele ser un solo video, asi que su
           // duracion vale para los ficheros que salen de ella.
           const duration = extractDuration(html);
+          // Del mismo HTML sale también el tamaño que el sitio muestra en
+          // pantalla. Se calcula una sola vez por ficha, aunque de ella
+          // salgan varios ficheros.
+          const declaredSize = withSizes ? extractSizeBytes(html) : null;
           const added = [];
 
           for (const file of found) {
@@ -293,11 +297,26 @@ async function findFiles(urls, options) {
           if (withSizes) {
             for (const file of added) {
               if (signal?.aborted) break;
+
+              // El HEAD es la fuente exacta, pero muchas URLs de fichero
+              // redirigen a una dirección con token que no devuelve
+              // content-length y vuelve null.
               const bytes = await fetchContentLength(file, { signal });
               const meta = details.get(file);
-              if (meta) {
+              if (!meta) continue;
+
+              if (bytes !== null) {
                 meta.sizeBytes = bytes;
                 meta.size = formatFileSize(bytes);
+                meta.sizeApproximate = false;
+              } else if (declaredSize !== null) {
+                // Respaldo: lo que el sitio dice en la ficha. Va marcado
+                // como aproximado porque viene redondeado de origen, y
+                // ademas la ficha describe el video, no necesariamente
+                // este fichero concreto.
+                meta.sizeBytes = declaredSize;
+                meta.size = formatFileSize(declaredSize);
+                meta.sizeApproximate = true;
               }
             }
           }

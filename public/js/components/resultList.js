@@ -26,7 +26,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
   let items = [];
   let filtered = [];
   let hiddenCount = 0;
-  // url -> { duration, size, sizeBytes }
+  // url -> { duration, size, sizeBytes, sizeApproximate }
   let meta = new Map();
   let sortBy = 'orden';
 
@@ -148,7 +148,20 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
         badges.push(el('span', { className: 'badge badge--accent', text: info.duration }));
       }
       if (info?.size) {
-        badges.push(el('span', { className: 'badge badge--success', text: info.size }));
+        // El tamaño sacado del HTML de la ficha se marca con "~": viene
+        // redondeado de origen y describe el vídeo, no necesariamente este
+        // fichero. Confundirlo con el exacto del HEAD llevaría a descartar
+        // un clip de vista previa creyendo que es el vídeo completo.
+        const approx = info.sizeApproximate === true;
+        badges.push(
+          el('span', {
+            className: 'badge badge--success',
+            text: approx ? `~${info.size}` : info.size,
+            attrs: approx
+              ? { title: 'Tamaño aproximado, tomado de la ficha del sitio' }
+              : { title: 'Tamaño exacto, informado por el servidor' },
+          })
+        );
       }
 
       return el('li', {
