@@ -30,6 +30,19 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
   let meta = new Map();
   let sortBy = 'orden';
 
+  /**
+   * Agrupación de duplicados.
+   *
+   * `duplicadoDe` mapea cada URL plegada al representante de su grupo, y
+   * `grupos` guarda los miembros de cada uno. NADA se borra de `items`:
+   * plegar es solo una vista, y el interruptor la deshace. Descartar en
+   * silencio haría perder resultados legítimos, porque dos vídeos distintos
+   * pueden compartir señales.
+   */
+  let duplicadoDe = new Map();
+  let grupos = new Map();
+  let plegarDuplicados = true;
+
   const counter = el('span', { className: 'badge', text: '0' });
   const hiddenBadge = el('span', { className: 'badge badge--warning', text: '' });
   hiddenBadge.hidden = true;
@@ -61,6 +74,36 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       input: () => applyFilter(),
     },
   });
+
+  /**
+   * Interruptor de agrupación.
+   *
+   * Existe porque la agrupación puede equivocarse: dos vídeos distintos
+   * pueden compartir señales. El usuario tiene que poder deshacerla y ver la
+   * lista entera, y por eso también se dice cuántos hay plegados en vez de
+   * dejar que desaparezcan sin más.
+   */
+  const dupeCheckbox = el('input', {
+    attrs: { type: 'checkbox', id: 'dupe-toggle', checked: true },
+    on: {
+      change: () => {
+        plegarDuplicados = dupeCheckbox.checked;
+        applyFilter();
+      },
+    },
+  });
+
+  const dupeLabel = el('span', { className: 'dupe-toggle__text', text: '' });
+
+  const dupeToggle = el('label', {
+    className: 'dupe-toggle',
+    attrs: {
+      for: 'dupe-toggle',
+      title: 'Agrupa los resultados que parecen el mismo contenido. Desactívalo para verlos todos.',
+    },
+    children: [dupeCheckbox, dupeLabel],
+  });
+  dupeToggle.hidden = true;
 
   const copyButton = el('button', {
     className: 'button button--secondary button--small',
@@ -107,7 +150,16 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
 
   const toolbar = el('div', {
     className: 'toolbar',
-    children: [counter, hiddenBadge, search, exclude, sortSelect, copyButton, downloadButton],
+    children: [
+      counter,
+      hiddenBadge,
+      dupeToggle,
+      search,
+      exclude,
+      sortSelect,
+      copyButton,
+      downloadButton,
+    ],
   });
 
   const list = el('ul', { className: 'result-list' });
@@ -147,6 +199,24 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       if (info?.duration) {
         badges.push(el('span', { className: 'badge badge--accent', text: info.duration }));
       }
+      // Marca de grupo: dice cuántos se han plegado bajo este y por qué, para
+      // que el usuario pueda juzgar si la agrupación tiene sentido.
+      const grupo = plegarDuplicados ? grupos.get(url) : null;
+      if (grupo && grupo.miembros.length > 1) {
+        const otros = grupo.miembros.length - 1;
+        badges.push(
+          el('span', {
+            className: 'badge badge--warning',
+            text: `+${otros} igual${otros === 1 ? '' : 'es'}`,
+            attrs: {
+              title: `Se han agrupado ${otros} resultado${otros === 1 ? '' : 's'} más por ${
+                grupo.motivos?.[0]?.texto || 'señales coincidentes'
+              }: ${grupo.miembros.slice(1).join(', ')}`,
+            },
+          })
+        );
+      }
+
       if (info?.size) {
         // El tamaño sacado del HTML de la ficha se marca con "~": viene
         // redondeado de origen y describe el vídeo, no necesariamente este
@@ -199,6 +269,9 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       .filter(Boolean);
 
     filtered = items.filter(url => {
+      // Los duplicados se pliegan bajo su representante, no se descartan:
+      // siguen en `items` y el interruptor los devuelve a la lista.
+      if (plegarDuplicados && duplicadoDe.has(url)) return false;
       const lower = url.toLowerCase();
       if (needle !== '' && !lower.includes(needle)) return false;
       return !blocked.some(term => lower.includes(term));
@@ -214,7 +287,16 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
       );
     }
 
-    hiddenCount = items.length - filtered.length;
+    // Los plegados no cuentan como "ocultos por el filtro": tienen su propio
+    // aviso y su propio interruptor, y mezclarlos confundiría los dos.
+    const plegados = plegarDuplicados ? items.filter(url => duplicadoDe.has(url)).length : 0;
+    hiddenCount = items.length - filtered.length - plegados;
+
+    dupeToggle.hidden = duplicadoDe.size === 0;
+    dupeLabel.textContent = plegarDuplicados
+      ? `${duplicadoDe.size} duplicado${duplicadoDe.size === 1 ? '' : 's'} agrupado${duplicadoDe.size === 1 ? '' : 's'}`
+      : `${duplicadoDe.size} duplicado${duplicadoDe.size === 1 ? '' : 's'} desplegado${duplicadoDe.size === 1 ? '' : 's'}`;
+
     render();
   }
 
@@ -224,6 +306,24 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     root,
     setItems(newItems) {
       items = [...new Set(newItems)];
+      applyFilter();
+    },
+    /**
+     * Recibe los grupos de duplicados calculados en el servidor.
+     * No borra nada: solo marca qué se pliega bajo qué.
+     */
+    setDuplicateGroups(groups) {
+      duplicadoDe = new Map();
+      grupos = new Map();
+
+      for (const grupo of groups || []) {
+        if (!grupo?.representante || !Array.isArray(grupo.miembros)) continue;
+        grupos.set(grupo.representante, grupo);
+        for (const miembro of grupo.miembros) {
+          if (miembro !== grupo.representante) duplicadoDe.set(miembro, grupo.representante);
+        }
+      }
+
       applyFilter();
     },
     /** Añade duración y tamaño de los ficheros ya conocidos. */
@@ -236,6 +336,8 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     clear() {
       items = [];
       meta = new Map();
+      duplicadoDe = new Map();
+      grupos = new Map();
       search.value = '';
       exclude.value = '';
       sortSelect.value = 'orden';

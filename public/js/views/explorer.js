@@ -592,6 +592,9 @@ export function createExplorerView(container, { limits }) {
         const deepSearch = event.extensions?.length > 0;
         results.setItems(deepSearch ? event.files : event.links);
         if (event.fileDetails) results.setDetails(event.fileDetails);
+        // Los duplicados se pliegan, no se descartan: la lista sigue entera y
+        // el interruptor de la barra los devuelve.
+        if (event.duplicateGroups) results.setDuplicateGroups(event.duplicateGroups);
         renderStats(event);
 
         // El scroll paró por un tope duro: hay más contenido que no se ha

@@ -16,7 +16,13 @@ const {
   applySearchTerm,
 } = require('../lib/url');
 const { detectLicense } = require('../lib/license');
-const { extractDuration, extractSizeBytes, formatFileSize } = require('../lib/media');
+const {
+  extractDuration,
+  extractDurationSeconds,
+  extractSizeBytes,
+  formatFileSize,
+} = require('../lib/media');
+const { groupDuplicates } = require('../lib/dedupe');
 const { createLinkMatcher } = require('../lib/pattern');
 const { resolveMode, ESTRATEGIAS, MODOS } = require('./pagination');
 const { fetchContentLength } = require('../lib/http');
@@ -238,6 +244,9 @@ async function findFiles(urls, options) {
           // Una pagina de detalle suele ser un solo video, asi que su
           // duracion vale para los ficheros que salen de ella.
           const duration = extractDuration(html);
+          // En segundos, ademas de formateada: la agrupacion de duplicados
+          // compara la duracion EXACTA, y "12:34" ya ha perdido precision.
+          const durationSeconds = extractDurationSeconds(html);
           // Del mismo HTML sale también el tamaño que el sitio muestra en
           // pantalla. Se calcula una sola vez por ficha, aunque de ella
           // salgan varios ficheros.
@@ -252,7 +261,7 @@ async function findFiles(urls, options) {
             if (!files.has(file)) {
               files.add(file);
               added.push(file);
-              details.set(file, { url: file, duration, sourceUrl: url });
+              details.set(file, { url: file, duration, durationSeconds, sourceUrl: url });
             }
           }
 
@@ -401,10 +410,24 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
   const cancelled = Boolean(signal?.aborted);
   const timedOut = timeoutSignal.aborted && !cancelled;
 
+  // Agrupación de duplicados. NO filtra nada: se devuelven todos los ficheros
+  // igual que antes, y los grupos van aparte para que la interfaz pueda
+  // plegarlos y el usuario deshacerlo. Descartar en silencio le haría perder
+  // resultados legítimos sin enterarse.
+  const { grupos, totalDuplicados } = groupDuplicates(fileDetails);
+
   return {
     links,
     files,
     fileDetails,
+    duplicateGroups: grupos
+      .filter(g => g.miembros.length > 1)
+      .map(g => ({
+        representante: g.representante.url,
+        miembros: g.miembros.map(m => m.url),
+        motivos: g.motivos,
+      })),
+    totalDuplicados,
     failures,
     pagesScraped,
     totalLinks: links.length,
