@@ -3,10 +3,10 @@
 const cheerio = require('cheerio');
 
 const config = require('../config');
+const { mapLimit } = require('../lib/concurrency');
 const logger = require('../lib/logger');
 const { renderPageWithMedia } = require('../lib/browser');
 const { fetchHtml, fetchContentLength } = require('../lib/http');
-const { sleep } = require('../lib/throttle');
 const { assertUrlIsSafe } = require('../lib/ssrf');
 const { toAbsoluteUrl, getExtension } = require('../lib/url');
 
@@ -380,18 +380,35 @@ async function extractVideos(rawUrl, { getMetadata = false, useJavaScript = true
   );
 
   if (getMetadata) {
+    /**
+     * Pesos en paralelo acotado, no de uno en uno.
+     *
+     * Antes era un bucle estrictamente secuencial con un `sleep` fijo entre
+     * peticiones: con los topes por defecto (100 búsquedas, 300 ms) eran 100
+     * viajes de ida y vuelta en serie MÁS 30 segundos de espera pura, todo
+     * dentro de la misma petición HTTP del usuario.
+     *
+     * El `sleep` sobraba: `fetchContentLength` ya pasa por `HostThrottle`,
+     * que impone por hostname un intervalo mínimo y un tope de peticiones
+     * simultáneas. La espera fija no añadía cortesía donde hacía falta —el
+     * throttle ya la garantiza— y sí penalizaba a los vídeos servidos por
+     * CDN distintos, que es justo donde no había motivo para esperar.
+     */
     const lookups = unique.slice(0, config.video.maxMetadataLookups);
-    for (const video of lookups) {
-      if (signal?.aborted) break;
+
+    await mapLimit(lookups, config.video.metadataConcurrency, async video => {
+      if (signal?.aborted) return;
+
+      // Un reproductor incrustado no tiene fichero que pesar
       if (video.platform) {
         video.size = 'Stream/Embed';
-        continue;
+        return;
       }
+
       const bytes = await fetchContentLength(video.url, { signal });
       video.sizeBytes = bytes;
       video.size = formatFileSize(bytes);
-      await sleep(config.video.metadataDelayMs);
-    }
+    });
   }
 
   return { url, videos: unique, methods, total: unique.length };

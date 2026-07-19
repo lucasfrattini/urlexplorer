@@ -93,12 +93,20 @@ function sameSize(a, b) {
   return Math.abs(a - b) / mayor <= TOLERANCIA_TAMANO;
 }
 
-/** Senales que comparten dos elementos. */
-function senalesComunes(a, b) {
+/**
+ * Senales que comparten dos elementos.
+ *
+ * `nombreA`/`nombreB` se pueden pasar ya calculados. No es un capricho de
+ * micro-optimización: esta función se llama dentro de un doble bucle, y
+ * `normalizeName` parsea la URL y aplica cinco reemplazos, así que sin
+ * precalcular se recomputaba el nombre del MISMO elemento una vez por cada
+ * elemento de la lista. Ver `groupDuplicates`.
+ */
+function senalesComunes(a, b, nombreAPrecalculado, nombreBPrecalculado) {
   const senales = [];
 
-  const nombreA = normalizeName(a.url);
-  const nombreB = normalizeName(b.url);
+  const nombreA = nombreAPrecalculado ?? normalizeName(a.url);
+  const nombreB = nombreBPrecalculado ?? normalizeName(b.url);
   if (nombreA !== '' && nombreA === nombreB) {
     senales.push({
       tipo: 'nombre',
@@ -155,6 +163,22 @@ function groupDuplicates(items) {
   // índice del grupo al que ya se asignó cada elemento
   const asignado = new Map();
 
+  /**
+   * Nombres normalizados, UNA vez cada uno.
+   *
+   * Antes se calculaban dentro del bucle interno, así que el nombre del
+   * elemento `i` se recomputaba n veces —parseo de URL y cinco regex— para
+   * dar siempre el mismo resultado. Con los topes de la aplicación (miles de
+   * ficheros) eso son millones de reemplazos regex y segundos de CPU
+   * bloqueando el proceso justo al final de una exploración.
+   *
+   * La comparación sigue siendo la misma y sigue siendo O(n²): lo que cambia
+   * es lo que cuesta cada comparación. No se agrupa por clave porque la
+   * tolerancia de tamaño no es una relación de equivalencia, y bucketizar
+   * cambiaría qué elementos acaban juntos.
+   */
+  const nombres = items.map(item => normalizeName(item.url));
+
   for (let i = 0; i < items.length; i += 1) {
     if (asignado.has(i)) continue;
 
@@ -172,7 +196,7 @@ function groupDuplicates(items) {
       // grupo. Encadenar (A~B, B~C ⇒ A,B,C juntos) arrastra elementos que no
       // se parecen entre sí, y es como una agrupación por duración acaba
       // tragándose media lista.
-      const senales = senalesComunes(items[i], items[j]);
+      const senales = senalesComunes(items[i], items[j], nombres[i], nombres[j]);
       if (!bastan(senales)) continue;
 
       grupo.miembros.push(items[j]);

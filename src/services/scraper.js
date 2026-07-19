@@ -6,7 +6,7 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const { AppError } = require('../lib/errors');
 const { renderPage } = require('../lib/browser');
-const { fetchHtmlWithRetry, tryFetchHtml } = require('../lib/http');
+const { fetchHtmlWithRetry, tryFetchHtml, fetchContentLength } = require('../lib/http');
 const { assertUrlIsSafe, isUrlSafe } = require('../lib/ssrf');
 const {
   toAbsoluteUrl,
@@ -17,9 +17,9 @@ const {
 } = require('../lib/url');
 const { detectLicense } = require('../lib/license');
 const {
-  extractDuration,
   extractDurationSeconds,
   extractSizeBytes,
+  formatDuration,
   formatFileSize,
 } = require('../lib/media');
 const { groupDuplicates } = require('../lib/dedupe');
@@ -27,7 +27,6 @@ const { findExtension } = require('./extensions');
 const { selectRelevantFiles, sizeLooksInconsistent } = require('../lib/relevance');
 const { createLinkMatcher } = require('../lib/pattern');
 const { resolveMode, ESTRATEGIAS, MODOS } = require('./pagination');
-const { fetchContentLength } = require('../lib/http');
 
 /** Selectores donde puede aparecer una referencia a un fichero. */
 const FILE_SELECTORS =
@@ -281,10 +280,19 @@ async function findFiles(urls, options) {
         if (found.length > 0) {
           // Una pagina de detalle suele ser un solo video, asi que su
           // duracion vale para los ficheros que salen de ella.
-          const duration = extractDuration(html);
-          // En segundos, ademas de formateada: la agrupacion de duplicados
-          // compara la duracion EXACTA, y "12:34" ya ha perdido precision.
+          //
+          // Se extraen los segundos UNA vez y se formatean, en vez de llamar
+          // a extractDuration() y extractDurationSeconds() por separado:
+          // extractDuration es literalmente formatDuration(extractDurationSeconds(html)),
+          // asi que pedir las dos parseaba el mismo HTML con cheerio dos
+          // veces para acabar con el mismo numero. En la fase 2 eso es un
+          // parseo completo de mas por CADA pagina de detalle.
+          //
+          // Se guardan los segundos ademas de la cadena porque la agrupacion
+          // de duplicados compara la duracion EXACTA, y "12:34" ya ha perdido
+          // precision.
           const durationSeconds = extractDurationSeconds(html);
+          const duration = formatDuration(durationSeconds);
           // Del mismo HTML sale también el tamaño que el sitio muestra en
           // pantalla. Se calcula una sola vez por ficha, aunque de ella
           // salgan varios ficheros.

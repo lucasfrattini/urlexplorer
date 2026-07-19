@@ -206,8 +206,15 @@ const config = {
   },
 
   video: {
-    // Pausa entre HEADs al pedir metadatos de tamaño
-    metadataDelayMs: intFromEnv('VIDEO_METADATA_DELAY_MS', 300),
+    /**
+     * Peticiones de peso simultáneas.
+     *
+     * Sustituye a la pausa fija que había entre HEADs: la cortesía por
+     * dominio ya la garantiza HostThrottle (intervalo mínimo y máximo
+     * simultáneas por hostname), así que esperar además entre vídeos de CDN
+     * distintos solo hacía la petición más lenta sin proteger a nadie.
+     */
+    metadataConcurrency: intFromEnv('VIDEO_METADATA_CONCURRENCY', 4),
     maxMetadataLookups: intFromEnv('VIDEO_MAX_METADATA_LOOKUPS', 100),
     maxResults: intFromEnv('VIDEO_MAX_RESULTS', 500),
   },

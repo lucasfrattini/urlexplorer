@@ -207,6 +207,20 @@ function secureLookup(hostname, options, callback) {
   const cb = typeof options === 'function' ? options : callback;
   const opts = typeof options === 'function' ? {} : options || {};
 
+  // Mismo interruptor que el resto de la protección: los tests contra
+  // fixtures locales lo apagan. Sin esto, la comprobación de aquí y la de
+  // `assertUrlIsSafe` podrían discrepar, que es peor que no tener ninguna.
+  if (!config.security.blockPrivateAddresses) {
+    return dns
+      .lookup(hostname, { ...opts, all: true })
+      .then(addresses => {
+        const lista = Array.isArray(addresses) ? addresses : [addresses];
+        if (opts.all) return cb(null, lista);
+        return cb(null, lista[0].address, lista[0].family);
+      })
+      .catch(error => cb(error));
+  }
+
   // OJO: `dns` en este módulo es la API de PROMESAS (`node:dns`.promises), no
   // la de callbacks. Pasarle un callback lo ignora en silencio y la petición
   // se queda colgada para siempre, sin error y sin timeout. Pasó al escribir
