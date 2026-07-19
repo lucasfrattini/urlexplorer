@@ -274,3 +274,54 @@ test('en una lista pequena, una miniatura repetida sigue identificando', () => {
   ];
   assert.equal(groupDuplicates(items).totalDuplicados, 1);
 });
+
+test('el representante del grupo es el MAS PESADO', async t => {
+  // Si dos URLs son el mismo video, la que mas pesa suele ser la de mejor
+  // calidad, y es la que se quiere ver cuando el grupo aparece plegado.
+  const items = [
+    { url: 'https://a.com/peli_480p.mp4', durationSeconds: 600, sizeBytes: 100_000_000 },
+    { url: 'https://a.com/peli_1080p.mp4', durationSeconds: 600, sizeBytes: 900_000_000 },
+    { url: 'https://a.com/peli_720p.mp4', durationSeconds: 600, sizeBytes: 400_000_000 },
+  ];
+
+  await t.test('gana el de mas bytes aunque no fuera el primero', () => {
+    const { grupos } = groupDuplicates(items);
+    const grupo = grupos.find(g => g.miembros.length > 1);
+    assert.ok(grupo, 'deberian haberse agrupado');
+    assert.equal(grupo.representante.url, 'https://a.com/peli_1080p.mp4');
+  });
+
+  await t.test('el representante va primero en miembros', () => {
+    const { grupos } = groupDuplicates(items);
+    const grupo = grupos.find(g => g.miembros.length > 1);
+    assert.equal(grupo.miembros[0].url, grupo.representante.url);
+  });
+
+  await t.test('no se pierde ni se duplica ningun miembro', () => {
+    const { grupos } = groupDuplicates(items);
+    const todos = grupos.flatMap(g => g.miembros.map(m => m.url)).sort();
+    assert.deepEqual(todos, items.map(i => i.url).sort());
+  });
+});
+
+test('un peso desconocido no gana la representacion', () => {
+  // Sin dato no se puede afirmar que sea el mejor: ascenderlo cambiaria el
+  // representante por una corazonada.
+  const items = [
+    { url: 'https://a.com/clip_720p.mp4', durationSeconds: 300, sizeBytes: 50_000_000 },
+    { url: 'https://a.com/clip_1080p.mp4', durationSeconds: 300 },
+  ];
+  const { grupos } = groupDuplicates(items);
+  const grupo = grupos.find(g => g.miembros.length > 1);
+  assert.equal(grupo.representante.url, 'https://a.com/clip_720p.mp4');
+});
+
+test('sin ningun peso conocido, el representante no cambia', () => {
+  const items = [
+    { url: 'https://a.com/video-identico.mp4', durationSeconds: 300 },
+    { url: 'https://b.com/video-identico.mp4', durationSeconds: 300 },
+  ];
+  const { grupos } = groupDuplicates(items);
+  const grupo = grupos.find(g => g.miembros.length > 1);
+  assert.equal(grupo.representante.url, 'https://a.com/video-identico.mp4');
+});

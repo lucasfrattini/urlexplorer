@@ -310,6 +310,44 @@ function groupDuplicates(items, opciones = {}) {
     grupos.push(grupo);
   }
 
+  /**
+   * El representante de cada grupo es el MÁS PESADO.
+   *
+   * Si dos URLs son el mismo vídeo, la que más pesa es casi siempre la de
+   * mejor calidad: más bitrate, o la versión de 1080 frente a la de 720. Es
+   * lo que se quiere ver por defecto cuando el grupo aparece plegado.
+   *
+   * Se hace al final y no al construir el grupo porque hasta que no está
+   * cerrado no se sabe quién es el más pesado.
+   *
+   * OJO: se cambia quién representa, NO quién pertenece. La comparación que
+   * decidió el grupo se hizo contra el primer elemento a propósito —encadenar
+   * arrastra elementos que no se parecen entre sí— y eso no se toca. Los
+   * miembros son exactamente los mismos.
+   *
+   * Un peso desconocido nunca gana: sin dato no se puede afirmar que sea el
+   * mejor, y ascenderlo cambiaría el representante por una corazonada.
+   */
+  for (const grupo of grupos) {
+    if (grupo.miembros.length < 2) continue;
+
+    let mejor = grupo.representante;
+    for (const miembro of grupo.miembros) {
+      const pesoMiembro = Number.isFinite(miembro.sizeBytes) ? miembro.sizeBytes : null;
+      const pesoMejor = Number.isFinite(mejor.sizeBytes) ? mejor.sizeBytes : null;
+      if (pesoMiembro !== null && (pesoMejor === null || pesoMiembro > pesoMejor)) {
+        mejor = miembro;
+      }
+    }
+
+    if (mejor !== grupo.representante) {
+      grupo.representante = mejor;
+      // Los miembros se reordenan para que el representante vaya primero: la
+      // interfaz muestra `miembros.slice(1)` como "los otros del grupo".
+      grupo.miembros = [mejor, ...grupo.miembros.filter(m => m !== mejor)];
+    }
+  }
+
   const totalDuplicados = grupos.reduce((suma, g) => suma + (g.miembros.length - 1), 0);
 
   return { grupos, totalDuplicados };

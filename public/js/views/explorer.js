@@ -229,7 +229,20 @@ export function createExplorerView(container, { limits }) {
     'fileExtensions',
     'explorer.extensiones.label',
     'explorer.extensiones.hint',
-    { type: 'text', placeholder: '.mp4, .webm', spellcheck: 'false' }
+    {
+      type: 'text',
+      placeholder: '.mp4, .webm',
+      spellcheck: 'false',
+      /**
+       * Valor POR DEFECTO, no solo marcador de posición.
+       *
+       * Es lo que hace que el paso 2 arranque con "los archivos de dentro" y
+       * el chip de Vídeo marcado: la tarjeta y el chip se deducen de este
+       * campo, no al revés (ver sincronizarUI). Va como atributo `value` para
+       * que `form.reset()` lo restaure igual que al resto.
+       */
+      value: PRESETS_EXTENSION[0].extensiones,
+    }
   );
 
   const objetivoEnlaces = makeChoice(
@@ -250,12 +263,28 @@ export function createExplorerView(container, { limits }) {
   const opcionesObjetivo = [objetivoEnlaces, objetivoFicheros];
 
   const chipsSlot = el('div', { className: 'chips' });
+  /**
+   * Peso y miniaturas viven AQUÍ, no en los ajustes avanzados.
+   *
+   * Los dos son datos DE LOS ARCHIVOS, así que su sitio es justo debajo de
+   * "¿qué tipo de archivo?" y no en un panel plegado que hay que saber abrir.
+   * Al estar dentro de este bloque aparecen y desaparecen con la tarjeta de
+   * "los archivos de dentro", que es lo correcto: sin fase 2 no hay ni pesos
+   * ni miniaturas que traer.
+   */
   const chipsBloque = el('div', {
     className: 'chips-block',
     children: [
       texto(el('p', { className: 'field__label' }), 'explorer.tipoArchivo'),
       chipsSlot,
       campoExtensiones,
+      el('div', {
+        className: 'grid grid--2',
+        children: [
+          makeSwitch('withSizes', 'explorer.peso.label', 'explorer.peso.hint'),
+          makeSwitch('withThumbnails', 'explorer.miniaturas.label', 'explorer.miniaturas.hint'),
+        ],
+      }),
     ],
   });
 
@@ -417,8 +446,6 @@ export function createExplorerView(container, { limits }) {
           }),
 
           makeSwitch('useJavaScript', 'explorer.navegador.label', 'explorer.navegador.hint'),
-          makeSwitch('withSizes', 'explorer.peso.label', 'explorer.peso.hint'),
-          makeSwitch('withThumbnails', 'explorer.miniaturas.label', 'explorer.miniaturas.hint'),
           makeSwitch('openLicenseOnly', 'explorer.licencia.label', 'explorer.licencia.hint'),
         ],
       }),
