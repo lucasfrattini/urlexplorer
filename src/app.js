@@ -13,8 +13,15 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 function createApp() {
   const app = express();
 
-  // Necesario para que req.ip sea correcto tras un reverse proxy
-  app.set('trust proxy', true);
+  /**
+   * De quién se acepta `X-Forwarded-For`.
+   *
+   * NO poner `true` aquí. `true` es "confía en cualquiera", y como `req.ip`
+   * sale de esa cabecera y el rate limiting va por `req.ip`, un cliente que
+   * rote la cabecera se salta el límite entero — incluida la protección de
+   * fuerza bruta del desbloqueo de admin. Ver `security.trustProxy`.
+   */
+  app.set('trust proxy', config.security.trustProxy);
   app.disable('x-powered-by');
 
   // Tope de body: nada legítimo se acerca a esto

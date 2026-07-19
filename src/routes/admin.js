@@ -16,7 +16,12 @@ const router = express.Router();
  * (5 intentos por minuto frente a 30 peticiones). Es el único endpoint de la
  * aplicación donde la fuerza bruta tiene sentido.
  */
-const unlockLimiter = createRateLimiter(config.admin.unlockRateLimit);
+const unlockLimiter = createRateLimiter({
+  ...config.admin.unlockRateLimit,
+  // Por la dirección real del socket, no por X-Forwarded-For: el contador de
+  // intentos de contraseña no puede depender de cómo esté puesto trust proxy.
+  useSocketAddress: true,
+});
 
 /**
  * POST /api/admin/unlock — valida el token.

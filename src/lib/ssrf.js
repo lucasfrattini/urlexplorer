@@ -181,6 +181,61 @@ async function assertUrlIsSafe(rawUrl) {
   return url;
 }
 
+/**
+ * `lookup` para los agentes HTTP: valida la IP EN EL MOMENTO DE CONECTAR.
+ *
+ * Cierra dos agujeros que la validación previa no puede tapar, y los dos son
+ * estructurales, no despistes:
+ *
+ * 1. REDIRECCIONES. El guardia de redirección de axios es SÍNCRONO, así que
+ *    no puede resolver DNS: solo comprueba la forma de la URL. Un host
+ *    público que redirige a otro host que resuelve a 127.0.0.1 pasaba entero,
+ *    porque la forma es impecable. Comprobado: la validación de forma acepta
+ *    un host que resuelve a loopback.
+ *
+ * 2. DNS REBINDING. `assertUrlIsSafe` resuelve el nombre y comprueba las IPs,
+ *    pero luego el cliente HTTP lo resuelve OTRA VEZ por su cuenta al
+ *    conectar. Entre las dos consultas la respuesta puede cambiar (TTL corto
+ *    controlado por el atacante) y se conecta a una dirección que nunca se
+ *    validó.
+ *
+ * Validar aquí elimina la ventana: es la misma resolución que se usa para
+ * abrir el socket, no una anterior.
+ */
+function secureLookup(hostname, options, callback) {
+  // Firma de dns.lookup: (host, cb) o (host, options, cb)
+  const cb = typeof options === 'function' ? options : callback;
+  const opts = typeof options === 'function' ? {} : options || {};
+
+  // OJO: `dns` en este módulo es la API de PROMESAS (`node:dns`.promises), no
+  // la de callbacks. Pasarle un callback lo ignora en silencio y la petición
+  // se queda colgada para siempre, sin error y sin timeout. Pasó al escribir
+  // esto y lo cazó el test de regresión.
+  dns
+    .lookup(hostname, { ...opts, all: true })
+    .then(addresses => {
+      const lista = Array.isArray(addresses) ? addresses : [addresses];
+      if (lista.length === 0) {
+        return cb(new Error(`El host no resolvió a ninguna dirección: ${hostname}`));
+      }
+
+      for (const { address } of lista) {
+        if (isPrivateAddress(address)) {
+          const bloqueo = new Error(
+            `Conexión bloqueada: ${hostname} resuelve a una dirección privada (${address})`
+          );
+          bloqueo.code = 'PRIVATE_ADDRESS_BLOCKED';
+          return cb(bloqueo);
+        }
+      }
+
+      // `all: true` devuelve la lista; sin él, la firma es (addr, family)
+      if (opts.all) return cb(null, lista);
+      return cb(null, lista[0].address, lista[0].family);
+    })
+    .catch(error => cb(error));
+}
+
 /** Variante booleana, para filtrar listas de URLs sin romper el flujo. */
 async function isUrlSafe(rawUrl) {
   try {
@@ -198,4 +253,5 @@ module.exports = {
   isPrivateAddress,
   isPrivateIPv4,
   isPrivateIPv6,
+  secureLookup,
 };

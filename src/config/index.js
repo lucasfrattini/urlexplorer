@@ -33,6 +33,26 @@ function listFromEnv(name, fallback) {
     .filter(Boolean);
 }
 
+/**
+ * `trust proxy` admite varios tipos y la diferencia importa: 'true' (cadena)
+ * y true (booleano) significan "confía en cualquiera", que es justo lo que no
+ * queremos por defecto. Un número es "confía en N saltos"; el resto se pasa
+ * tal cual a Express.
+ */
+function trustProxyFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+
+  const limpio = raw.trim();
+  if (limpio.toLowerCase() === 'false') return false;
+  if (limpio.toLowerCase() === 'true') return true;
+
+  const saltos = Number.parseInt(limpio, 10);
+  if (String(saltos) === limpio && Number.isFinite(saltos)) return saltos;
+
+  return limpio;
+}
+
 const config = {
   // No asumir 3000: esta máquina corre en 3001 vía .env
   port: intFromEnv('PORT', 3000),
@@ -135,6 +155,29 @@ const config = {
     // Allowlist opcional de hosts. Vacía = cualquier host público.
     allowedHosts: listFromEnv('SECURITY_ALLOWED_HOSTS', []),
     maxUrlLength: intFromEnv('SECURITY_MAX_URL_LENGTH', 2048),
+    /**
+     * En quién se confía para leer `X-Forwarded-For`.
+     *
+     * Estaba en `true`, que significa "confía en CUALQUIERA". Como `req.ip`
+     * sale de esa cabecera y el rate limiting va por `req.ip`, cualquier
+     * cliente podía mandar una X-Forwarded-For distinta en cada petición y
+     * saltarse el límite por completo — incluido el de 5 intentos por minuto
+     * del desbloqueo de admin, que es lo único que frena la fuerza bruta
+     * contra ADMIN_TOKEN. Medido: 0 bloqueos en 40 peticiones rotando la
+     * cabecera, frente a 10 de 40 con la misma IP.
+     *
+     * Por defecto `false`: no se cree la cabecera a nadie.
+     *
+     * Se probó 'loopback' y NO sirve aquí: significa "confía si quien conecta
+     * es loopback", y en este despliegue los clientes conectan justamente
+     * desde localhost (Docker publica el 3001 en la propia máquina), así que
+     * seguían pudiendo falsificarla. El test de regresión lo cazó.
+     *
+     * Detrás de un proxy inverso real, poner aquí SU dirección; nunca 'true'.
+     * Acepta lo mismo que Express: 'loopback', 'uniquelocal', una lista de
+     * IPs/CIDR, un número de saltos, o false.
+     */
+    trustProxy: trustProxyFromEnv('TRUST_PROXY', false),
     rateLimit: {
       windowMs: intFromEnv('RATE_LIMIT_WINDOW_MS', 60 * 1000),
       maxRequests: intFromEnv('RATE_LIMIT_MAX_REQUESTS', 30),

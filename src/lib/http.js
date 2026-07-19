@@ -1,11 +1,13 @@
 'use strict';
 
 const axios = require('axios');
+const http = require('node:http');
+const https = require('node:https');
 
 const config = require('../config');
 const logger = require('./logger');
 const { AppError } = require('./errors');
-const { assertUrlIsSafe, validateUrlShape } = require('./ssrf');
+const { assertUrlIsSafe, validateUrlShape, secureLookup } = require('./ssrf');
 const { HostThrottle, sleep } = require('./throttle');
 
 /**
@@ -45,8 +47,24 @@ function buildHeaders(extra = {}) {
 const throttle = new HostThrottle();
 
 /**
- * Cada redirección se revalida: si no, un host público podía redirigir a
- * 127.0.0.1 y saltarse por completo la comprobación inicial.
+ * Agentes con validación de IP en el momento de conectar.
+ *
+ * Es la ÚNICA capa que ve todas las conexiones: la primera, cada redirección
+ * y la resolución real que abre el socket. `guardRedirect` sigue existiendo
+ * porque corta antes y con mejor mensaje, pero es síncrono y por tanto no
+ * puede resolver DNS: no basta por sí solo.
+ */
+const agentOptions = { keepAlive: true, lookup: secureLookup };
+const httpAgent = new http.Agent(agentOptions);
+const httpsAgent = new https.Agent(agentOptions);
+
+/**
+ * Revalidación de FORMA en cada redirección.
+ *
+ * Filtra lo evidente (protocolo raro, IP privada literal, localhost) antes de
+ * abrir nada. Lo que NO puede hacer es resolver DNS, porque axios llama a
+ * esto de forma síncrona: un host público que resuelve a una IP privada pasa
+ * este control sin despeinarse. Ese caso lo corta `secureLookup` al conectar.
  */
 function guardRedirect(options) {
   const target = `${options.protocol}//${options.host}${options.path || ''}`;
@@ -66,6 +84,8 @@ async function fetchHtml(url, { timeout, signal } = {}) {
       maxBodyLength: config.http.maxResponseBytes,
       responseType: 'text',
       signal,
+      httpAgent,
+      httpsAgent,
       beforeRedirect: guardRedirect,
       validateStatus: status => status >= 200 && status < 400,
     });
@@ -147,6 +167,8 @@ async function fetchContentLength(url, { signal, referer } = {}) {
         timeout: config.http.headTimeoutMs,
         maxRedirects: config.http.maxRedirects,
         signal,
+        httpAgent,
+        httpsAgent,
         beforeRedirect: guardRedirect,
       });
       const contentLength = response.headers['content-length'];
