@@ -184,15 +184,11 @@ export const es = {
 
   /* ── Explorador: cabecera ──────────────────────────────────────── */
   'explorer.titulo': 'Recorrer un sitio página a página',
-  'explorer.subtitulo':
-    'Pasa por las páginas de una sección y te devuelve lo que encuentre. Tres pasos.',
+  'explorer.subtitulo': 'Pasa por las páginas de una sección y te devuelve lo que encuentre.',
   'explorer.vacio.titulo': 'Todavía no hay resultados',
-  'explorer.vacio.texto': 'Rellena los tres pasos y pulsa «Empezar a explorar».',
+  'explorer.vacio.texto': 'Pega una dirección y pulsa «Empezar a explorar».',
 
-  /* ── Explorador: paso 1 ────────────────────────────────────────── */
-  'explorer.paso1.titulo': '¿Qué página quieres recorrer?',
-  'explorer.paso1.ayuda':
-    'Ve a la página 2 en el sitio y copia esa dirección: así se ve cómo numera las páginas.',
+  /* ── Explorador: de dónde se parte ─────────────────────────────── */
   'explorer.url.label': '¿Qué página quieres recorrer?',
   'explorer.url.hint':
     'Pega la dirección tal cual. Si escribes {q} donde iría la palabra buscada y {page} donde va el número de página, el sitio se guarda una vez y solo cambias la palabra.',
@@ -201,15 +197,17 @@ export const es = {
   'explorer.termino.hint':
     'Se coloca donde la dirección tenga {q}. Si la dirección no lleva {q}, este campo no hace nada.',
   'explorer.termino.placeholder': 'gatos',
+  'explorer.termino.mostrar': 'Buscar una palabra concreta →',
+  'explorer.termino.ocultar': 'Sin palabra concreta ←',
 
-  /* ── Explorador: paso 2 ────────────────────────────────────────── */
-  'explorer.paso2.titulo': '¿Qué quieres obtener?',
-  'explorer.paso2.ayuda':
-    'Los enlaces se recogen siempre. Los archivos obligan a entrar en cada enlace, y eso tarda.',
+  /* ── Explorador: qué obtener ───────────────────────────────────── */
+  'explorer.objetivo.pregunta': '¿Qué quieres obtener?',
   'explorer.objetivo.enlaces': 'Solo la lista de enlaces',
+  'explorer.objetivo.enlaces.breve': 'Solo enlaces',
   'explorer.objetivo.enlaces.hint':
     'Recorre las páginas y te da las direcciones que encuentre. Es lo más rápido.',
   'explorer.objetivo.ficheros': 'Los archivos de dentro',
+  'explorer.objetivo.ficheros.breve': 'Archivos de dentro',
   'explorer.objetivo.ficheros.hint':
     'Además entra en cada enlace y busca los archivos que haya dentro. Tarda bastante más.',
   'explorer.tipoArchivo': '¿Qué tipo de archivo?',
@@ -221,8 +219,7 @@ export const es = {
   'explorer.extensiones.label': 'Extensiones a buscar, separadas por comas',
   'explorer.extensiones.hint': 'Con el punto delante. Por ejemplo: .pdf, .zip',
 
-  /* ── Explorador: paso 3 ────────────────────────────────────────── */
-  'explorer.paso3.titulo': 'Todo listo',
+  /* ── Explorador: acciones ──────────────────────────────────────── */
   'explorer.explorar': 'Empezar a explorar',
   'explorer.explorando': 'Explorando…',
   'explorer.detectar': 'Que lo configure por mí',
@@ -235,12 +232,15 @@ export const es = {
   'explorer.avanzados': 'Ajustes avanzados (opcional)',
   'explorer.modo.pregunta': '¿Cómo pasa de página el sitio?',
   'explorer.modo.auto': 'Detectar automáticamente (recomendado)',
+  'explorer.modo.auto.breve': 'Automático',
   'explorer.modo.auto.hint':
     'Sirve para casi todos los sitios: usa lo que ya venga en la dirección.',
   'explorer.modo.manual': 'Indicar los patrones a mano',
+  'explorer.modo.manual.breve': 'A mano',
   'explorer.modo.manual.hint':
     'Para decir exactamente qué enlaces seguir y cómo numera las páginas el sitio.',
   'explorer.modo.scroll': 'Scroll infinito',
+  'explorer.modo.scroll.breve': 'Scroll',
   'explorer.modo.scroll.hint':
     'Para sitios sin botonera de páginas, que cargan más resultados al bajar. Aquí «hasta» cuenta cargas, no páginas.',
   'explorer.modo.resumen':
@@ -264,9 +264,11 @@ export const es = {
   'explorer.navegador.hint':
     'Abre cada página como lo haría un navegador de verdad, ejecutando su JavaScript. Hace falta si el sitio no enseña nada sin él. Mucho más lento: cuenta varios segundos por enlace.',
   'explorer.peso.label': 'Averiguar cuánto pesa cada archivo',
+  'explorer.peso.breve': 'Peso',
   'explorer.peso.hint':
     'Pregunta el peso de cada archivo sin descargarlo. Permite ordenar por tamaño y distinguir un vídeo entero de un clip de vista previa. Va más lento.',
   'explorer.miniaturas.label': 'Traer una miniatura de cada resultado',
+  'explorer.miniaturas.breve': 'Miniatura',
   'explorer.miniaturas.hint':
     'Pide una imagen de vista previa por ficha. Las descarga y las sirve ESTE servidor, no tu navegador: los sitios explorados no ven tu conexión. Va más lento y hace más peticiones al sitio.',
   'explorer.licencia.label': 'Solo material con licencia abierta',

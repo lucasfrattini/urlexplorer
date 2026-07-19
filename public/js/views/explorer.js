@@ -24,15 +24,21 @@ const STORAGE_KEY = 'urlexplorer:explorer-form';
  * Vista Explorador: fase 1 (recorrer paginación y extraer enlaces) y, si se
  * indican extensiones, fase 2 (buscar ficheros dentro de cada enlace).
  *
- * ── Sobre el formulario en tres pasos ─────────────────────────────────
+ * ── Sobre la disposición del formulario ───────────────────────────────
  *
- * Los pasos son PRESENTACIÓN. Los parámetros que se envían son los mismos de
- * siempre y siguen viviendo en `fields`, que es el contrato con los perfiles,
- * con los enlaces compartidos y con `readForm()`. Las tarjetas, los chips y
- * los radios solo escriben en esos campos; nunca son la fuente de la verdad.
- * Por eso existe `sincronizarUI()`: cuando la verdad llega de fuera (un
- * perfil, un enlace compartido, la detección), la UI se recalcula a partir de
- * los campos y no al revés.
+ * La disposición es PRESENTACIÓN. Los parámetros que se envían son los mismos
+ * de siempre y siguen viviendo en `fields`, que es el contrato con los
+ * perfiles, con los enlaces compartidos y con `readForm()`. Los segmentados,
+ * los chips y los plegados solo escriben en esos campos; nunca son la fuente
+ * de la verdad. Por eso existe `sincronizarUI()`: cuando la verdad llega de
+ * fuera (un perfil, un enlace compartido, la detección), la UI se recalcula a
+ * partir de los campos y no al revés.
+ *
+ * Y por eso mismo, plegar NUNCA vacía: la palabra buscada y los patrones se
+ * siguen enviando aunque su campo esté oculto, así que ocultarlos obliga a
+ * decirlo —el toggle se abre solo si hay valor, el resumen del modo canta los
+ * patrones activos—. Un campo que filtra sin verse es indistinguible de un
+ * sitio que no devuelve nada.
  */
 
 /**
@@ -151,8 +157,14 @@ export function createExplorerView(container, { limits }) {
     });
   };
 
-  /** Opción con forma de tarjeta seleccionable (un radio por debajo). */
-  const makeChoice = (group, value, titleKey, hintKey, { checked = false } = {}) => {
+  /**
+   * Una opción de un selector segmentado (un radio por debajo).
+   *
+   * El rótulo visible es la clave `.breve`; la explicación larga va al `title`
+   * en vez de debajo. Es lo que permite que tres opciones ocupen una línea en
+   * vez de tres tarjetas, sin perder la explicación para quien la busque.
+   */
+  const makeSegment = (group, value, labelKey, hintKey, { checked = false } = {}) => {
     const id = `explorer-${group}-${value}`;
     const input = el('input', {
       attrs: { type: 'radio', name: `explorer-${group}`, id, value, checked },
@@ -160,53 +172,43 @@ export function createExplorerView(container, { limits }) {
     uiInputs.push(input);
 
     const root = el('label', {
-      className: 'choice',
+      className: 'segmented__option',
       attrs: { for: id },
-      children: [
-        input,
-        el('span', {
-          className: 'choice__text',
-          children: [
-            texto(el('span', { className: 'choice__title' }), titleKey),
-            texto(el('span', { className: 'choice__hint' }), hintKey),
-          ],
-        }),
-      ],
+      children: [input, texto(el('span', { className: 'segmented__label' }), labelKey)],
     });
+    if (hintKey) atributo(root, 'title', hintKey);
 
     return { root, input, value };
   };
 
-  /** Paso numerado. El número es decorativo: el título ya ordena la lectura. */
-  const makeStep = (numero, tituloKey, ayudaKey, children) => {
-    // El número va delante del título y se recompone al cambiar de idioma:
-    // por eso el título se registra en vez de asignarse una sola vez.
-    const titulo = el('h3', { className: 'step__title' });
-    alCambiarIdioma(() => {
-      titulo.textContent = `${numero}. ${t(tituloKey)}`;
+  const makeSegmented = opciones =>
+    el('div', {
+      className: 'segmented',
+      attrs: { role: 'group' },
+      children: opciones.map(o => o.root),
     });
 
-    return el('section', {
-      className: 'step',
-      children: [
-        el('div', {
-          className: 'step__mark',
-          text: String(numero),
-          attrs: { 'aria-hidden': 'true' },
-        }),
-        el('div', {
-          className: 'step__body',
-          children: [
-            titulo,
-            ayudaKey ? texto(el('p', { className: 'step__hint' }), ayudaKey) : null,
-            el('div', { className: 'step__fields', children }),
-          ],
-        }),
-      ],
+  /**
+   * Interruptor con forma de chip, para lo que se decide de un vistazo.
+   *
+   * Mismo `input[type=checkbox]` de siempre —sigue en `fields`, sigue viajando
+   * al servidor—; lo único que cambia es que ocupa una línea compartida en vez
+   * de un bloque con título y ayuda.
+   */
+  const makeChipToggle = (name, labelKey, hintKey) => {
+    const input = el('input', { attrs: { type: 'checkbox', id: `explorer-${name}`, name } });
+    fields[name] = input;
+
+    const root = el('label', {
+      className: 'chip chip--toggle',
+      attrs: { for: `explorer-${name}` },
+      children: [input, texto(el('span', { className: 'chip__label' }), labelKey)],
     });
+    atributo(root, 'title', hintKey);
+    return root;
   };
 
-  // ── Paso 1: de dónde se parte ──────────────────────────────────────
+  // ── De dónde se parte ──────────────────────────────────────────────
 
   const campoUrl = makeField(
     'searchUrl',
@@ -224,7 +226,44 @@ export function createExplorerView(container, { limits }) {
     { placeholderKey: 'explorer.termino.placeholder' }
   );
 
-  // ── Paso 2: qué se quiere obtener ──────────────────────────────────
+  /**
+   * La palabra buscada empieza plegada.
+   *
+   * Solo sirve cuando la dirección lleva `{q}`, que es la minoría de los
+   * casos, así que enseñarla siempre costaba una fila de formulario a todo el
+   * mundo. Se despliega sola si ya trae valor (perfil, enlace compartido o
+   * formulario recordado): un campo con contenido que no se ve es justo el
+   * estado invisible que aquí se paga caro.
+   */
+  let terminoVisible = false;
+
+  const terminoToggle = el('button', {
+    className: 'link-toggle',
+    attrs: { type: 'button', 'aria-expanded': 'false' },
+    on: {
+      click: () => {
+        terminoVisible = !terminoVisible;
+        aplicarVistaTermino();
+        if (terminoVisible) fields.searchTerm.focus();
+      },
+    },
+  });
+  uiInputs.push(terminoToggle);
+
+  function aplicarVistaTermino() {
+    // Con valor puesto no se puede plegar: se vería una configuración
+    // distinta de la que se ejecuta.
+    const abierto = terminoVisible || Boolean(fields.searchTerm.value.trim());
+    show(campoTermino, abierto);
+    terminoToggle.setAttribute('aria-expanded', String(abierto));
+    terminoToggle.textContent = t(
+      abierto ? 'explorer.termino.ocultar' : 'explorer.termino.mostrar'
+    );
+  }
+  // Texto calculado a partir del estado: se repinta, no se enlaza.
+  alCambiarIdioma(() => aplicarVistaTermino());
+
+  // ── Qué se quiere obtener ──────────────────────────────────────────
 
   /**
    * `fileExtensions` sigue siendo un campo de texto de verdad.
@@ -254,22 +293,30 @@ export function createExplorerView(container, { limits }) {
     }
   );
 
-  const objetivoEnlaces = makeChoice(
+  const objetivoEnlaces = makeSegment(
     'objetivo',
     'enlaces',
-    'explorer.objetivo.enlaces',
+    'explorer.objetivo.enlaces.breve',
     'explorer.objetivo.enlaces.hint',
     { checked: true }
   );
 
-  const objetivoFicheros = makeChoice(
+  const objetivoFicheros = makeSegment(
     'objetivo',
     'ficheros',
-    'explorer.objetivo.ficheros',
+    'explorer.objetivo.ficheros.breve',
     'explorer.objetivo.ficheros.hint'
   );
 
   const opcionesObjetivo = [objetivoEnlaces, objetivoFicheros];
+
+  const bloqueObjetivo = el('div', {
+    className: 'field',
+    children: [
+      texto(el('p', { className: 'field__label' }), 'explorer.objetivo.pregunta'),
+      makeSegmented(opcionesObjetivo),
+    ],
+  });
 
   const chipsSlot = el('div', { className: 'chips' });
   /**
@@ -288,10 +335,10 @@ export function createExplorerView(container, { limits }) {
       chipsSlot,
       campoExtensiones,
       el('div', {
-        className: 'grid grid--2',
+        className: 'chips',
         children: [
-          makeSwitch('withSizes', 'explorer.peso.label', 'explorer.peso.hint'),
-          makeSwitch('withThumbnails', 'explorer.miniaturas.label', 'explorer.miniaturas.hint'),
+          makeChipToggle('withSizes', 'explorer.peso.breve', 'explorer.peso.hint'),
+          makeChipToggle('withThumbnails', 'explorer.miniaturas.breve', 'explorer.miniaturas.hint'),
         ],
       }),
     ],
@@ -348,21 +395,25 @@ export function createExplorerView(container, { limits }) {
     attrs: { type: 'hidden', name: 'paginationMode', value: 'auto' },
   });
 
-  const modoAuto = makeChoice('modo', 'auto', 'explorer.modo.auto', 'explorer.modo.auto.hint', {
-    checked: true,
-  });
+  const modoAuto = makeSegment(
+    'modo',
+    'auto',
+    'explorer.modo.auto.breve',
+    'explorer.modo.auto.hint',
+    { checked: true }
+  );
 
-  const modoManual = makeChoice(
+  const modoManual = makeSegment(
     'modo',
     'manual',
-    'explorer.modo.manual',
+    'explorer.modo.manual.breve',
     'explorer.modo.manual.hint'
   );
 
-  const modoScroll = makeChoice(
+  const modoScroll = makeSegment(
     'modo',
     'scroll',
-    'explorer.modo.scroll',
+    'explorer.modo.scroll.breve',
     'explorer.modo.scroll.hint'
   );
 
@@ -440,10 +491,7 @@ export function createExplorerView(container, { limits }) {
               // devuelve a "auto" como a cualquier otro campo.
               fields.paginationMode,
               texto(el('p', { className: 'field__label' }), 'explorer.modo.pregunta'),
-              el('div', {
-                className: 'choices choices--stack',
-                children: opcionesModo.map(o => o.root),
-              }),
+              makeSegmented(opcionesModo),
               resumenModo,
               bloqueManual,
             ],
@@ -461,15 +509,18 @@ export function createExplorerView(container, { limits }) {
     ],
   });
 
-  // ── Paso 3: lanzar ─────────────────────────────────────────────────
+  // ── Lanzar ─────────────────────────────────────────────────────────
 
-  const submitButton = el('button', { className: 'button', attrs: { type: 'submit' } });
+  const submitButton = el('button', {
+    className: 'button button--large',
+    attrs: { type: 'submit' },
+  });
   const detectButton = el('button', {
     className: 'button button--secondary',
     attrs: { type: 'button' },
   });
   const resetButton = el('button', {
-    className: 'button button--secondary',
+    className: 'button button--ghost',
     attrs: { type: 'button' },
   });
 
@@ -507,26 +558,35 @@ export function createExplorerView(container, { limits }) {
   const detectSlot = el('div');
   show(detectSlot, false);
 
+  /**
+   * La dirección manda, y la detección va pegada a ella.
+   *
+   * "Que lo configure por mí" opera sobre lo que hay escrito en este campo,
+   * así que su sitio es el lado del campo y no una fila de botones al final:
+   * allí abajo no se leía como lo que es, una ayuda para rellenar ESTA
+   * dirección.
+   */
+  campoUrl.insertBefore(
+    el('div', { className: 'url-row', children: [fields.searchUrl, detectButton] }),
+    campoUrl.children[1]
+  );
+
   const form = el('form', {
-    className: 'steps',
+    className: 'explorer-form',
     attrs: { novalidate: true },
     children: [
-      makeStep(1, 'explorer.paso1.titulo', 'explorer.paso1.ayuda', [campoUrl, campoTermino]),
+      campoUrl,
+      terminoToggle,
+      campoTermino,
 
-      makeStep(2, 'explorer.paso2.titulo', 'explorer.paso2.ayuda', [
-        el('div', { className: 'choices', children: opcionesObjetivo.map(o => o.root) }),
-        chipsBloque,
-      ]),
+      el('div', {
+        className: 'button-row button-row--principal',
+        children: [submitButton, continueButton, resetButton],
+      }),
 
+      bloqueObjetivo,
+      chipsBloque,
       advanced,
-
-      makeStep(3, 'explorer.paso3.titulo', null, [
-        el('div', {
-          className: 'button-row',
-          children: [submitButton, continueButton, detectButton, resetButton],
-        }),
-      ]),
-
       detectSlot,
     ],
   });
@@ -537,7 +597,7 @@ export function createExplorerView(container, { limits }) {
   });
 
   const formCard = el('div', {
-    className: 'card',
+    className: 'card card--form',
     children: [
       el('div', {
         className: 'card__header',
@@ -614,6 +674,9 @@ export function createExplorerView(container, { limits }) {
     for (const opcion of opcionesModo) opcion.input.checked = opcion.value === modo;
 
     aplicarVistaModo();
+    // Un término que llega de fuera tiene que verse: si el campo se quedara
+    // plegado, la palabra viajaría al servidor sin aparecer en pantalla.
+    aplicarVistaTermino();
   }
 
   /** Muestra u oculta los patrones según el radio, sin tocar sus valores. */
@@ -1253,6 +1316,10 @@ export function createExplorerView(container, { limits }) {
 
     if (/\{(?:q|query|termino|término)\}/i.test(params.searchUrl) && !params.searchTerm) {
       showError('error.faltaTermino', 'error.faltaTermino.body');
+      // Se pide una palabra que está en un campo plegado: sin desplegarlo, el
+      // aviso señalaría a algo que no se ve.
+      terminoVisible = true;
+      aplicarVistaTermino();
       fields.searchTerm.focus();
       return;
     }
@@ -1327,6 +1394,7 @@ export function createExplorerView(container, { limits }) {
     fields.endPage.value = '5';
     fields.concurrency.value = String(limits.defaultConcurrency);
     mostrarExtensionesLibres = false;
+    terminoVisible = false;
     jobIdPendiente = null;
     show(continueButton, false);
     sincronizarUI();

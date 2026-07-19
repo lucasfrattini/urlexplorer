@@ -184,15 +184,11 @@ export const en = {
 
   /* ── Explorer: header ──────────────────────────────────────────── */
   'explorer.titulo': 'Walk a site page by page',
-  'explorer.subtitulo':
-    'Goes through the pages of a section and returns whatever it finds. Three steps.',
+  'explorer.subtitulo': 'Goes through the pages of a section and returns whatever it finds.',
   'explorer.vacio.titulo': 'No results yet',
-  'explorer.vacio.texto': 'Fill in the three steps and press “Start exploring”.',
+  'explorer.vacio.texto': 'Paste an address and press “Start exploring”.',
 
-  /* ── Explorer: step 1 ──────────────────────────────────────────── */
-  'explorer.paso1.titulo': 'Which page do you want to walk through?',
-  'explorer.paso1.ayuda':
-    'Go to page 2 on the site and copy that address: that shows how it numbers its pages.',
+  /* ── Explorer: where to start ──────────────────────────────────── */
   'explorer.url.label': 'Which page do you want to walk through?',
   'explorer.url.hint':
     'Paste the address as it is. If you write {q} where the searched word would go and {page} where the page number goes, the site is saved once and you only change the word.',
@@ -201,15 +197,17 @@ export const en = {
   'explorer.termino.hint':
     'It goes wherever the address has {q}. If the address has no {q}, this field does nothing.',
   'explorer.termino.placeholder': 'cats',
+  'explorer.termino.mostrar': 'Search for a particular word →',
+  'explorer.termino.ocultar': 'No particular word ←',
 
-  /* ── Explorer: step 2 ──────────────────────────────────────────── */
-  'explorer.paso2.titulo': 'What do you want to get?',
-  'explorer.paso2.ayuda':
-    'Links are always collected. Files require opening every link, and that takes a while.',
+  /* ── Explorer: what to get ─────────────────────────────────────── */
+  'explorer.objetivo.pregunta': 'What do you want to get?',
   'explorer.objetivo.enlaces': 'Just the list of links',
+  'explorer.objetivo.enlaces.breve': 'Links only',
   'explorer.objetivo.enlaces.hint':
     'Walks the pages and gives you the addresses it finds. This is the fastest option.',
   'explorer.objetivo.ficheros': 'The files inside',
+  'explorer.objetivo.ficheros.breve': 'The files inside',
   'explorer.objetivo.ficheros.hint':
     'Also opens every link and looks for the files inside. Takes considerably longer.',
   'explorer.tipoArchivo': 'What kind of file?',
@@ -221,8 +219,7 @@ export const en = {
   'explorer.extensiones.label': 'Extensions to look for, comma separated',
   'explorer.extensiones.hint': 'With the leading dot. For example: .pdf, .zip',
 
-  /* ── Explorer: step 3 ──────────────────────────────────────────── */
-  'explorer.paso3.titulo': 'All set',
+  /* ── Explorer: actions ─────────────────────────────────────────── */
   'explorer.explorar': 'Start exploring',
   'explorer.explorando': 'Exploring…',
   'explorer.detectar': 'Set it up for me',
@@ -235,12 +232,15 @@ export const en = {
   'explorer.avanzados': 'Advanced settings (optional)',
   'explorer.modo.pregunta': 'How does the site move between pages?',
   'explorer.modo.auto': 'Detect automatically (recommended)',
+  'explorer.modo.auto.breve': 'Automatic',
   'explorer.modo.auto.hint':
     'Works for almost every site: uses whatever the address already carries.',
   'explorer.modo.manual': 'Set the patterns by hand',
+  'explorer.modo.manual.breve': 'By hand',
   'explorer.modo.manual.hint':
     'To say exactly which links to follow and how the site numbers its pages.',
   'explorer.modo.scroll': 'Infinite scroll',
+  'explorer.modo.scroll.breve': 'Scroll',
   'explorer.modo.scroll.hint':
     'For sites with no page buttons that load more results as you scroll down. Here “up to” counts loads, not pages.',
   'explorer.modo.resumen':
@@ -264,9 +264,11 @@ export const en = {
   'explorer.navegador.hint':
     'Opens every page the way a real browser would, running its JavaScript. Needed when the site shows nothing without it. Much slower: count several seconds per link.',
   'explorer.peso.label': 'Find out how big each file is',
+  'explorer.peso.breve': 'Size',
   'explorer.peso.hint':
     'Asks for the size of every file without downloading it. Lets you sort by size and tell a full video from a preview clip. Slower.',
   'explorer.miniaturas.label': 'Fetch a thumbnail for each result',
+  'explorer.miniaturas.breve': 'Thumbnail',
   'explorer.miniaturas.hint':
     'Requests a preview image per page. THIS server downloads and serves them, not your browser: the explored sites never see your connection. Slower, and it makes more requests to the site.',
   'explorer.licencia.label': 'Only openly licensed material',

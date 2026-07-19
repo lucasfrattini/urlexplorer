@@ -428,6 +428,18 @@ a {
   margin-top: var(--space-5);
 }
 
+/*
+ * El formulario se centra y se estrecha.
+ *
+ * A ancho completo las líneas de un formulario de una sola columna quedan
+ * larguísimas y obligan a barrer la pantalla de lado a lado. Los resultados
+ * sí aprovechan todo el ancho: ahí lo que sobra son columnas, no texto.
+ */
+.card--form {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
 .card__header {
   padding: var(--space-5) var(--space-5) 0;
 }
@@ -594,146 +606,140 @@ a {
   border-top: 1px solid var(--c-border);
 }
 
-/* ── Formulario por pasos ────────────────────────────────────────────
-   Los pasos son presentación pura: numeran la lectura sin cambiar ni un
-   parámetro de los que se envían. El número va en un círculo de acento
-   porque es lo único que tiene que verse de un vistazo. */
+/* ── Formulario del explorador ───────────────────────────────────────
+   Una sola columna, sin numerar. Lo que se decide siempre —la dirección y
+   el botón de lanzar— va arriba y visible; el resto son matices que se
+   leen después o se quedan plegados. */
 
-.steps {
+.explorer-form {
   display: grid;
-  gap: var(--space-5);
-}
-
-.step {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
   gap: var(--space-4);
-  align-items: start;
 }
 
-.step__mark {
+/*
+ * La dirección y su detección comparten fila.
+ *
+ * El botón opera sobre lo que hay escrito en el campo, así que pegado a él
+ * se lee como lo que es. En pantalla estrecha baja debajo, porque partir el
+ * campo de la dirección lo dejaría inservible.
+ */
+.url-row {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--c-accent);
-  color: var(--c-accent-text);
-  font-size: 13.5px;
-  font-weight: 640;
-  font-variant-numeric: tabular-nums;
+  gap: var(--space-2);
+  align-items: stretch;
 }
 
-.step__body {
+.url-row .input {
+  flex: 1;
   min-width: 0;
 }
 
-.step__title {
-  margin: 3px 0 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--c-text);
-}
-
-.step__hint {
-  margin: var(--space-1) 0 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--c-text-muted);
-}
-
-.step__fields {
-  display: grid;
-  gap: var(--space-4);
-  margin-top: var(--space-4);
-}
-
-/* El panel avanzado se alinea con el cuerpo de los pasos, no con su número */
-.steps > .disclosure {
-  margin-left: calc(28px + var(--space-4));
-}
-
-@media (max-width: 640px) {
-  .steps > .disclosure {
-    margin-left: 0;
-  }
-}
-
-/* ── Opciones con forma de tarjeta ───────────────────────────────────── */
-
-.choices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-
-.choices--stack {
-  grid-template-columns: 1fr;
-  gap: var(--space-2);
+.url-row .button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 @media (max-width: 720px) {
-  .choices {
-    grid-template-columns: 1fr;
+  .url-row {
+    flex-direction: column;
   }
 }
 
-.choice {
+/* Enlace que despliega la palabra buscada. Va con forma de enlace y no de
+   botón a propósito: es una salida secundaria, no una acción del formulario. */
+.link-toggle {
+  justify-self: start;
+  margin-top: calc(-1 * var(--space-2));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-accent);
+  font-size: 13px;
+  font-weight: 540;
+  cursor: pointer;
+}
+
+.link-toggle:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.link-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Selector segmentado ─────────────────────────────────────────────
+   Sustituye a las tarjetas de opción: mismas radios por debajo, pero en una
+   línea. La explicación larga de cada opción vive en su `title`. */
+
+.segmented {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: 3px;
+  padding: 3px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
   background: var(--c-surface-2);
+}
+
+.segmented__option {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px var(--space-3);
+  border-radius: calc(var(--radius) - 3px);
+  font-size: 13px;
+  font-weight: 540;
+  color: var(--c-text-muted);
+  text-align: center;
   cursor: pointer;
   transition:
-    border-color var(--transition),
-    background var(--transition);
+    background var(--transition),
+    color var(--transition);
 }
 
-.choice:hover {
-  border-color: var(--c-border-strong);
+/*
+ * El radio sigue ahí, solo que invisible.
+ *
+ * No se quita ni se sustituye por `display:none`: es lo que da el grupo
+ * navegable con las flechas y lo que anuncia el lector de pantalla. Lo que
+ * se ve es la pastilla; lo que manda sigue siendo el input.
+ */
+.segmented__option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.choice input {
-  margin-top: 2px;
-  width: 16px;
-  height: 16px;
-  accent-color: var(--c-accent);
-  cursor: pointer;
-  flex-shrink: 0;
+.segmented__option:hover:not(:has(input:checked)) {
+  color: var(--c-text);
 }
 
-/* La opción elegida se distingue por el borde de acento, no solo por el
-   punto del radio: en una tarjeta el punto es demasiado pequeño. */
-.choice:has(input:checked) {
-  border-color: var(--c-accent);
-  background: var(--c-accent-soft);
+.segmented__option:has(input:checked) {
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent);
+  padding: 6px calc(var(--space-3) - 1px);
+  color: var(--c-accent);
+  box-shadow: var(--shadow-sm);
 }
 
-.choice:has(input:focus-visible) {
+.segmented__option:has(input:focus-visible) {
   outline: 2px solid var(--c-accent);
   outline-offset: 2px;
 }
 
-.choice__text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.segmented__option:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.choice__title {
-  font-size: 13.5px;
-  font-weight: 560;
-}
-
-.choice__hint {
-  font-size: 12.5px;
-  color: var(--c-text-muted);
-  line-height: 1.4;
+@media (max-width: 560px) {
+  .segmented {
+    flex-direction: column;
+  }
 }
 
 /* ── Chips de tipo de archivo ────────────────────────────────────────── */
@@ -794,6 +800,42 @@ a {
 .chip--activo .chip__ext {
   color: inherit;
   opacity: 0.85;
+}
+
+/*
+ * Chip con casilla: peso y miniatura.
+ *
+ * Son datos DE LOS ARCHIVOS, así que viven junto a los tipos de archivo y no
+ * en los ajustes avanzados. Con forma de chip caben en la misma línea que
+ * ellos en vez de ocupar dos bloques con título y ayuda.
+ */
+.chip--toggle {
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chip--toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--c-accent);
+  cursor: pointer;
+}
+
+.chip--toggle:has(input:checked) {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.chip--toggle:has(input:focus-visible) {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.chip--toggle:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /*
@@ -867,6 +909,27 @@ a {
   font-size: 13px;
 }
 
+/* Acción principal del formulario: es lo único que tiene que verse sin
+   buscarlo, así que ocupa el ancho y sube de tamaño. */
+.button--large {
+  flex: 1;
+  padding: 12px var(--space-5);
+  font-size: 15.5px;
+}
+
+/* "Limpiar" es destructivo y poco frecuente: se deja discreto para que no
+   compita con el botón de lanzar, que está justo al lado. */
+.button--ghost {
+  background: none;
+  border-color: transparent;
+  color: var(--c-text-muted);
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: var(--c-surface-2);
+  color: var(--c-text);
+}
+
 /*
  * Botón de un solo icono. Se repite en cada fila de resultados, así que va
  * sin texto para no robarle ancho al enlace; el nombre lo lleva en
@@ -893,6 +956,11 @@ a {
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
+}
+
+.button-row--principal {
+  flex-wrap: nowrap;
+  gap: var(--space-2);
 }
 
 /* ── Progreso ────────────────────────────────────────────────────────── */
