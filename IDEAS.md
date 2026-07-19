@@ -22,16 +22,16 @@
 Los límites reales no son teóricos: salieron de intentar configurar sitios
 concretos. Se investigaron ocho que no se pudieron dejar funcionando.
 
-| Sitio | Paginación                          | Fichas         | Obstáculo                                                               |
-| ----- | ----------------------------------- | -------------- | ----------------------------------------------------------------------- |
-| **A** | `?page=N` correcta                  | `/videos`      | Challenge anti-bot; sin navegador devuelve 0                            |
-| **B** | `/search/{page}/?q=` correcta       | `/videos`      | Challenge anti-bot; el patrón simple también captura `/members`         |
-| **C** | por path                            | —              | El sitio tarda más de 30 s en responder: agota el timeout de navegación |
-| **D** | AJAX interno (motor de tubes común) | `/videos`      | Challenge anti-bot                                                      |
-| **E** | **por path** `/tag/{q}/{page}/`     | —              | **Ninguno real: el motor ya lo soporta, faltaba la configuración**      |
-| **F** | scroll infinito                     | —              | No hay URL de página; el motor no puede avanzar                         |
-| **G** | scroll infinito                     | `/v`, `/video` | Ídem                                                                    |
-| **H** | AJAX + scroll infinito              | `/videos`      | Challenge anti-bot + scroll                                             |
+| Sitio | Paginación                             | Fichas         | Obstáculo                                                               |
+| ----- | -------------------------------------- | -------------- | ----------------------------------------------------------------------- |
+| **A** | `?page=N` correcta                     | `/videos`      | Challenge anti-bot; sin navegador devuelve 0                            |
+| **B** | `/search/{page}/?q=` correcta          | `/videos`      | Challenge anti-bot; el patrón simple también captura `/members`         |
+| **C** | por path                               | —              | El sitio tarda más de 30 s en responder: agota el timeout de navegación |
+| **D** | AJAX interno (motor de listados común) | `/videos`      | Challenge anti-bot                                                      |
+| **E** | **por path** `/tag/{q}/{page}/`        | —              | **Ninguno real: el motor ya lo soporta, faltaba la configuración**      |
+| **F** | scroll infinito                        | —              | No hay URL de página; el motor no puede avanzar                         |
+| **G** | scroll infinito                        | `/v`, `/video` | Ídem                                                                    |
+| **H** | AJAX + scroll infinito                 | `/videos`      | Challenge anti-bot + scroll                                             |
 
 Tres patrones de fallo, y ninguno es "el sitio es raro":
 
@@ -307,7 +307,7 @@ red compartida.
 - **Sitio B** — Paginación correcta por path. Necesita navegador y un patrón más
   fino para no arrastrar páginas de miembros: se resuelve hoy con un patrón más
   específico, y mejor aún con QW-2. _Coste: bajo._
-- **Sitio D** — Usa el mismo motor de tubes que otro perfil ya incluido, con la
+- **Sitio D** — Usa el mismo motor de listados que otro perfil ya incluido, con la
   misma URL interna de paginación. Debería salir con navegador. _Coste: bajo._
 
 ### Viables con trabajo

@@ -65,11 +65,35 @@ Lo que devuelvan `listar` y `extraerFicheros` pasa por las mismas validaciones
 que el resto: SSRF, topes de enlaces y de ficheros. Una extensión no puede
 saltarse los límites del motor.
 
+## ⚠️ Privacidad: las extensiones reales NO se versionan
+
+Una extensión real delata el sitio por dos vías a la vez: el **nombre del
+fichero** y, sobre todo, el **hostname dentro de su `match()`**, que no se
+puede neutralizar sin dejarla inservible. Renombrar el fichero a `site-a.js`
+solo taparía la mitad del problema.
+
+Por eso `.gitignore` excluye `src/extensions/*.js` **por defecto** y solo
+versiona `ejemplo-*.js`, que son la plantilla del patrón. La exclusión va en
+esa dirección a propósito: si alguien añade una extensión real y no se acuerda
+de nada, git no la coge.
+
+**Contrapartida, dicha claramente:** una extensión no versionada **no pasa por
+revisión de código en git**. Eso debilita una de las garantías del diseño, y
+conviene asumirlo en vez de fingir que no pasa. Lo que NO se pierde es la
+garantía técnica que de verdad importa: el cargador sigue leyendo solo de este
+directorio del sistema de ficheros, así que colocar una extensión exige el
+mismo acceso que editar el `.env` del servidor. Nunca es inyectable por HTTP,
+ni por la API, ni desde `data/`.
+
+En la práctica: trata una extensión local con el mismo cuidado que tratarías
+un cambio en el servidor, porque es exactamente eso.
+
 ## Cómo añadir una
 
 1. Crear `src/extensions/<nombre>.js` con la interfaz de arriba.
-2. Escribir un test en `tests/extensions.test.js`.
-3. Commit y revisión, como cualquier otro código.
+2. Escribir un test en `tests/extensions.test.js`. Si la extensión es real, el
+   test tampoco debe nombrar el sitio: usa un doble con un host ficticio.
+3. Commit y revisión si es de ejemplo; si es real, queda solo en local.
 
 No hay que registrarla en ningún sitio: el cargador enumera el directorio.
 
