@@ -620,6 +620,23 @@ export function createExplorerView(container, { limits }) {
           show(alertSlot, true);
         }
 
+        // Sin extensiones no hay fase 2, y hasta ahora eso no se decía en
+        // ninguna parte: el usuario veía una lista de enlaces, ningún
+        // fichero y ningún error, y no tenía forma de saber que faltaba
+        // rellenar un campo. Es el mismo fallo silencioso de siempre, esta
+        // vez por configuración.
+        if (!deepSearch && event.links.length > 0) {
+          setChildren(
+            alertSlot,
+            alertBox({
+              variant: 'warning',
+              title: 'Solo se han recogido enlaces, no ficheros',
+              body: 'El campo "Extensiones a buscar" está vacío, así que no se ha entrado en cada enlace. Escribe por ejemplo ".mp4" y vuelve a explorar para que la segunda fase busque los ficheros dentro de cada página.',
+            })
+          );
+          show(alertSlot, true);
+        }
+
         // Ficheros que estaban en la ficha pero no eran suyos (anuncios,
         // vistas previas de los relacionados), y los que no se pudieron
         // verificar. Callarlo era el problema original: se entregaba un clip

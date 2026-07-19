@@ -134,4 +134,65 @@ test('crawl completo — las dos fases contra un servidor real', async t => {
     const resultado = await crawl(params);
     assert.equal(resultado.pagesScraped, 2, 'debe parar en la página 2, que va vacía');
   });
+
+  // Sin extensiones NO hay fase 2. Es correcto, pero era invisible: se veían
+  // enlaces, ningún fichero y ningún error, y no había forma de saber que
+  // faltaba rellenar un campo. Ahora la interfaz lo avisa; aquí se fija el
+  // comportamiento del motor.
+  await t.test('sin extensiones no ejecuta la fase 2', async () => {
+    const resultado = await crawl({ ...params, extensions: [] });
+    assert.ok(resultado.totalLinks > 0, 'la fase 1 sí debe traer enlaces');
+    assert.equal(resultado.totalFiles, 0);
+    assert.deepEqual(resultado.extensions, []);
+  });
+
+  /**
+   * Enlaces que REDIRIGEN a otro sitio, como los de un agregador.
+   *
+   * Fija dos cosas:
+   *  1. La fase 2 sigue el redirect y saca el fichero de la página destino.
+   *  2. La comprobación de identidad usa la URL PEDIDA, no la final, así que
+   *     tras un redirect no tiene identificador con el que comparar y aplica
+   *     su regla permisiva. Es una limitación conocida y asumida: se prefiere
+   *     devolver el fichero a marcarlo por algo que el motor no puede
+   *     comprobar.
+   */
+  await t.test('sigue los enlaces que redirigen a otro sitio', async () => {
+    const destino = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<html><body><video src="/media/real-9931.mp4"></video></body></html>');
+    });
+    await new Promise(r => destino.listen(0, '127.0.0.1', r));
+    const destinoBase = `http://127.0.0.1:${destino.address().port}`;
+
+    const agregador = http.createServer((req, res) => {
+      const url = new URL(req.url, 'http://127.0.0.1');
+      if (url.pathname === '/search') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        return res.end('<html><body><a href="/out/?l=abc123">ir</a></body></html>');
+      }
+      res.writeHead(302, { Location: `${destinoBase}/v/9931` });
+      return res.end();
+    });
+    await new Promise(r => agregador.listen(0, '127.0.0.1', r));
+    const agregadorBase = `http://127.0.0.1:${agregador.address().port}`;
+
+    try {
+      const resultado = await crawl({
+        searchUrl: `${agregadorBase}/search?q=x`,
+        linkPattern: '/out',
+        startPage: 1,
+        endPage: 1,
+        extensions: ['mp4'],
+        concurrency: 1,
+        useJavaScript: false,
+      });
+
+      assert.equal(resultado.totalLinks, 1);
+      assert.equal(resultado.totalFiles, 1, 'debe sacar el fichero de la página destino');
+    } finally {
+      await new Promise(r => agregador.close(r));
+      await new Promise(r => destino.close(r));
+    }
+  });
 });
