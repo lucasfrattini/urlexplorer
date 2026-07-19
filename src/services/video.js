@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 
 const config = require('../config');
 const { mapLimit } = require('../lib/concurrency');
+const { formatDuration, formatFileSize } = require('../lib/format');
 const logger = require('../lib/logger');
 const { renderPageWithMedia } = require('../lib/browser');
 const { fetchHtml, fetchContentLength } = require('../lib/http');
@@ -72,35 +73,6 @@ function extractQualityFromUrl(url) {
   if (/(^|\D)360(\D|$)/.test(lower)) return '360p';
   if (/(^|\D)240(\D|$)/.test(lower)) return '240p';
   return null;
-}
-
-function formatDuration(totalSeconds) {
-  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return null;
-  const seconds = Math.floor(totalSeconds);
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const rest = seconds % 60;
-  const pad = value => String(value).padStart(2, '0');
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`;
-}
-
-/**
- * Formatea bytes.
- * `if (!bytes)` devolvía null para 0 (un fichero vacío es un dato válido) y
- * Math.log de valores < 1 producía un índice de unidad negativo.
- */
-function formatFileSize(bytes) {
-  if (bytes === null || bytes === undefined) return null;
-  if (!Number.isFinite(bytes) || bytes < 0) return null;
-  if (bytes === 0) return '0 Bytes';
-
-  const units = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const index = Math.min(
-    Math.max(Math.floor(Math.log(bytes) / Math.log(1024)), 0),
-    units.length - 1
-  );
-  const value = bytes / 1024 ** index;
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
 /** Busca una duración declarada en el HTML cerca de la URL del video. */

@@ -1,6 +1,7 @@
 'use strict';
 
-const cheerio = require('cheerio');
+const { formatDuration, formatFileSize } = require('./format');
+const { asDocument, esDocumento } = require('./document');
 
 /**
  * Extracción de duración desde el HTML de una página de detalle.
@@ -28,17 +29,6 @@ function parseClockDuration(value) {
   const [, h, m, s] = match;
   const total = (Number(h) || 0) * 3600 + Number(m) * 60 + Number(s);
   return total > 0 ? total : null;
-}
-
-/** Segundos → "12:34" o "1:02:03". */
-function formatDuration(totalSeconds) {
-  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return null;
-  const seconds = Math.round(totalSeconds);
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  const pad = v => String(v).padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
 /** Recorre el JSON-LD buscando un campo `duration`. */
@@ -81,9 +71,11 @@ function durationFromJsonLd($) {
  * Se prueban las formas habituales, de la más fiable a la más frágil.
  */
 function extractDurationSeconds(html) {
-  if (typeof html !== 'string' || html.trim() === '') return null;
+  // Acepta HTML sin parsear o un documento ya cargado: en la fase 2 se saca
+  // más de un dato de la misma ficha y no tiene sentido parsearla otra vez.
+  if (!esDocumento(html) && (typeof html !== 'string' || html.trim() === '')) return null;
 
-  const $ = cheerio.load(html);
+  const $ = asDocument(html);
 
   // 1. Metadatos declarados: lo más fiable
   const metaSeconds =
@@ -226,9 +218,11 @@ function sizeFromJsonLd($) {
  * De la fuente más fiable a la más frágil, igual que la duración.
  */
 function extractSizeBytes(html) {
-  if (typeof html !== 'string' || html.trim() === '') return null;
+  // Acepta HTML sin parsear o un documento ya cargado: en la fase 2 se saca
+  // más de un dato de la misma ficha y no tiene sentido parsearla otra vez.
+  if (!esDocumento(html) && (typeof html !== 'string' || html.trim() === '')) return null;
 
-  const $ = cheerio.load(html);
+  const $ = asDocument(html);
 
   // 1. Metadatos declarados
   const meta =
@@ -273,25 +267,6 @@ function extractSizeBytes(html) {
   }
 
   return null;
-}
-
-/**
- * Formatea bytes.
- * `if (!bytes)` devolvía null para 0, que es un tamaño válido, y Math.log de
- * valores menores que 1 daba un índice de unidad negativo.
- */
-function formatFileSize(bytes) {
-  if (bytes === null || bytes === undefined) return null;
-  if (!Number.isFinite(bytes) || bytes < 0) return null;
-  if (bytes === 0) return '0 Bytes';
-
-  const units = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const index = Math.min(
-    Math.max(Math.floor(Math.log(bytes) / Math.log(1024)), 0),
-    units.length - 1
-  );
-  const value = bytes / 1024 ** index;
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
 module.exports = {

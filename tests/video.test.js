@@ -70,9 +70,16 @@ test('formatFileSize', async t => {
 
 test('formatDuration', async t => {
   await t.test('formatea minutos y segundos', () => {
-    assert.equal(formatDuration(0), '0:00');
     assert.equal(formatDuration(65), '1:05');
     assert.equal(formatDuration(600), '10:00');
+  });
+
+  // CAMBIO DELIBERADO al unificar los formateadores duplicados. Esta version
+  // devolvia '0:00' y la de media.js devolvia null para el mismo dato. Gana
+  // null: un video de cero segundos no existe, asi que un 0 significa que NO
+  // se sabe, y pintar "0:00" afirma lo contrario. Ver src/lib/format.js.
+  await t.test('cero segundos es "no se sabe", no una duracion de cero', () => {
+    assert.equal(formatDuration(0), null);
   });
 
   await t.test('añade horas cuando corresponde', () => {

@@ -1,6 +1,6 @@
 'use strict';
 
-const cheerio = require('cheerio');
+const { asDocument, esDocumento } = require('./document');
 
 /**
  * Detección de licencia declarada en una página.
@@ -82,11 +82,12 @@ function findLicenseInJsonLd($) {
  *            source: string|null, restricted: boolean}}
  */
 function detectLicense(html) {
-  if (typeof html !== 'string' || html.trim() === '') {
+  // Acepta HTML sin parsear o un documento ya cargado; ver lib/document.js
+  if (!esDocumento(html) && (typeof html !== 'string' || html.trim() === '')) {
     return { declared: false, isOpen: false, value: null, source: null, restricted: false };
   }
 
-  const $ = cheerio.load(html);
+  const $ = asDocument(html);
   const candidates = [];
 
   const relLicense = $('link[rel="license"]').attr('href');

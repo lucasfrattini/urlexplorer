@@ -1,7 +1,5 @@
 'use strict';
 
-const cheerio = require('cheerio');
-
 const config = require('../config');
 const logger = require('../lib/logger');
 const { AppError } = require('../lib/errors');
@@ -23,6 +21,7 @@ const {
   formatFileSize,
 } = require('../lib/media');
 const { groupDuplicates } = require('../lib/dedupe');
+const { asDocument } = require('../lib/document');
 const { findExtension } = require('./extensions');
 const { selectRelevantFiles, sizeLooksInconsistent } = require('../lib/relevance');
 const { createLinkMatcher } = require('../lib/pattern');
@@ -48,7 +47,7 @@ const FILE_SELECTORS =
  * el propio matcher a lo largo de toda la exploración.
  */
 function extractMatchingLinks(html, baseUrl, pattern) {
-  const $ = cheerio.load(html);
+  const $ = asDocument(html);
   const links = new Set();
   // Compatible con las llamadas que aún pasan la cadena del patrón
   const matcher =
@@ -67,7 +66,7 @@ function extractMatchingLinks(html, baseUrl, pattern) {
 
 /** Busca en un HTML las URLs cuya extensión real esté en `extensions`. */
 function extractFilesFromHtml(html, baseUrl, extensions) {
-  const $ = cheerio.load(html);
+  const $ = asDocument(html);
   const files = new Set();
 
   $(FILE_SELECTORS).each((_, element) => {
@@ -239,11 +238,28 @@ async function findFiles(urls, options) {
           ? await renderPageOrFallback(url, { signal })
           : await fetchHtmlWithRetry(url, { signal, timeout: config.http.fileScanTimeoutMs });
 
+        /**
+         * UN solo parseo por ficha, repartido entre los cuatro extractores.
+         *
+         * De cada página de detalle se sacan los ficheros, la licencia, la
+         * duración y el tamaño, y cada uno hacía su propio `cheerio.load()`
+         * del MISMO documento: hasta cuatro parseos completos para leer
+         * cuatro datos.
+         *
+         * Se declara AQUÍ, antes del filtro de licencia, porque ese filtro es
+         * el primero que lo usa. Declararlo más abajo lo dejaba en zona
+         * muerta temporal, que en este proyecto ya tumbó una barra entera.
+         *
+         * A las extensiones por sitio se les sigue pasando el HTML en crudo:
+         * su contrato es público y puede que no usen cheerio.
+         */
+        const doc = asDocument(html);
+
         // Filtro de licencia: solo se conserva lo que el publicador declara
         // explícitamente como abierto. Sin declaración se asume cerrado,
         // porque por defecto una obra nace con todos los derechos reservados.
         if (licenseFilter === 'open-only') {
-          const license = detectLicense(html);
+          const license = detectLicense(doc);
           if (!license.isOpen) {
             skippedByLicense.push({
               url,
@@ -263,7 +279,7 @@ async function findFiles(urls, options) {
         const extension = findExtension(url);
         const candidatos = extension?.extraerFicheros
           ? extension.extraerFicheros(html, { baseUrl: url, extensions, extractFilesFromHtml })
-          : extractFilesFromHtml(html, url, extensions);
+          : extractFilesFromHtml(doc, url, extensions);
 
         // Una ficha no contiene solo su vídeo: también los clips de vista
         // previa de los relacionados y los anuncios de terceros. Se separa
@@ -291,12 +307,12 @@ async function findFiles(urls, options) {
           // Se guardan los segundos ademas de la cadena porque la agrupacion
           // de duplicados compara la duracion EXACTA, y "12:34" ya ha perdido
           // precision.
-          const durationSeconds = extractDurationSeconds(html);
+          const durationSeconds = extractDurationSeconds(doc);
           const duration = formatDuration(durationSeconds);
           // Del mismo HTML sale también el tamaño que el sitio muestra en
           // pantalla. Se calcula una sola vez por ficha, aunque de ella
           // salgan varios ficheros.
-          const declaredSize = withSizes ? extractSizeBytes(html) : null;
+          const declaredSize = withSizes ? extractSizeBytes(doc) : null;
           const added = [];
 
           for (const file of found) {
