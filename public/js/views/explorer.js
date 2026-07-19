@@ -79,6 +79,23 @@ export function createExplorerView(container, { limits }) {
     });
   };
 
+  const makeSelect = (name, label, hint, opciones) => {
+    const select = el('select', {
+      className: 'input',
+      attrs: { id: `explorer-${name}`, name },
+      children: opciones.map(o => el('option', { text: o.label, attrs: { value: o.value } })),
+    });
+    fields[name] = select;
+    return el('div', {
+      className: 'field',
+      children: [
+        el('label', { className: 'field__label', text: label, attrs: { for: `explorer-${name}` } }),
+        select,
+        hint ? el('p', { className: 'field__hint', text: hint }) : null,
+      ],
+    });
+  };
+
   const makeSwitch = (name, title, hint) => {
     const input = el('input', { attrs: { type: 'checkbox', id: `explorer-${name}`, name } });
     fields[name] = input;
@@ -175,6 +192,16 @@ export function createExplorerView(container, { limits }) {
           el('div', {
             className: 'disclosure__content grid',
             children: [
+              makeSelect(
+                'paginationMode',
+                'Cómo pagina el sitio',
+                'Automático sirve para casi todo: usa el parámetro de página o la plantilla {page} de la URL. Elige "scroll" solo si el sitio no tiene botonera de páginas y carga más resultados al bajar.',
+                [
+                  { value: 'auto', label: 'Automático (parámetro o plantilla)' },
+                  { value: 'scroll', label: 'Scroll infinito (carga al bajar)' },
+                ]
+              ),
+
               el('div', {
                 className: 'grid grid--3',
                 children: [
@@ -288,6 +315,7 @@ export function createExplorerView(container, { limits }) {
     return {
       searchUrl: fields.searchUrl.value.trim(),
       searchTerm: fields.searchTerm.value.trim(),
+      paginationMode: fields.paginationMode.value,
       pageParam: fields.pageParam.value.trim(),
       linkPattern: fields.linkPattern.value.trim(),
       fileExtensions: fields.fileExtensions.value.trim(),
@@ -498,7 +526,11 @@ export function createExplorerView(container, { limits }) {
       if (sugerencia.searchUrl && sugerencia.searchUrl !== url) {
         aplicar.searchUrl = sugerencia.searchUrl;
       }
+      if (sugerencia.paginationMode) aplicar.paginationMode = sugerencia.paginationMode;
       aplicar.useJavaScript = sugerencia.useJavaScript;
+      // El scroll no funciona sin navegador, así que proponerlo sin activarlo
+      // sería proponer una configuración que no puede funcionar.
+      if (sugerencia.paginationMode === 'scroll') aplicar.useJavaScript = true;
       applyConfig(aplicar);
 
       mostrarPropuesta(resultado);
@@ -534,6 +566,10 @@ export function createExplorerView(container, { limits }) {
 
       case 'phase1_complete':
         progress.completePhase1(event);
+        // Se guarda para avisar al final: si el scroll paró por un tope, los
+        // resultados están incompletos y callarlo los haría pasar por
+        // completos.
+        collected.scroll = event.scroll || null;
         break;
 
       case 'phase2_start':
@@ -557,6 +593,29 @@ export function createExplorerView(container, { limits }) {
         results.setItems(deepSearch ? event.files : event.links);
         if (event.fileDetails) results.setDetails(event.fileDetails);
         renderStats(event);
+
+        // El scroll paró por un tope duro: hay más contenido que no se ha
+        // llegado a ver. Decirlo es obligatorio, porque los resultados
+        // parecen completos y no lo son.
+        const MOTIVOS_DE_TOPE = {
+          'tope-de-rondas': 'se alcanzó el número máximo de cargas',
+          'tope-de-elementos': 'se alcanzó el tope de elementos',
+          'tiempo-agotado': 'se agotó el tiempo máximo de scroll',
+          'error-de-navegador': 'el navegador dejó de responder',
+        };
+        const motivoTope = MOTIVOS_DE_TOPE[collected.scroll?.motivo];
+
+        if (motivoTope) {
+          setChildren(
+            alertSlot,
+            alertBox({
+              variant: 'warning',
+              title: 'El scroll se detuvo antes de agotar el listado',
+              body: `Tras ${collected.scroll.rounds} cargas, ${motivoTope}. Es muy probable que el sitio tuviera más resultados: los que ves están incompletos. Sube "Hasta" para pedir más cargas, o afina el patrón para traer menos por carga.`,
+            })
+          );
+          show(alertSlot, true);
+        }
 
         if (event.truncated) {
           setChildren(
@@ -654,8 +713,17 @@ export function createExplorerView(container, { limits }) {
     // "Parámetro de página" e ignoraba la plantilla {page} dentro de la URL,
     // así que rechazaba como inválidas configuraciones correctas: las de los
     // sitios que llevan el número de página dentro de la ruta.
+    // En modo scroll no hay URL por página que construir: "Hasta" son cargas,
+    // no páginas, así que ni se exige parámetro ni aplica el tope de páginas.
+    const modoScroll = params.paginationMode === 'scroll';
+
     const paginaPorPlantilla = /\{page(?::\d+)?\}/i.test(params.searchUrl);
-    if (!params.pageParam && !paginaPorPlantilla && params.endPage > params.startPage) {
+    if (
+      !modoScroll &&
+      !params.pageParam &&
+      !paginaPorPlantilla &&
+      params.endPage > params.startPage
+    ) {
       showError(
         'Falta el parámetro de página',
         `Has pedido de la ${params.startPage} a la ${params.endPage}, pero sin "Parámetro de página" solo se descarga una. Ábrelo en "Paginación y opciones avanzadas" e indica el nombre del parámetro que usa el sitio (por ejemplo "page").`
@@ -671,7 +739,7 @@ export function createExplorerView(container, { limits }) {
     // Antes esta comprobación solo corría si había pageParam, así que un rango
     // inválido llegaba al servidor y volvía como un 400 que el EventSource no
     // sabe leer.
-    if (params.endPage - params.startPage + 1 > limits.maxPages) {
+    if (!modoScroll && params.endPage - params.startPage + 1 > limits.maxPages) {
       showError(
         'Rango de páginas demasiado grande',
         `Has pedido ${params.endPage - params.startPage + 1} páginas y el máximo por búsqueda es ${limits.maxPages}. Reduce el valor de "Hasta" a ${params.startPage + limits.maxPages - 1} o menos.`

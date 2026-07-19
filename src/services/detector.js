@@ -356,7 +356,10 @@ async function detectConfig(searchUrl, { signal } = {}) {
     sugerencia: {
       searchUrl: paginacion.searchUrl || searchUrl,
       pageParam: paginacion.pageParam || '',
-      paginationMode: paginacion.modo === 'ninguno' ? 'parametro' : paginacion.modo,
+      // El formulario solo distingue "automático" de "scroll": el parámetro y
+      // la plantilla los resuelve solo el motor a partir de la URL. Si no se
+      // ha encontrado botonera, lo accionable es proponer el scroll.
+      paginationMode: paginacion.modo === 'ninguno' ? 'scroll' : 'auto',
       linkPattern: patron.linkPattern,
       fileExtensions: extensiones.join(', '),
       useJavaScript,

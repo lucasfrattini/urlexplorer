@@ -201,6 +201,119 @@ async function renderPage(url, { scroll = true } = {}) {
 }
 
 /**
+ * Renderiza una página que carga más resultados al bajar (scroll infinito).
+ *
+ * A diferencia de `autoScroll`, que baja a ciegas una cantidad fija, esta
+ * OBSERVA: tras cada scroll cuenta los enlaces y sigue solo mientras aparezcan
+ * nuevos. Así se adapta a sitios que cargan lotes de tamaños distintos.
+ *
+ * ── Por qué cada ronda es un evaluate corto ──────────────────────────
+ * Sería más directo meter el bucle entero dentro de un solo page.evaluate,
+ * pero entonces una página que bloquea el hilo dejaría esa llamada sin
+ * volver, y con ella la pestaña colgada hasta agotar el protocolTimeout. Con
+ * una orden corta por ronda, el control vuelve a Node entre medias y los
+ * topes se comprueban de verdad.
+ *
+ * ── Los topes son obligatorios ───────────────────────────────────────
+ * Esta función ocupa UNA pestaña del pool durante toda la fase 1, y el pool
+ * tiene dos. Un sitio con scroll sin fin bloquearía la aplicación para todo
+ * el mundo. Se corta por lo que llegue primero: rondas, tiempo, número de
+ * enlaces, o varias rondas seguidas sin nada nuevo.
+ */
+async function renderPageWithInfiniteScroll(url, options = {}) {
+  await assertUrlIsSafe(url);
+
+  const {
+    maxRounds = config.scroll.maxRounds,
+    maxDurationMs = config.scroll.maxDurationMs,
+    maxElements = config.scroll.maxElements,
+    settleMs = config.scroll.settleMs,
+    stableRounds = config.scroll.stableRounds,
+    signal,
+    onRound,
+  } = options;
+
+  return pool.withPage(async page => {
+    await page.goto(url, {
+      waitUntil: config.browser.waitUntil,
+      timeout: config.browser.navigationTimeoutMs,
+    });
+
+    const startedAt = Date.now();
+    let previousCount = 0;
+    let sinCambios = 0;
+    let rounds = 0;
+    let motivo = 'sin-contenido-nuevo';
+
+    // Una ronda: bajar del todo y devolver cuántos enlaces hay ahora
+    const scrollOnce = () =>
+      page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+        return document.querySelectorAll('a[href]').length;
+      });
+
+    // Recuento inicial, antes de tocar nada
+    previousCount = await scrollOnce().catch(() => 0);
+
+    while (rounds < maxRounds) {
+      if (signal?.aborted) {
+        motivo = 'cancelado';
+        break;
+      }
+      if (Date.now() - startedAt > maxDurationMs) {
+        motivo = 'tiempo-agotado';
+        break;
+      }
+      if (previousCount >= maxElements) {
+        motivo = 'tope-de-elementos';
+        break;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, settleMs));
+
+      let count;
+      try {
+        count = await scrollOnce();
+      } catch (error) {
+        // La pestaña dejó de responder: se para y se aprovecha lo que haya
+        logger.warn(`Scroll interrumpido en ${url}`, error.message);
+        motivo = 'error-de-navegador';
+        break;
+      }
+
+      rounds += 1;
+      const nuevos = count - previousCount;
+      previousCount = count;
+
+      onRound?.({ round: rounds, totalElements: count, nuevos });
+
+      if (nuevos <= 0) {
+        sinCambios += 1;
+        // Un solo lote lento cortaría la exploración antes de tiempo, así
+        // que hacen falta varias rondas seguidas en blanco para creerse
+        // que ya no queda nada.
+        if (sinCambios >= stableRounds) {
+          motivo = 'sin-contenido-nuevo';
+          break;
+        }
+      } else {
+        sinCambios = 0;
+      }
+
+      if (rounds >= maxRounds) motivo = 'tope-de-rondas';
+    }
+
+    return {
+      html: await page.content(),
+      rounds,
+      totalElements: previousCount,
+      motivo,
+      durationMs: Date.now() - startedAt,
+    };
+  });
+}
+
+/**
  * Renderiza y además captura las peticiones de red de tipo media, que es como
  * se cazan los videos que nunca aparecen en el HTML.
  */
@@ -266,4 +379,10 @@ async function renderPageWithMedia(url, { isMediaUrl } = {}) {
   });
 }
 
-module.exports = { pool, renderPage, renderPageWithMedia, BrowserPool };
+module.exports = {
+  pool,
+  renderPage,
+  renderPageWithMedia,
+  renderPageWithInfiniteScroll,
+  BrowserPool,
+};

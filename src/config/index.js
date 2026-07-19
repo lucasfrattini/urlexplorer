@@ -104,6 +104,30 @@ const config = {
     idleShutdownMs: intFromEnv('BROWSER_IDLE_SHUTDOWN_MS', 60000),
   },
 
+  /**
+   * Scroll infinito (modo de paginación "scroll").
+   *
+   * Todos estos son TOPES DUROS, no sugerencias. Una sola exploración de este
+   * tipo ocupa una pestaña del pool durante toda la fase 1, y el pool tiene
+   * dos: un sitio con scroll sin fin bloquearía la aplicación entera para
+   * todo el mundo. Cada tope corta por un motivo distinto y hacen falta los
+   * tres, porque un sitio puede ser lento sin cargar nada, rápido cargando
+   * sin parar, o quedarse a medias.
+   */
+  scroll: {
+    // Cargas máximas por exploración
+    maxRounds: intFromEnv('SCROLL_MAX_ROUNDS', 50),
+    // Tiempo máximo de la fase de scroll, pase lo que pase
+    maxDurationMs: intFromEnv('SCROLL_MAX_DURATION_MS', 120000),
+    // Enlaces acumulados a partir de los cuales se para
+    maxElements: intFromEnv('SCROLL_MAX_ELEMENTS', 3000),
+    // Espera tras cada scroll para que cargue el lote siguiente
+    settleMs: intFromEnv('SCROLL_SETTLE_MS', 1200),
+    // Rondas seguidas sin enlaces nuevos que se consideran "ya no hay más".
+    // Con 1 sola se cortaría en el primer lote que tarde un poco de más.
+    stableRounds: intFromEnv('SCROLL_STABLE_ROUNDS', 3),
+  },
+
   security: {
     // Protección SSRF. Desactivar SOLO en tests contra fixtures locales.
     blockPrivateAddresses: boolFromEnv('SECURITY_BLOCK_PRIVATE_ADDRESSES', true),

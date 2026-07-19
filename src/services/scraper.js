@@ -7,11 +7,9 @@ const logger = require('../lib/logger');
 const { AppError } = require('../lib/errors');
 const { renderPage } = require('../lib/browser');
 const { fetchHtmlWithRetry, tryFetchHtml } = require('../lib/http');
-const { sleep } = require('../lib/throttle');
 const { assertUrlIsSafe, isUrlSafe } = require('../lib/ssrf');
 const {
   toAbsoluteUrl,
-  buildPageUrl,
   hasExtension,
   hasPageTemplate,
   hasSearchTemplate,
@@ -20,6 +18,7 @@ const {
 const { detectLicense } = require('../lib/license');
 const { extractDuration, extractSizeBytes, formatFileSize } = require('../lib/media');
 const { createLinkMatcher } = require('../lib/pattern');
+const { resolveMode, ESTRATEGIAS, MODOS } = require('./pagination');
 const { fetchContentLength } = require('../lib/http');
 
 /** Selectores donde puede aparecer una referencia a un fichero. */
@@ -106,7 +105,12 @@ async function fetchPage(url, { useJavaScript, signal }) {
 }
 
 /**
- * FASE 1 — recorre la paginación y acumula links.
+ * FASE 1 — recorre el listado y acumula links.
+ *
+ * El recorrido en sí vive en `services/pagination.js`, una función por modo.
+ * Aquí se resuelve lo que comparten todas: qué motor descarga, qué patrón
+ * filtra y qué topes se aplican.
+ *
  * Corta si: se acaban las páginas, una página no devuelve links, se supera el
  * tope de links, o el cliente cancela.
  */
@@ -115,6 +119,7 @@ async function collectLinks(options) {
     searchUrl,
     pageParam,
     linkPattern,
+    paginationMode,
     startPage,
     endPage,
     useJavaScript,
@@ -122,68 +127,26 @@ async function collectLinks(options) {
     onProgress,
   } = options;
 
-  const links = new Set();
   // El patrón se compila UNA vez para toda la exploración: si fuese una vez
   // por página, cada una empezaría con el presupuesto de tiempo a cero y la
   // protección contra ReDoS no serviría de nada.
   const matcher = createLinkMatcher(linkPattern);
-  // Hay paginación si se dio un parámetro O si la URL trae una plantilla {page}
-  const usePagination = hasPageTemplate(searchUrl) || Boolean(pageParam && pageParam.trim() !== '');
-  let pagesScraped = 0;
-  let truncated = false;
 
-  if (!usePagination) {
-    const html = await fetchPage(searchUrl, { useJavaScript, signal });
-    if (html) {
-      pagesScraped = 1;
-      for (const link of extractMatchingLinks(html, searchUrl, matcher)) {
-        if (links.size >= config.crawl.maxLinks) {
-          truncated = true;
-          break;
-        }
-        links.add(link);
-      }
-      onProgress?.({ currentPage: 1, totalPages: 1, linksFound: links.size });
-    }
-    return { links: [...links], pagesScraped, truncated };
-  }
+  const modo = resolveMode({ paginationMode, searchUrl, pageParam });
+  const estrategia = ESTRATEGIAS[modo];
 
-  for (let page = startPage; page <= endPage; page += 1) {
-    if (signal?.aborted) break;
+  const resultado = await estrategia({
+    searchUrl,
+    pageParam,
+    startPage,
+    endPage,
+    signal,
+    onProgress,
+    fetchPage: url => fetchPage(url, { useJavaScript, signal }),
+    extract: (html, baseUrl) => extractMatchingLinks(html, baseUrl, matcher),
+  });
 
-    const pageUrl = buildPageUrl(searchUrl, pageParam, page, startPage);
-    const html = await fetchPage(pageUrl, { useJavaScript, signal });
-
-    if (!html) {
-      logger.warn(`Sin contenido en la página ${page}, se detiene la paginación`);
-      break;
-    }
-
-    pagesScraped += 1;
-    const pageLinks = extractMatchingLinks(html, pageUrl, matcher);
-
-    for (const link of pageLinks) {
-      if (links.size >= config.crawl.maxLinks) {
-        truncated = true;
-        break;
-      }
-      links.add(link);
-    }
-
-    onProgress?.({
-      currentPage: page,
-      totalPages: endPage,
-      linksFound: pageLinks.length,
-      totalLinks: links.size,
-    });
-
-    // Una página sin resultados se interpreta como fin de la paginación
-    if (pageLinks.length === 0 || truncated) break;
-
-    if (page < endPage) await sleep(config.crawl.pageDelayMs);
-  }
-
-  return { links: [...links], pagesScraped, truncated };
+  return { ...resultado, paginationMode: modo };
 }
 
 /**
@@ -352,6 +315,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
   const {
     searchUrl,
     pageParam = '',
+    paginationMode = 'auto',
     linkPattern = '',
     startPage = 1,
     endPage = 10,
@@ -380,9 +344,12 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     links,
     pagesScraped,
     truncated: linksTruncated,
+    scroll: scrollInfo,
+    paginationMode: modoUsado,
   } = await collectLinks({
     searchUrl,
     pageParam,
+    paginationMode,
     linkPattern,
     startPage,
     endPage,
@@ -397,6 +364,8 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     pagesScraped,
     truncated: linksTruncated,
     pattern: linkPattern || null,
+    paginationMode: modoUsado,
+    scroll: scrollInfo || null,
   });
 
   let files = [];
@@ -476,7 +445,13 @@ function normalizeCrawlParams(input) {
   const endPage = Math.max(startPage, requestedEnd);
 
   const pageParam = typeof input.pageParam === 'string' ? input.pageParam.trim() : '';
-  const usePagination = hasPageTemplate(searchUrl) || pageParam !== '';
+
+  const paginationMode = MODOS.includes(input.paginationMode) ? input.paginationMode : 'auto';
+
+  // En modo scroll no hay URLs por página: "Hasta" pasa a ser el número de
+  // cargas, y el tope de páginas no aplica.
+  const usePagination =
+    paginationMode !== 'scroll' && (hasPageTemplate(searchUrl) || pageParam !== '');
 
   // El tope solo tiene sentido si de verdad se van a recorrer páginas. Sin
   // pageParam se descarga UNA sola, así que rechazar endPage=51 era gratuito:
@@ -498,11 +473,12 @@ function normalizeCrawlParams(input) {
     searchUrl,
     searchTerm,
     pageParam,
+    paginationMode,
     linkPattern: typeof input.linkPattern === 'string' ? input.linkPattern.trim() : '',
     startPage,
     // Sin paginación solo se pide una página; normalizar endPage evita que el
     // resumen diga "1 a 51" cuando en realidad se recorrió una.
-    endPage: usePagination ? endPage : startPage,
+    endPage: usePagination || paginationMode === 'scroll' ? endPage : startPage,
     useJavaScript: input.useJavaScript === true || input.useJavaScript === 'true',
     concurrency,
     // Solo dos valores: 'off' (todo) y 'open-only' (solo licencia abierta)
