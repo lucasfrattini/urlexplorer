@@ -20,6 +20,14 @@ module.exports = [
       reportUnusedDisableDirectives: true,
     },
     rules: {
+      // La config plana de ESLint 9 NO activa no-undef por defecto, a
+      // diferencia del viejo eslint:recommended. Sin ella, referenciar una
+      // variable que no existe pasa el linter sin decir nada y solo revienta
+      // en tiempo de ejecución. Eso es exactamente lo que dejó pasar un
+      // `withSizes` sin declarar dentro de findFiles: ReferenceError en cada
+      // URL de la fase 2, tragado por el try/catch por URL, y una exploración
+      // que devolvía cero ficheros sin un solo error visible.
+      'no-undef': 'error',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
       'no-console': 'off',
       'no-var': 'error',
@@ -30,6 +38,17 @@ module.exports = [
       'prefer-promise-reject-errors': 'error',
       'no-return-await': 'error',
       'require-atomic-updates': 'off',
+    },
+  },
+
+  // El pool de Puppeteer es código de Node que ADEMÁS contiene funciones que
+  // se serializan y se ejecutan dentro de la página (page.evaluate). Ahí
+  // `document` y `window` sí existen, así que el fichero necesita los dos
+  // conjuntos de globals para que no-undef no dé falsos positivos.
+  {
+    files: ['src/lib/browser.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 

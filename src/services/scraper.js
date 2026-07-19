@@ -177,6 +177,11 @@ async function findFiles(urls, options) {
     extensions,
     concurrency,
     useJavaScript,
+    // Faltaba en este destructuring aunque `crawl` sí lo pasaba, así que las
+    // dos líneas que lo usan lanzaban ReferenceError en CADA URL de la fase 2.
+    // El try/catch de abajo lo convertía en un fallo por URL en vez de en un
+    // error visible, que es lo que lo mantuvo escondido.
+    withSizes = false,
     licenseFilter,
     signal,
     onProgress,
