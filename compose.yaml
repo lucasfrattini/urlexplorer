@@ -1,0 +1,60 @@
+services:
+  urlexplorer:
+    build: .
+    image: url-explorer:latest
+    container_name: urlexplorer
+
+    # "Corriendo siempre": se reinicia si el proceso muere y al arrancar el
+    # host. `unless-stopped` respeta un `docker compose stop` manual, a
+    # diferencia de `always`.
+    restart: unless-stopped
+
+    # El contenedor escucha en 3000; se publica en el 3001 del host, que es
+    # el puerto donde ya esperas la app.
+    ports:
+      - '3001:3000'
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: info
+      # Protección SSRF. NO la desactives aquí: dentro de Docker, "privado"
+      # incluye la red del propio host y la de los demás contenedores.
+      SECURITY_BLOCK_PRIVATE_ADDRESSES: 'true'
+      # Con read_only: true el HOME del usuario `node` no es escribible y
+      # Chromium falla al crear su base de datos de crashpad. Se le da un HOME
+      # en el tmpfs.
+      HOME: /tmp
+      BROWSER_USER_DATA_DIR: /tmp/chromium-data
+
+    # Chromium usa /dev/shm intensivamente. Los 64 MB por defecto de Docker
+    # provocan cuelgues al renderizar páginas pesadas.
+    shm_size: '1gb'
+
+    # PID 1 que recoge los procesos hijo que deja Chromium.
+    init: true
+
+    # Endurecimiento: sin escalada de privilegios y raíz de solo lectura.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      # Chromium escribe aquí su perfil y sus ficheros temporales.
+      - /tmp:size=512m,mode=1777
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'

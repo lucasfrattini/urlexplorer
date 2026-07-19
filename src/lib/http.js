@@ -1,0 +1,146 @@
+'use strict';
+
+const axios = require('axios');
+
+const config = require('../config');
+const logger = require('./logger');
+const { AppError } = require('./errors');
+const { assertUrlIsSafe, validateUrlShape } = require('./ssrf');
+const { HostThrottle, sleep } = require('./throttle');
+
+/**
+ * Cliente HTTP saliente.
+ *
+ * Concentra User-Agent rotativo, timeouts, throttling por dominio, validación
+ * SSRF (también en cada redirección) y tope de tamaño de respuesta.
+ */
+
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+];
+
+function buildHeaders(extra = {}) {
+  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  return {
+    'User-Agent': userAgent,
+    Accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+    'Accept-Encoding': 'gzip, deflate, br',
+    DNT: '1',
+    Connection: 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Cache-Control': 'max-age=0',
+    ...extra,
+  };
+}
+
+const throttle = new HostThrottle();
+
+/**
+ * Cada redirección se revalida: si no, un host público podía redirigir a
+ * 127.0.0.1 y saltarse por completo la comprobación inicial.
+ */
+function guardRedirect(options) {
+  const target = `${options.protocol}//${options.host}${options.path || ''}`;
+  validateUrlShape(target);
+}
+
+/** GET de HTML con throttle, validación SSRF y tope de tamaño. */
+async function fetchHtml(url, { timeout, signal } = {}) {
+  await assertUrlIsSafe(url);
+
+  return throttle.run(url, async () => {
+    const response = await axios.get(url, {
+      headers: buildHeaders(),
+      timeout: timeout ?? config.http.pageTimeoutMs,
+      maxRedirects: config.http.maxRedirects,
+      maxContentLength: config.http.maxResponseBytes,
+      maxBodyLength: config.http.maxResponseBytes,
+      responseType: 'text',
+      signal,
+      beforeRedirect: guardRedirect,
+      validateStatus: status => status >= 200 && status < 400,
+    });
+
+    if (typeof response.data !== 'string') {
+      return String(response.data ?? '');
+    }
+    return response.data;
+  });
+}
+
+/** Igual que fetchHtml pero devuelve null en vez de lanzar. */
+async function tryFetchHtml(url, options = {}) {
+  try {
+    return await fetchHtml(url, options);
+  } catch (error) {
+    logger.warn(`No se pudo descargar ${url}`, error.message);
+    return null;
+  }
+}
+
+/** GET con reintentos y backoff lineal. Lanza el último error. */
+async function fetchHtmlWithRetry(url, { retries, signal, timeout } = {}) {
+  const attempts = retries ?? config.http.retries;
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (signal?.aborted) throw new AppError('Operación cancelada', 499, 'ABORTED');
+    try {
+      return await fetchHtml(url, { signal, timeout });
+    } catch (error) {
+      lastError = error;
+      // Un fallo de validación no mejora reintentando
+      if (error instanceof AppError && error.expected) throw error;
+      if (attempt < attempts) {
+        await sleep(config.http.retryBaseDelayMs * attempt);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/** HEAD para obtener content-length. Devuelve null si no se puede. */
+async function fetchContentLength(url, { signal } = {}) {
+  try {
+    await assertUrlIsSafe(url);
+  } catch {
+    return null;
+  }
+
+  try {
+    return await throttle.run(url, async () => {
+      const response = await axios.head(url, {
+        headers: buildHeaders(),
+        timeout: config.http.headTimeoutMs,
+        maxRedirects: config.http.maxRedirects,
+        signal,
+        beforeRedirect: guardRedirect,
+      });
+      const contentLength = response.headers['content-length'];
+      if (contentLength === undefined) return null;
+      const parsed = Number.parseInt(contentLength, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    });
+  } catch {
+    return null;
+  }
+}
+
+module.exports = {
+  buildHeaders,
+  fetchHtml,
+  tryFetchHtml,
+  fetchHtmlWithRetry,
+  fetchContentLength,
+  USER_AGENTS,
+};

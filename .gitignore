@@ -1,0 +1,10 @@
+node_modules/
+.env
+logs/*.log
+coverage/
+*.local
+CLAUDE.md
+
+# Datos locales del servidor. Contiene los perfiles de sitios guardados:
+# NUNCA se versiona, es lo que mantiene los nombres reales fuera del repositorio.
+data/
