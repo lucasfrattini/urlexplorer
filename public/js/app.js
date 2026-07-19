@@ -3,6 +3,14 @@ import { createExplorerView } from './views/explorer.js';
 import { createVideoView } from './views/video.js';
 import { attachSecretGesture, setAdminToken, clearAdminToken, isUnlocked } from './admin.js';
 import { toast } from './dom.js';
+import {
+  t,
+  IDIOMAS,
+  idiomaActual,
+  cambiarIdioma,
+  alCambiarIdioma,
+  traducirDocumento,
+} from './i18n/index.js';
 
 const THEME_KEY = 'urlexplorer:theme';
 
@@ -32,17 +40,57 @@ function initTheme() {
   }
   apply(current);
 
+  // El título dice el tema vigente, así que se rehace también al cambiar de
+  // idioma: si no, se quedaría "Tema: oscuro" con la interfaz ya en inglés.
+  const refrescarTitulo = () => {
+    if (toggle) toggle.title = t('tema.actual', { modo: t(`tema.modo.${current}`) });
+  };
+  alCambiarIdioma(refrescarTitulo);
+
   toggle?.addEventListener('click', () => {
     const order = ['system', 'light', 'dark'];
     current = order[(order.indexOf(current) + 1) % order.length];
     apply(current);
-    toggle.title = `Tema: ${current}`;
+    refrescarTitulo();
     try {
       localStorage.setItem(THEME_KEY, current);
     } catch {
       // sin almacenamiento: el tema no persiste, no es crítico
     }
   });
+}
+
+/* ── Idioma ────────────────────────────────────────────────────────── */
+
+/**
+ * Selector de idioma de la cabecera.
+ *
+ * El tema vive en `localStorage` y el idioma en `sessionStorage`, y no es un
+ * descuido: el tema es una preferencia de la persona que usa el ordenador,
+ * mientras que aquí varias personas comparten la máquina y la sesión tiene
+ * que empezar limpia, detectando de nuevo el idioma del navegador.
+ */
+function initLanguage() {
+  const botones = [...document.querySelectorAll('.langswitch__option')];
+
+  for (const boton of botones) {
+    boton.addEventListener('click', () => {
+      cambiarIdioma(boton.dataset.lang);
+      toast(t('idioma.cambiado'));
+    });
+  }
+
+  // El estado marcado se recalcula al cambiar el idioma, venga del clic o de
+  // la detección inicial.
+  alCambiarIdioma(actual => {
+    for (const boton of botones) {
+      const activo = boton.dataset.lang === actual;
+      boton.setAttribute('aria-pressed', String(activo));
+      boton.setAttribute('title', t(`idioma.${boton.dataset.lang}`));
+    }
+  });
+
+  if (!IDIOMAS.includes(idiomaActual())) cambiarIdioma('en');
 }
 
 /* ── Navegación entre vistas ───────────────────────────────────────── */
@@ -105,11 +153,11 @@ function initAdminGesture() {
   attachSecretGesture(logo, async () => {
     if (isUnlocked()) {
       clearAdminToken();
-      toast('Configuraciones bloqueadas');
+      toast(t('admin.bloqueadas'));
       return;
     }
 
-    const password = window.prompt('Contraseña:');
+    const password = window.prompt(t('admin.contrasena'));
     if (password === null || password.trim() === '') return;
 
     try {
@@ -117,15 +165,12 @@ function initAdminGesture() {
       // Solo se guarda DESPUÉS de que el servidor lo valide: así en
       // sessionStorage nunca queda un token que no sirve.
       setAdminToken(password);
-      toast('Configuraciones desbloqueadas');
+      toast(t('admin.desbloqueadas'));
     } catch (error) {
       // Un 404 significa que no hay ADMIN_TOKEN configurado. Se responde lo
       // mismo que ante una contraseña incorrecta para no confirmar si la
       // funcionalidad existe siquiera.
-      toast(
-        error.status === 429 ? 'Demasiados intentos. Espera un minuto.' : 'Contraseña incorrecta',
-        'error'
-      );
+      toast(t(error.status === 429 ? 'admin.demasiados' : 'admin.incorrecta'), 'error');
     }
   });
 }
@@ -136,16 +181,42 @@ async function initHealth() {
   const dot = document.getElementById('health-indicator');
   const text = document.getElementById('health-text');
 
+  /** Último estado conocido, para poder repintarlo en el otro idioma. */
+  let estado = null;
+
+  const pintar = () => {
+    if (!estado) return;
+    text.textContent = estado.ok
+      ? t('salud.activo', {
+          estado: t(
+            estado.browserEnabled ? 'salud.navegador.disponible' : 'salud.navegador.desactivado'
+          ),
+          paginas: estado.maxPages,
+        })
+      : t('salud.error');
+  };
+  alCambiarIdioma(pintar);
+
+  /**
+   * A partir de aquí el texto lo gobierna `pintar()`, así que se le quita el
+   * `data-i18n` del HTML. Si se dejara, el traductor del documento lo
+   * devolvería a «Comprobando servicio…» en cada cambio de idioma, pisando
+   * el estado real.
+   */
+  const tomarElControl = () => text.removeAttribute('data-i18n');
+
   try {
     const health = await getHealth();
     dot.className = 'status-dot status-dot--ok';
-    text.textContent = `Servicio activo · navegador ${
-      health.browserEnabled ? 'disponible' : 'desactivado'
-    } · máx. ${health.limits.maxPages} páginas por búsqueda`;
+    tomarElControl();
+    estado = { ok: true, browserEnabled: health.browserEnabled, maxPages: health.limits.maxPages };
+    pintar();
     return health.limits;
   } catch {
     dot.className = 'status-dot status-dot--error';
-    text.textContent = 'No se pudo contactar con el servidor. Se usan los límites por defecto.';
+    tomarElControl();
+    estado = { ok: false };
+    pintar();
     return DEFAULT_LIMITS;
   }
 }
@@ -153,6 +224,10 @@ async function initHealth() {
 /* ── Arranque ──────────────────────────────────────────────────────── */
 
 async function main() {
+  // El idioma va PRIMERO: todo lo que se construya después ya nace traducido
+  // y no hay un parpadeo en español antes de pasar a inglés.
+  traducirDocumento();
+  initLanguage();
   initTheme();
   initAdminGesture();
 

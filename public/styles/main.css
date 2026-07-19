@@ -341,6 +341,58 @@ a {
   color: var(--c-text);
 }
 
+/*
+ * Controles de la derecha: idioma y tema, agrupados.
+ *
+ * Van juntos y con su propio contenedor para que la cabecera no acabe siendo
+ * una fila de botones sueltos según se añadan cosas. Fuera de
+ * `.topbar__brand`: ahí vive `.topbar__mark`, que es el objetivo del gesto
+ * oculto de admin, y meterle controles clicables al lado repartiría los
+ * clics del gesto.
+ */
+.topbar__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Selector de idioma: segmentado, con el activo marcado en acento. Se elige
+   frente a un <select> porque con dos opciones un desplegable esconde la
+   mitad de la información y exige dos clics para algo que se hace con uno. */
+.langswitch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--c-surface-2);
+  border-radius: var(--radius);
+}
+
+.langswitch__option {
+  padding: 5px var(--space-3);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--c-text-muted);
+  font-size: 12.5px;
+  font-weight: 620;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.langswitch__option:hover {
+  color: var(--c-text);
+}
+
+.langswitch__option[aria-pressed='true'] {
+  background: var(--c-surface);
+  color: var(--c-accent);
+  box-shadow: var(--shadow-sm);
+}
+
 @media (max-width: 720px) {
   .topbar {
     flex-wrap: wrap;

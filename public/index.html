@@ -21,7 +21,7 @@
     <link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
   </head>
   <body>
-    <a class="skip-link" href="#main">Saltar al contenido</a>
+    <a class="skip-link" href="#main" data-i18n="app.saltar">Saltar al contenido</a>
 
     <div class="layout">
       <header class="topbar">
@@ -38,28 +38,61 @@
           </span>
           <div>
             <h1 class="topbar__title">URL Explorer</h1>
-            <p class="topbar__subtitle">Explora enlaces y recursos de un sitio</p>
+            <p class="topbar__subtitle" data-i18n="app.subtitulo">
+              Explora enlaces y recursos de un sitio
+            </p>
           </div>
         </div>
 
-        <nav class="tabs" aria-label="Herramientas">
+        <nav
+          class="tabs"
+          data-i18n="nav.aria"
+          data-i18n-attr="aria-label"
+          aria-label="Herramientas"
+        >
           <button class="tab" data-view="explorer" type="button" aria-current="page">
-            <span aria-hidden="true">🔗</span> Explorador
+            <span aria-hidden="true">🔗</span>
+            <span class="tab__label" data-i18n="nav.explorador">Explorador</span>
           </button>
           <button class="tab" data-view="video" type="button">
-            <span aria-hidden="true">🎬</span> Videos
+            <span aria-hidden="true">🎬</span>
+            <span class="tab__label" data-i18n="nav.videos">Vídeos</span>
           </button>
         </nav>
 
-        <button
-          class="icon-button"
-          id="theme-toggle"
-          type="button"
-          aria-label="Cambiar tema"
-          title="Cambiar tema"
-        >
-          <span aria-hidden="true">◐</span>
-        </button>
+        <!--
+          Controles de la cabecera, agrupados a la derecha.
+
+          El selector de idioma y el de tema viven JUNTOS y fuera de
+          `.topbar__brand` a propósito: `.topbar__mark` es el objetivo del
+          gesto oculto de admin (cinco clics), así que nada clicable puede
+          acabar dentro de él ni cerca, o los clics se repartirían y el gesto
+          dejaría de dispararse.
+        -->
+        <div class="topbar__controls">
+          <div
+            class="langswitch"
+            role="group"
+            data-i18n="idioma.aria"
+            data-i18n-attr="aria-label"
+            aria-label="Idioma"
+          >
+            <button class="langswitch__option" type="button" data-lang="es">ES</button>
+            <button class="langswitch__option" type="button" data-lang="en">EN</button>
+          </div>
+
+          <button
+            class="icon-button"
+            id="theme-toggle"
+            type="button"
+            data-i18n="tema.cambiar"
+            data-i18n-attr="aria-label,title"
+            aria-label="Cambiar tema"
+            title="Cambiar tema"
+          >
+            <span aria-hidden="true">◐</span>
+          </button>
+        </div>
       </header>
 
       <main id="main" class="main">
@@ -73,7 +106,7 @@
           class="status-dot status-dot--unknown"
           aria-hidden="true"
         ></span>
-        <span id="health-text">Comprobando servicio…</span>
+        <span id="health-text" data-i18n="salud.comprobando">Comprobando servicio…</span>
       </footer>
     </div>
 
