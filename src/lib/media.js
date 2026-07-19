@@ -2,6 +2,7 @@
 
 const { formatDuration, formatFileSize } = require('./format');
 const { asDocument, esDocumento } = require('./document');
+const { toAbsoluteUrl } = require('./url');
 
 /**
  * Extracción de duración desde el HTML de una página de detalle.
@@ -269,7 +270,72 @@ function extractSizeBytes(html) {
   return null;
 }
 
+/**
+ * Miniatura declarada por la ficha.
+ *
+ * Sale del MISMO documento que ya se parseó para los demás datos, así que no
+ * cuesta ninguna petición ni ningún parseo extra. Se buscan las fuentes en
+ * orden de fiabilidad: og:image es la que el sitio elige para representar la
+ * página, y el `poster` del reproductor es la del vídeo concreto.
+ */
+function extractThumbnail(html, baseUrl) {
+  if (!esDocumento(html) && (typeof html !== 'string' || html.trim() === '')) return null;
+
+  const $ = asDocument(html);
+
+  const candidatos = [
+    $('meta[property="og:image"]').attr('content'),
+    $('meta[name="twitter:image"]').attr('content'),
+    $('meta[itemprop="thumbnailUrl"]').attr('content'),
+    $('video[poster]').attr('poster'),
+    thumbnailFromJsonLd($),
+  ];
+
+  for (const candidato of candidatos) {
+    if (!candidato) continue;
+    const absoluta = toAbsoluteUrl(String(candidato).trim(), baseUrl);
+    // Solo http(s): un data: URI aquí sería enorme y no hay que descargarlo
+    if (absoluta && /^https?:\/\//i.test(absoluta)) return absoluta;
+  }
+
+  return null;
+}
+
+/** Busca `thumbnailUrl` en el JSON-LD de la ficha. */
+function thumbnailFromJsonLd($) {
+  let encontrada = null;
+
+  $('script[type="application/ld+json"]').each((_, element) => {
+    if (encontrada) return;
+    try {
+      const datos = JSON.parse($(element).text());
+      const buscar = valor => {
+        if (encontrada || !valor) return;
+        if (Array.isArray(valor)) return valor.forEach(buscar);
+        if (typeof valor !== 'object') return;
+
+        const directa = valor.thumbnailUrl || valor.thumbnail;
+        if (typeof directa === 'string') {
+          encontrada = directa;
+          return;
+        }
+        if (directa && typeof directa === 'object' && typeof directa.url === 'string') {
+          encontrada = directa.url;
+          return;
+        }
+        for (const anidado of Object.values(valor)) buscar(anidado);
+      };
+      buscar(datos);
+    } catch {
+      // JSON-LD roto: no es motivo para fallar
+    }
+  });
+
+  return encontrada;
+}
+
 module.exports = {
+  extractThumbnail,
   extractDuration,
   extractDurationSeconds,
   extractSizeBytes,

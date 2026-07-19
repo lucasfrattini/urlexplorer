@@ -145,6 +145,11 @@ export const es = {
   'filtros.agrupar.varios': 'Agrupar {n} duplicados',
   'filtros.agrupar.title':
     'Agrupa los resultados que parecen el mismo contenido. Desactívalo para verlos todos.',
+  'filtros.modoDup.label': 'Cómo agrupar duplicados',
+  'filtros.modoDup.seguro': 'Duplicados seguros (dos señales)',
+  'filtros.modoDup.duracion': 'Agresivo: solo por duración',
+  'filtros.modoDup.aviso':
+    'Modo agresivo: agrupa TODO lo que dure lo mismo. La duración no identifica un vídeo, así que dos vídeos distintos que duran igual acabarán juntos. Nada se borra: despliega el grupo o vuelve al modo seguro para verlos todos.',
   'filtros.nota':
     'Los rangos solo recortan entre los resultados que tienen el dato. A los que no lo tienen no los toca: para quitarlos, usa los interruptores.',
   'filtros.sinPeso':
@@ -234,6 +239,9 @@ export const es = {
   'explorer.peso.label': 'Averiguar cuánto pesa cada archivo',
   'explorer.peso.hint':
     'Pregunta el peso de cada archivo sin descargarlo. Permite ordenar por tamaño y distinguir un vídeo entero de un clip de vista previa. Va más lento.',
+  'explorer.miniaturas.label': 'Traer una miniatura de cada resultado',
+  'explorer.miniaturas.hint':
+    'Pide una imagen de vista previa por ficha. Las descarga y las sirve ESTE servidor, no tu navegador: los sitios explorados no ven tu conexión. Va más lento y hace más peticiones al sitio.',
   'explorer.licencia.label': 'Solo material con licencia abierta',
   'explorer.licencia.hint':
     'Se queda únicamente con las páginas que declaran una licencia abierta (Creative Commons, dominio público, CC0…). Lo que no declara licencia se descarta: por defecto una obra nace con todos los derechos reservados, así que la ausencia de licencia no significa que sea libre.',

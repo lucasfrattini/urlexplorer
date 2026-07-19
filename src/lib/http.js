@@ -181,7 +181,13 @@ async function fetchContentLength(url, { signal, referer } = {}) {
   }
 }
 
+/** Agentes con validación de IP al conectar, para reutilizarlos fuera. */
+function agentesSeguros() {
+  return { httpAgent, httpsAgent };
+}
+
 module.exports = {
+  agentesSeguros,
   buildHeaders,
   fetchHtml,
   tryFetchHtml,

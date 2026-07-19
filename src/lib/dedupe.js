@@ -128,11 +128,35 @@ function senalesComunes(a, b, nombreAPrecalculado, nombreBPrecalculado) {
   return senales;
 }
 
-/** ¿Bastan estas senales para agrupar? */
-function bastan(senales) {
+/**
+ * ¿Bastan estas senales para agrupar?
+ *
+ * Por defecto hacen falta DOS senales, o un nombre normalizado largo y
+ * especifico que ya identifica por si solo.
+ *
+ * ── Por que la duracion sola NO basta por defecto ─────────────────────
+ *
+ * La duracion no es un identificador. Dos videos genuinamente distintos
+ * pueden durar exactamente lo mismo, y con listas grandes eso no es raro:
+ * es lo normal. Medido sobre duraciones repartidas entre 1 y 30 minutos:
+ *
+ *   n=  100  ->    3 colisiones entre videos DISTINTOS  ( 3% de la lista)
+ *   n= 1000  ->  225 colisiones                         (23% de la lista)
+ *   n= 2000  ->  807 colisiones                         (40% de la lista)
+ *
+ * Agrupar solo por duracion en una lista de mil resultados escondería uno de
+ * cada cuatro videos buenos detras de otro que no tiene nada que ver. Por eso
+ * `soloDuracion` existe pero es una eleccion explicita del usuario, avisada,
+ * y nunca el comportamiento por defecto.
+ */
+function bastan(senales, { soloDuracion = false } = {}) {
   if (senales.length >= 2) return true;
-  // Un nombre normalizado largo y específico ya identifica por sí solo
-  return senales.length === 1 && senales[0].tipo === 'nombre' && senales[0].especifica === true;
+  if (senales.length !== 1) return false;
+
+  if (senales[0].tipo === 'nombre' && senales[0].especifica === true) return true;
+
+  // Modo agresivo: la duracion sola agrupa. Solo si se pide expresamente.
+  return soloDuracion && senales[0].tipo === 'duracion';
 }
 
 /** Texto legible del motivo de la agrupación, para enseñárselo al usuario. */
@@ -154,7 +178,9 @@ function describir(senales) {
  *
  * @returns {{grupos: Array, totalDuplicados: number}}
  */
-function groupDuplicates(items) {
+function groupDuplicates(items, opciones = {}) {
+  const { soloDuracion = false } = opciones;
+
   if (!Array.isArray(items) || items.length === 0) {
     return { grupos: [], totalDuplicados: 0 };
   }
@@ -197,7 +223,7 @@ function groupDuplicates(items) {
       // se parecen entre sí, y es como una agrupación por duración acaba
       // tragándose media lista.
       const senales = senalesComunes(items[i], items[j], nombres[i], nombres[j]);
-      if (!bastan(senales)) continue;
+      if (!bastan(senales, { soloDuracion })) continue;
 
       grupo.miembros.push(items[j]);
       grupo.motivos.push({

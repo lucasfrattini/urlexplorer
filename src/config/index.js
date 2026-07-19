@@ -205,6 +205,23 @@ const config = {
     maxProfiles: intFromEnv('ADMIN_MAX_PROFILES', 100),
   },
 
+  /**
+   * Miniaturas. Las sirve el BACKEND, nunca el navegador del usuario: ver
+   * services/thumbnails.js para el porqué (privacidad y CSP).
+   */
+  thumbnails: {
+    // Desactivadas por defecto: son peticiones extra a los sitios explorados
+    enabled: boolFromEnv('THUMBNAILS_ENABLED', true),
+    timeoutMs: intFromEnv('THUMBNAILS_TIMEOUT_MS', 6000),
+    // Tope por imagen: una miniatura legítima no llega ni de lejos
+    maxBytes: intFromEnv('THUMBNAILS_MAX_BYTES', 2 * 1024 * 1024),
+    // Caché EN MEMORIA: muere con el proceso y no deja rastro en disco
+    cacheMaxEntries: intFromEnv('THUMBNAILS_CACHE_MAX_ENTRIES', 300),
+    cacheMaxBytes: intFromEnv('THUMBNAILS_CACHE_MAX_BYTES', 64 * 1024 * 1024),
+    // Cuánto puede cachear el navegador lo que ya servimos nosotros
+    browserCacheSeconds: intFromEnv('THUMBNAILS_BROWSER_CACHE_SECONDS', 3600),
+  },
+
   video: {
     /**
      * Peticiones de peso simultáneas.

@@ -162,3 +162,55 @@ test('groupDuplicates', async t => {
     assert.deepEqual(groupDuplicates(null).grupos, []);
   });
 });
+
+test('modo agresivo: la duracion sola agrupa, pero solo si se pide', async t => {
+  /**
+   * La duracion NO es un identificador. Dos videos genuinamente distintos
+   * pueden durar lo mismo, y en listas grandes eso es lo normal, no la
+   * excepcion. Por eso este modo existe pero no es el defecto.
+   */
+  const items = [
+    { url: 'https://a.com/pelicula-del-oeste.mp4', durationSeconds: 600 },
+    { url: 'https://b.com/documental-de-abejas.mp4', durationSeconds: 600 },
+  ];
+
+  await t.test('por defecto NO se agrupan: solo comparten duracion', () => {
+    const { grupos, totalDuplicados } = groupDuplicates(items);
+    assert.equal(totalDuplicados, 0);
+    assert.equal(grupos.length, 2, 'dos videos distintos deben seguir separados');
+  });
+
+  await t.test('con soloDuracion SI se agrupan', () => {
+    const { grupos, totalDuplicados } = groupDuplicates(items, { soloDuracion: true });
+    assert.equal(totalDuplicados, 1);
+    assert.equal(grupos.length, 1);
+    assert.equal(grupos[0].miembros.length, 2);
+  });
+
+  await t.test('ni siquiera el modo agresivo DESCARTA nada', () => {
+    // Agrupar es una capa encima; los dos elementos siguen estando
+    const { grupos } = groupDuplicates(items, { soloDuracion: true });
+    const todos = grupos.flatMap(g => g.miembros.map(m => m.url));
+    assert.deepEqual(todos.sort(), items.map(i => i.url).sort());
+  });
+});
+
+test('el modo agresivo no agrupa lo que no comparte duracion', () => {
+  const items = [
+    { url: 'https://a.com/uno.mp4', durationSeconds: 100 },
+    { url: 'https://b.com/dos.mp4', durationSeconds: 200 },
+  ];
+  const { totalDuplicados } = groupDuplicates(items, { soloDuracion: true });
+  assert.equal(totalDuplicados, 0);
+});
+
+test('sin duracion conocida, el modo agresivo no inventa grupos', () => {
+  // durationSeconds ausente o 0 no debe hacer que todo se agrupe con todo
+  const items = [
+    { url: 'https://a.com/uno.mp4' },
+    { url: 'https://b.com/dos.mp4' },
+    { url: 'https://c.com/tres.mp4', durationSeconds: 0 },
+  ];
+  const { totalDuplicados } = groupDuplicates(items, { soloDuracion: true });
+  assert.equal(totalDuplicados, 0, 'la ausencia de dato no es una coincidencia');
+});

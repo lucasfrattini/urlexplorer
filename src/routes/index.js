@@ -5,6 +5,7 @@ const express = require('express');
 const config = require('../config');
 const scrapeRoutes = require('./scrape');
 const videoRoutes = require('./video');
+const thumbnailRoutes = require('./thumbnail');
 const adminRoutes = require('./admin');
 
 const router = express.Router();
@@ -28,6 +29,7 @@ router.get('/health', (req, res) => {
 
 router.use(scrapeRoutes);
 router.use(videoRoutes);
+router.use(thumbnailRoutes);
 
 // /health NO anuncia si el modo admin existe: eso delataría que hay una
 // puerta. Con el token sin configurar, sus rutas responden 404.

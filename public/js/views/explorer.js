@@ -418,6 +418,7 @@ export function createExplorerView(container, { limits }) {
 
           makeSwitch('useJavaScript', 'explorer.navegador.label', 'explorer.navegador.hint'),
           makeSwitch('withSizes', 'explorer.peso.label', 'explorer.peso.hint'),
+          makeSwitch('withThumbnails', 'explorer.miniaturas.label', 'explorer.miniaturas.hint'),
           makeSwitch('openLicenseOnly', 'explorer.licencia.label', 'explorer.licencia.hint'),
         ],
       }),
@@ -644,6 +645,7 @@ export function createExplorerView(container, { limits }) {
       useJavaScript: fields.useJavaScript.checked,
       licenseFilter: fields.openLicenseOnly.checked ? 'open-only' : 'off',
       withSizes: fields.withSizes.checked,
+      withThumbnails: fields.withThumbnails.checked,
     };
   }
 
@@ -984,7 +986,9 @@ export function createExplorerView(container, { limits }) {
         if (event.fileDetails) results.setDetails(event.fileDetails);
         // Los duplicados se pliegan, no se descartan: la lista sigue entera y
         // el interruptor de la barra los devuelve.
-        if (event.duplicateGroups) results.setDuplicateGroups(event.duplicateGroups);
+        if (event.duplicateGroups) {
+          results.setDuplicateGroups(event.duplicateGroups, event.duplicateGroupsPorDuracion);
+        }
         renderStats(event);
 
         // El scroll paró por un tope duro: hay más contenido que no se ha

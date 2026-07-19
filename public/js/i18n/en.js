@@ -144,6 +144,11 @@ export const en = {
   'filtros.agrupar.varios': 'Group {n} duplicates',
   'filtros.agrupar.title':
     'Groups results that look like the same content. Turn it off to see them all.',
+  'filtros.modoDup.label': 'How to group duplicates',
+  'filtros.modoDup.seguro': 'Safe duplicates (two signals)',
+  'filtros.modoDup.duracion': 'Aggressive: by length only',
+  'filtros.modoDup.aviso':
+    'Aggressive mode: it groups EVERYTHING with the same length. Length does not identify a video, so two different videos of equal length will end up together. Nothing is deleted: expand the group or go back to safe mode to see them all.',
   'filtros.nota':
     'The ranges only trim among results that have the data. They leave the ones without it alone: to remove those, use the switches.',
   'filtros.sinPeso':
@@ -233,6 +238,9 @@ export const en = {
   'explorer.peso.label': 'Find out how big each file is',
   'explorer.peso.hint':
     'Asks for the size of every file without downloading it. Lets you sort by size and tell a full video from a preview clip. Slower.',
+  'explorer.miniaturas.label': 'Fetch a thumbnail for each result',
+  'explorer.miniaturas.hint':
+    'Requests a preview image per page. THIS server downloads and serves them, not your browser: the explored sites never see your connection. Slower, and it makes more requests to the site.',
   'explorer.licencia.label': 'Only openly licensed material',
   'explorer.licencia.hint':
     'Keeps only the pages that declare an open licence (Creative Commons, public domain, CC0…). Anything without a declared licence is dropped: by default a work is born with all rights reserved, so the absence of a licence does not mean it is free.',

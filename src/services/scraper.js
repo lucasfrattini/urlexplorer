@@ -17,6 +17,7 @@ const { detectLicense } = require('../lib/license');
 const {
   extractDurationSeconds,
   extractSizeBytes,
+  extractThumbnail,
   formatDuration,
   formatFileSize,
 } = require('../lib/media');
@@ -266,6 +267,9 @@ async function findFiles(urls, options) {
     // El try/catch de abajo lo convertía en un fallo por URL en vez de en un
     // error visible, que es lo que lo mantuvo escondido.
     withSizes = false,
+    // Miniaturas: NUNCA por defecto. Son peticiones extra a los sitios
+    // explorados, así que solo si el usuario las pide.
+    withThumbnails = false,
     licenseFilter,
     signal,
     onProgress,
@@ -398,6 +402,8 @@ async function findFiles(urls, options) {
           // pantalla. Se calcula una sola vez por ficha, aunque de ella
           // salgan varios ficheros.
           const declaredSize = withSizes ? extractSizeBytes(doc) : null;
+          // Del MISMO documento ya parseado: no cuesta ni petición ni parseo
+          const thumbnail = withThumbnails ? extractThumbnail(doc, url) : null;
           const added = [];
 
           for (const file of found) {
@@ -421,6 +427,7 @@ async function findFiles(urls, options) {
                 suspect: info?.suspect === true,
                 suspectReason: info?.reason || null,
                 sourceUrl: url,
+                thumbnail,
               });
             }
           }
@@ -507,6 +514,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     concurrency,
     licenseFilter = 'off',
     withSizes = false,
+    withThumbnails = false,
   } = params;
 
   await assertUrlIsSafe(searchUrl);
@@ -569,6 +577,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
       useJavaScript,
       licenseFilter,
       withSizes,
+      withThumbnails,
       signal: timeoutSignal,
       onProgress: progress => emit({ type: 'phase2_progress', ...progress }),
       onFilesFound: payload => emit({ type: 'files_found', ...payload }),
@@ -594,6 +603,19 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
   // resultados legítimos sin enterarse.
   const { grupos, totalDuplicados } = groupDuplicates(fileDetails);
 
+  /**
+   * Segunda agrupacion, mas agresiva: la duracion sola basta.
+   *
+   * Se calcula aqui y se manda junto a la conservadora para que el usuario
+   * pueda cambiar de modo sin volver a explorar. Cuesta otra pasada, pero la
+   * agrupacion son ~33 ms con 2000 ficheros.
+   *
+   * NO es el modo por defecto, y el motivo esta medido: ver lib/dedupe.js.
+   * Con mil resultados, agrupar solo por duracion esconde uno de cada cuatro
+   * videos buenos detras de otro que no tiene nada que ver.
+   */
+  const porDuracion = groupDuplicates(fileDetails, { soloDuracion: true });
+
   return {
     links,
     files,
@@ -606,6 +628,14 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
         motivos: g.motivos,
       })),
     totalDuplicados,
+    duplicateGroupsPorDuracion: porDuracion.grupos
+      .filter(g => g.miembros.length > 1)
+      .map(g => ({
+        representante: g.representante.url,
+        miembros: g.miembros.map(m => m.url),
+        motivos: g.motivos,
+      })),
+    totalDuplicadosPorDuracion: porDuracion.totalDuplicados,
     failures,
     pagesScraped,
     totalLinks: links.length,
@@ -698,6 +728,7 @@ function normalizeCrawlParams(input) {
     // Solo dos valores: 'off' (todo) y 'open-only' (solo licencia abierta)
     licenseFilter: input.licenseFilter === 'open-only' ? 'open-only' : 'off',
     withSizes: input.withSizes === true || input.withSizes === 'true',
+    withThumbnails: input.withThumbnails === true || input.withThumbnails === 'true',
   };
 }
 

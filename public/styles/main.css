@@ -1868,3 +1868,33 @@ a {
   line-height: 1.5;
   color: var(--c-text-muted);
 }
+
+/* ── Miniaturas de resultado ──────────────────────────────────────────
+   Opcionales y desactivadas por defecto. El `src` apunta SIEMPRE a
+   /api/thumbnail de este mismo servidor: el navegador del usuario nunca
+   habla con el CDN del sitio explorado, así que su IP no se reparte y la
+   CSP puede seguir con `img-src 'self' data:`. Ver services/thumbnails.js. */
+.result-item__thumb {
+  width: 64px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--c-surface-3);
+  flex-shrink: 0;
+}
+
+/* Con miniatura hay una columna más antes del índice */
+.result-item--con-miniatura {
+  grid-template-columns: 64px 2.5rem minmax(0, 1fr) 5.5rem 6rem;
+}
+
+@media (max-width: 640px) {
+  .result-item--con-miniatura {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .result-item--con-miniatura .result-item__main,
+  .result-item--con-miniatura .result-item__col {
+    grid-column: 2;
+  }
+}

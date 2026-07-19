@@ -58,6 +58,16 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   let grupos = new Map();
   let plegarDuplicados = true;
 
+  /**
+   * Las DOS agrupaciones que manda el servidor, y cuál se está usando.
+   *
+   * `seguro` exige dos señales coincidentes (nombre + duración/tamaño).
+   * `duracion` es el modo agresivo: la duración sola basta. Se guardan las
+   * dos para poder cambiar de modo sin volver a explorar.
+   */
+  let gruposPorModo = { seguro: [], duracion: [] };
+  let modoDuplicados = 'seguro';
+
   /* ── Cabecera: conteo y acciones ─────────────────────────────────── */
 
   const contador = el('span', { className: 'results__count' });
@@ -242,6 +252,46 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     }
   );
 
+  /**
+   * Selector del modo de agrupación.
+   *
+   * El agresivo NO es el defecto y el motivo está medido: con mil resultados,
+   * agrupar solo por duración esconde uno de cada cuatro vídeos buenos detrás
+   * de otro que no tiene nada que ver. Se ofrece porque a veces es justo lo
+   * que se quiere, pero es una elección explícita y avisada.
+   *
+   * En los dos modos la agrupación sigue siendo REVERSIBLE: nada se borra,
+   * el interruptor de plegado los devuelve y cada representante dice cuántos
+   * lleva detrás.
+   */
+  const modoDupSelect = el('select', {
+    className: 'input',
+    on: {
+      change: () => {
+        modoDuplicados = modoDupSelect.value;
+        aplicarGruposDelModo();
+        applyFilter();
+      },
+    },
+  });
+  atributo(modoDupSelect, 'aria-label', 'filtros.modoDup.label');
+
+  const MODOS_DUP = [
+    { value: 'seguro', clave: 'filtros.modoDup.seguro' },
+    { value: 'duracion', clave: 'filtros.modoDup.duracion' },
+  ];
+  alCambiarIdioma(() => {
+    const elegido = modoDupSelect.value || 'seguro';
+    modoDupSelect.replaceChildren(
+      ...MODOS_DUP.map(m => el('option', { text: t(m.clave), attrs: { value: m.value } }))
+    );
+    modoDupSelect.value = elegido;
+  });
+
+  // Aviso del modo agresivo: solo se ve cuando está activo
+  const avisoModoDup = el('p', { className: 'filters__note filters__note--warn' });
+  avisoModoDup.hidden = true;
+
   const dupeToggle = crearToggle('dupe-toggle', null, 'filtros.agrupar.title', v => {
     plegarDuplicados = v;
     applyFilter();
@@ -278,9 +328,10 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       }),
       el('div', {
         className: 'filters__row filters__row--flags',
-        children: [toggleSinDuracion.root, toggleSinPeso.root, dupeToggle.root],
+        children: [toggleSinDuracion.root, toggleSinPeso.root, dupeToggle.root, modoDupSelect],
       }),
       nota,
+      avisoModoDup,
       avisoSinPeso,
     ],
   });
@@ -418,9 +469,35 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
           })
         : celda(null, 'columnas.peso');
 
+      /**
+       * Miniatura, si la ficha traía una y el usuario las pidió.
+       *
+       * El `src` apunta a NUESTRO servidor, nunca al CDN del sitio: es lo que
+       * mantiene la IP del usuario fuera de los sitios explorados y permite
+       * que la CSP siga siendo `img-src 'self' data:`. Ver
+       * src/services/thumbnails.js.
+       *
+       * `loading=lazy` porque una lista puede traer cientos: sin esto se
+       * pedirían todas de golpe al pintar.
+       */
+      const miniatura = info?.thumbnail
+        ? el('img', {
+            className: 'result-item__thumb',
+            attrs: {
+              src: `/api/thumbnail?url=${encodeURIComponent(info.thumbnail)}`,
+              alt: '',
+              loading: 'lazy',
+              decoding: 'async',
+              width: '64',
+              height: '36',
+            },
+          })
+        : null;
+
       return el('li', {
-        className: 'result-item',
+        className: miniatura ? 'result-item result-item--con-miniatura' : 'result-item',
         children: [
+          miniatura,
           el('span', { className: 'result-item__index', text: String(index + 1) }),
           el('span', {
             className: 'result-item__main',
@@ -454,6 +531,25 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     }
 
     setChildren(list, nodes);
+  }
+
+  /** Vuelca al estado los grupos del modo elegido. */
+  function aplicarGruposDelModo() {
+    duplicadoDe = new Map();
+    grupos = new Map();
+
+    for (const grupo of gruposPorModo[modoDuplicados] || []) {
+      if (!grupo?.representante || !Array.isArray(grupo.miembros)) continue;
+      grupos.set(grupo.representante, grupo);
+      for (const miembro of grupo.miembros) {
+        if (miembro !== grupo.representante) duplicadoDe.set(miembro, grupo.representante);
+      }
+    }
+
+    // El aviso solo se ve con el modo agresivo puesto: es donde hace falta.
+    const agresivo = modoDuplicados === 'duracion';
+    avisoModoDup.hidden = !agresivo;
+    if (agresivo) avisoModoDup.textContent = t('filtros.modoDup.aviso');
   }
 
   /* ── Filtrado ────────────────────────────────────────────────────── */
@@ -555,6 +651,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   // se quedaria con las columnas y los avisos en el idioma anterior hasta la
   // siguiente busqueda.
   alCambiarIdioma(() => {
+    aplicarGruposDelModo();
     actualizarContador();
     render();
   });
@@ -581,18 +678,14 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
      * Grupos de duplicados calculados en el servidor.
      * No borra nada: solo marca qué se pliega bajo qué.
      */
-    setDuplicateGroups(groups) {
-      duplicadoDe = new Map();
-      grupos = new Map();
-
-      for (const grupo of groups || []) {
-        if (!grupo?.representante || !Array.isArray(grupo.miembros)) continue;
-        grupos.set(grupo.representante, grupo);
-        for (const miembro of grupo.miembros) {
-          if (miembro !== grupo.representante) duplicadoDe.set(miembro, grupo.representante);
-        }
-      }
-
+    setDuplicateGroups(groups, groupsPorDuracion) {
+      gruposPorModo = {
+        seguro: groups || [],
+        // Si el servidor no manda la agresiva, el modo agresivo se queda con
+        // la conservadora: mejor agrupar de menos que inventar grupos.
+        duracion: groupsPorDuracion || groups || [],
+      };
+      aplicarGruposDelModo();
       applyFilter();
     },
 
@@ -601,6 +694,10 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       meta = new Map();
       duplicadoDe = new Map();
       grupos = new Map();
+      gruposPorModo = { seguro: [], duracion: [] };
+      modoDuplicados = 'seguro';
+      modoDupSelect.value = 'seguro';
+      avisoModoDup.hidden = true;
       search.value = '';
       exclude.value = '';
       sortSelect.value = 'orden';
