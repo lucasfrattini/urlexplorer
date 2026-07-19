@@ -23,6 +23,7 @@ const {
   formatFileSize,
 } = require('../lib/media');
 const { groupDuplicates } = require('../lib/dedupe');
+const { findExtension } = require('./extensions');
 const { createLinkMatcher } = require('../lib/pattern');
 const { resolveMode, ESTRATEGIAS, MODOS } = require('./pagination');
 const { fetchContentLength } = require('../lib/http');
@@ -141,6 +142,14 @@ async function collectLinks(options) {
   const modo = resolveMode({ paginationMode, searchUrl, pageParam });
   const estrategia = ESTRATEGIAS[modo];
 
+  // Extensión por sitio, si alguna reclama esta URL. Sustituye solo al "de
+  // dónde salen los enlaces de una página": el recorrido lo sigue llevando
+  // la estrategia del modo, sin duplicar el bucle ni los topes.
+  const extension = findExtension(searchUrl);
+  if (extension?.listar) {
+    logger.info(`Usando la extensión "${extension.name}" para listar ${searchUrl}`);
+  }
+
   const resultado = await estrategia({
     searchUrl,
     pageParam,
@@ -150,9 +159,10 @@ async function collectLinks(options) {
     onProgress,
     fetchPage: url => fetchPage(url, { useJavaScript, signal }),
     extract: (html, baseUrl) => extractMatchingLinks(html, baseUrl, matcher),
+    listar: extension?.listar ? extension.listar.bind(extension) : null,
   });
 
-  return { ...resultado, paginationMode: modo };
+  return { ...resultado, paginationMode: modo, extension: extension?.name || null };
 }
 
 /**
@@ -238,7 +248,14 @@ async function findFiles(urls, options) {
           }
         }
 
-        const found = extractFilesFromHtml(html, url, extensions);
+        // Si una extensión reclama esta ficha, extrae ella. Lo que devuelva
+        // pasa por las mismas validaciones que el resto: la comprobación
+        // SSRF de arriba y los topes de abajo. Una extensión no se salta los
+        // límites del motor, solo sabe dónde mirar.
+        const extension = findExtension(url);
+        const found = extension?.extraerFicheros
+          ? extension.extraerFicheros(html, { baseUrl: url, extensions, extractFilesFromHtml })
+          : extractFilesFromHtml(html, url, extensions);
 
         if (found.length > 0) {
           // Una pagina de detalle suele ser un solo video, asi que su

@@ -55,15 +55,31 @@ function acumular(links, nuevos) {
   return false;
 }
 
+/**
+ * Enlaces de UNA página del listado.
+ *
+ * Es el único punto que sabe de dónde salen los enlaces, y por eso es el
+ * seam donde encajan las extensiones por sitio: si una implementa `listar`,
+ * sustituye a esto y el recorrido de las estrategias no cambia ni una línea.
+ * Devuelve null si la página no respondió, que es lo que corta la paginación.
+ */
+async function listarPagina(ctx, pageUrl, page) {
+  if (ctx.listar) return ctx.listar(pageUrl, { ...ctx, page });
+
+  const html = await ctx.fetchPage(pageUrl);
+  if (!html) return null;
+  return ctx.extract(html, pageUrl);
+}
+
 /** Una sola página: no hay nada que recorrer. */
 async function estrategiaUnica(ctx) {
-  const { searchUrl, fetchPage, extract, onProgress } = ctx;
+  const { searchUrl, onProgress } = ctx;
 
   const links = new Set();
-  const html = await fetchPage(searchUrl);
-  if (!html) return { links: [], pagesScraped: 0, truncated: false };
+  const encontrados = await listarPagina(ctx, searchUrl, 1);
+  if (encontrados === null) return { links: [], pagesScraped: 0, truncated: false };
 
-  const truncated = acumular(links, extract(html, searchUrl));
+  const truncated = acumular(links, encontrados);
   onProgress?.({ currentPage: 1, totalPages: 1, linksFound: links.size, totalLinks: links.size });
 
   return { links: [...links], pagesScraped: 1, truncated };
@@ -77,7 +93,7 @@ async function estrategiaUnica(ctx) {
  * que pedirlas en paralelo descargaría de más sin saberlo.
  */
 async function estrategiaPorUrl(ctx) {
-  const { searchUrl, pageParam, startPage, endPage, fetchPage, extract, onProgress, signal } = ctx;
+  const { searchUrl, pageParam, startPage, endPage, onProgress, signal } = ctx;
 
   const links = new Set();
   let pagesScraped = 0;
@@ -87,15 +103,14 @@ async function estrategiaPorUrl(ctx) {
     if (signal?.aborted) break;
 
     const pageUrl = buildPageUrl(searchUrl, pageParam, page, startPage);
-    const html = await fetchPage(pageUrl);
+    const pageLinks = await listarPagina(ctx, pageUrl, page);
 
-    if (!html) {
+    if (pageLinks === null) {
       logger.warn(`Sin contenido en la página ${page}, se detiene la paginación`);
       break;
     }
 
     pagesScraped += 1;
-    const pageLinks = extract(html, pageUrl);
     truncated = acumular(links, pageLinks);
 
     onProgress?.({
