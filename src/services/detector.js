@@ -3,6 +3,7 @@
 const cheerio = require('cheerio');
 
 const config = require('../config');
+const { escapeRegExp } = require('../lib/pattern');
 const logger = require('../lib/logger');
 const { AppError } = require('../lib/errors');
 const { renderPage } = require('../lib/browser');
@@ -241,7 +242,20 @@ function detectarPatron(enlaces) {
   // Si casi todas las fichas de esa ruta acaban en número, una expresión
   // regular deja fuera las páginas de sección que comparten prefijo.
   if (datos.numericos >= 3 && datos.numericos / datos.total > 0.7) {
-    const escapado = prefijo.replace(/\//g, '\\/');
+    /**
+     * Escape COMPLETO, y además las barras.
+     *
+     * Antes SOLO se escapaban las barras, y eso dejaba pasar dos fallos:
+     *   - Silencioso: un prefijo "/media[hd]/" se convertía en una clase de
+     *     caracteres y el patrón sugerido casaba "/mediah/12", que no era
+     *     eso. Comprobado.
+     *   - Ruidoso: "/media[hd/" producía una regex inválida, así que la
+     *     herramienta sugería un patrón que su propio validador rechaza.
+     *
+     * Las barras se siguen escapando aparte porque el patrón va delimitado
+     * por barras: dejarlas crudas hace ambiguo dónde termina la expresión.
+     */
+    const escapado = escapeRegExp(prefijo).replace(/\//g, '\\/');
     return {
       linkPattern: `/${escapado}\\d+/`,
       motivo: `${datos.total} enlaces cuelgan de "${prefijo}" y ${datos.numericos} acaban en un número. La expresión regular deja fuera las páginas de sección que comparten esa ruta.`,
@@ -333,9 +347,21 @@ async function detectConfig(searchUrl, { signal } = {}) {
     motivoNavegador = `Con navegador aparecen ${enlacesNavegador.length} enlaces frente a ${enlacesPlano.length} sin él: el contenido se carga con JavaScript.`;
   }
 
-  // Se analiza el HTML más completo de los dos
-  const html = enlacesNavegador.length >= enlacesPlano.length ? htmlNavegador : htmlPlano;
-  const enlaces = enlacesNavegador.length >= enlacesPlano.length ? enlacesNavegador : enlacesPlano;
+  /**
+   * Se analiza el HTML más completo de los dos, pero SOLO entre los que
+   * existen.
+   *
+   * Antes la elección era `enlacesNavegador.length >= enlacesPlano.length`, y
+   * con el navegador caído o desactivado eso comparaba 0 contra 0 en cuanto
+   * la página no tenía enlaces: `0 >= 0` es cierto, así que se elegía el HTML
+   * del navegador, que era null, y `cheerio.load(null)` lanzaba. El endpoint
+   * respondía 500 con la traza en vez de una propuesta.
+   *
+   * Arriba ya se ha garantizado que al menos uno de los dos existe.
+   */
+  const usarNavegador = htmlNavegador !== null && enlacesNavegador.length >= enlacesPlano.length;
+  const html = usarNavegador ? htmlNavegador : (htmlPlano ?? htmlNavegador);
+  const enlaces = usarNavegador ? enlacesNavegador : enlacesPlano;
 
   // ADVERTENCIA IMPORTANTE: esto mide la fase 1. Que los enlaces se vean sin
   // navegador no dice nada sobre si la fase 2 lo necesitará, que es un fallo

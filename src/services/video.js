@@ -9,6 +9,7 @@ const { renderPageWithMedia } = require('../lib/browser');
 const { fetchHtml, fetchContentLength } = require('../lib/http');
 const { assertUrlIsSafe } = require('../lib/ssrf');
 const { toAbsoluteUrl, getExtension } = require('../lib/url');
+const { escapeRegExp } = require('../lib/pattern');
 
 /**
  * Extracción de videos de una única URL, por cuatro vías complementarias:
@@ -100,10 +101,6 @@ function formatFileSize(bytes) {
   );
   const value = bytes / 1024 ** index;
   return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Busca una duración declarada en el HTML cerca de la URL del video. */

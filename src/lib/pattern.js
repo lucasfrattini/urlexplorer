@@ -188,9 +188,29 @@ function createLinkMatcher(pattern) {
   return { kind: 'substring', source: clean, test: (_raw, absolute) => absolute.includes(clean) };
 }
 
+/**
+ * Escapa un texto para meterlo LITERAL dentro de una expresión regular.
+ *
+ * Vive aquí porque es la contrapartida de `createLinkMatcher`: uno compila
+ * patrones que el usuario escribe a propósito, y este convierte texto que NO
+ * es un patrón en algo que solo se representa a sí mismo.
+ *
+ * El detector escapaba solo las barras, y eso deja pasar dos fallos:
+ *   - Silencioso: un prefijo "/media[hd]/" se convierte en una clase de
+ *     caracteres y el patrón sugerido casa "/mediah/12", que no era eso.
+ *     Comprobado.
+ *   - Ruidoso: "/media[hd/" produce una regex inválida, así que la propia
+ *     herramienta sugiere un patrón que su propio validador rechaza con
+ *     INVALID_PATTERN.
+ */
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 module.exports = {
   createLinkMatcher,
   looksLikeRegex,
+  escapeRegExp,
   MAX_PATTERN_LENGTH,
   TIME_BUDGET_MS,
 };
