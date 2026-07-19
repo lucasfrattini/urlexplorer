@@ -4,6 +4,7 @@ import {
   setChildren,
   emptyState,
   copyToClipboard,
+  copyIconButton,
   downloadText,
   toast,
 } from '../dom.js';
@@ -363,7 +364,14 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
           el('span', { className: 'result-item__index', text: String(index + 1) }),
           el('span', {
             className: 'result-item__main',
-            children: [safeLink(url, { className: 'result-item__link' }), marcaDudoso, marcaGrupo],
+            children: [
+              safeLink(url, { className: 'result-item__link' }),
+              marcaDudoso,
+              marcaGrupo,
+              // Copiar una sola línea. Los botones globales copian la lista
+              // filtrada entera, que no sirve cuando solo quieres esta URL.
+              copyIconButton(url, { label: 'Copiar esta URL' }),
+            ],
           }),
           celda(info?.duration || null, 'Duración'),
           celdaPeso,
@@ -470,7 +478,7 @@ export function createResultList({ emptyTitle, emptyText, filename = 'urlexplore
     avisoSinPeso.hidden = !sinNingunPeso;
     if (sinNingunPeso) {
       avisoSinPeso.textContent =
-        'Ningún resultado trae el peso. Se obtiene activando «Obtener el tamaño de cada fichero» antes de explorar.';
+        'Ningún resultado trae el peso. Se obtiene activando «Averiguar cuánto pesa cada archivo» en los ajustes avanzados, antes de explorar.';
     }
 
     // Los plegados tienen su propio interruptor y su propio recuento

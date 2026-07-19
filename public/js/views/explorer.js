@@ -3,6 +3,13 @@ import { openScrapeStream, detectConfig } from '../api.js';
 import { createProgressPanel } from '../components/progress.js';
 import { createResultList } from '../components/resultList.js';
 import { createProfileBar, configFromUrl } from '../components/profiles.js';
+import {
+  PRESETS_EXTENSION,
+  presetDe,
+  objetivoDe,
+  modoAvanzadoDe,
+  paginationModeDe,
+} from './explorerOptions.js';
 
 /**
  * El último formulario usado se recuerda en `sessionStorage`, no en
@@ -15,7 +22,18 @@ const STORAGE_KEY = 'urlexplorer:explorer-form';
 /**
  * Vista Explorador: fase 1 (recorrer paginación y extraer enlaces) y, si se
  * indican extensiones, fase 2 (buscar ficheros dentro de cada enlace).
+ *
+ * ── Sobre el formulario en tres pasos ─────────────────────────────────
+ *
+ * Los pasos son PRESENTACIÓN. Los parámetros que se envían son los mismos de
+ * siempre y siguen viviendo en `fields`, que es el contrato con los perfiles,
+ * con los enlaces compartidos y con `readForm()`. Las tarjetas, los chips y
+ * los radios solo escriben en esos campos; nunca son la fuente de la verdad.
+ * Por eso existe `sincronizarUI()`: cuando la verdad llega de fuera (un
+ * perfil, un enlace compartido, la detección), la UI se recalcula a partir de
+ * los campos y no al revés.
  */
+
 /**
  * Ejemplos de paginación.
  *
@@ -25,9 +43,9 @@ const STORAGE_KEY = 'urlexplorer:explorer-form';
  */
 function paginationExamples() {
   const CASES = [
-    { cambio: '?page=2', donde: 'Parámetro de página', valor: 'page' },
-    { cambio: '/page/2', donde: 'URL de partida', valor: '…/page/{page}' },
-    { cambio: '/01, /02', donde: 'URL de partida', valor: '…/{page:02}' },
+    { cambio: '?page=2', donde: 'Nombre del parámetro', valor: 'page' },
+    { cambio: '/page/2', donde: 'Dirección de partida', valor: '…/page/{page}' },
+    { cambio: '/01, /02', donde: 'Dirección de partida', valor: '…/{page:02}' },
   ];
 
   return el('div', {
@@ -35,7 +53,7 @@ function paginationExamples() {
     children: [
       el('p', {
         className: 'examples__title',
-        text: 'Pasa a la página 2 en el sitio y mira qué cambia en su URL:',
+        text: 'Pasa a la página 2 en el sitio y mira qué cambia en su dirección:',
       }),
       el('ul', {
         className: 'examples__list',
@@ -61,7 +79,18 @@ function paginationExamples() {
 
 export function createExplorerView(container, { limits }) {
   const fields = {};
+  // Controles que solo existen en la interfaz: no viajan al servidor, pero sí
+  // hay que deshabilitarlos mientras se explora.
+  const uiInputs = [];
   let stream = null;
+  /**
+   * Marca "Otro" a mano, para escribir extensiones que no son ningún preset.
+   *
+   * Se declara aquí arriba, antes que cualquier manejador que la lea: una
+   * `const`/`let` usada antes de su declaración ya tumbó una barra entera de
+   * esta aplicación por TDZ.
+   */
+  let mostrarExtensionesLibres = false;
 
   const makeField = (name, label, hint, inputAttrs = {}) => {
     const input = el('input', {
@@ -74,23 +103,6 @@ export function createExplorerView(container, { limits }) {
       children: [
         el('label', { className: 'field__label', text: label, attrs: { for: `explorer-${name}` } }),
         input,
-        hint ? el('p', { className: 'field__hint', text: hint }) : null,
-      ],
-    });
-  };
-
-  const makeSelect = (name, label, hint, opciones) => {
-    const select = el('select', {
-      className: 'input',
-      attrs: { id: `explorer-${name}`, name },
-      children: opciones.map(o => el('option', { text: o.label, attrs: { value: o.value } })),
-    });
-    fields[name] = select;
-    return el('div', {
-      className: 'field',
-      children: [
-        el('label', { className: 'field__label', text: label, attrs: { for: `explorer-${name}` } }),
-        select,
         hint ? el('p', { className: 'field__hint', text: hint }) : null,
       ],
     });
@@ -115,10 +127,316 @@ export function createExplorerView(container, { limits }) {
     });
   };
 
+  /** Opción con forma de tarjeta seleccionable (un radio por debajo). */
+  const makeChoice = (group, value, title, hint, { checked = false } = {}) => {
+    const id = `explorer-${group}-${value}`;
+    const input = el('input', {
+      attrs: { type: 'radio', name: `explorer-${group}`, id, value, checked },
+    });
+    uiInputs.push(input);
+
+    const root = el('label', {
+      className: 'choice',
+      attrs: { for: id },
+      children: [
+        input,
+        el('span', {
+          className: 'choice__text',
+          children: [
+            el('span', { className: 'choice__title', text: title }),
+            el('span', { className: 'choice__hint', text: hint }),
+          ],
+        }),
+      ],
+    });
+
+    return { root, input, value };
+  };
+
+  /** Paso numerado. El número es decorativo: el título ya ordena la lectura. */
+  const makeStep = (numero, titulo, ayuda, children) =>
+    el('section', {
+      className: 'step',
+      children: [
+        el('div', {
+          className: 'step__mark',
+          text: String(numero),
+          attrs: { 'aria-hidden': 'true' },
+        }),
+        el('div', {
+          className: 'step__body',
+          children: [
+            el('h3', { className: 'step__title', text: `${numero}. ${titulo}` }),
+            ayuda ? el('p', { className: 'step__hint', text: ayuda }) : null,
+            el('div', { className: 'step__fields', children }),
+          ],
+        }),
+      ],
+    });
+
+  // ── Paso 1: de dónde se parte ──────────────────────────────────────
+
+  const campoUrl = makeField(
+    'searchUrl',
+    '¿Qué página quieres recorrer?',
+    'Pega la dirección tal cual. Si escribes {q} donde iría la palabra buscada y {page} donde va el número de página, el sitio se guarda una vez y solo cambias la palabra.',
+    {
+      type: 'url',
+      placeholder: 'https://ejemplo.com/galeria?q=gatos',
+      required: true,
+      autocomplete: 'url',
+      spellcheck: 'false',
+    }
+  );
+
+  const campoTermino = makeField(
+    'searchTerm',
+    '¿Buscas una palabra concreta? (opcional)',
+    'Se coloca donde la dirección tenga {q}. Si la dirección no lleva {q}, este campo no hace nada.',
+    { type: 'text', placeholder: 'argentina', spellcheck: 'false' }
+  );
+
+  // ── Paso 2: qué se quiere obtener ──────────────────────────────────
+
+  /**
+   * `fileExtensions` sigue siendo un campo de texto de verdad.
+   *
+   * Las tarjetas y los chips escriben aquí; este input es el que leen
+   * `readForm()`, los perfiles y los enlaces compartidos. Cuando el chip
+   * elegido es "Otro" se muestra, y el resto del tiempo se mantiene oculto
+   * pero con su valor: así lo que se ve y lo que se envía es lo mismo.
+   */
+  const campoExtensiones = makeField(
+    'fileExtensions',
+    'Extensiones a buscar, separadas por comas',
+    'Con el punto delante. Por ejemplo: .pdf, .zip',
+    { type: 'text', placeholder: '.mp4, .webm', spellcheck: 'false' }
+  );
+
+  const objetivoEnlaces = makeChoice(
+    'objetivo',
+    'enlaces',
+    'Solo la lista de enlaces',
+    'Recorre las páginas y te da las direcciones que encuentre. Es lo más rápido.',
+    { checked: true }
+  );
+
+  const objetivoFicheros = makeChoice(
+    'objetivo',
+    'ficheros',
+    'Los archivos de dentro',
+    'Además entra en cada enlace y busca los archivos que haya dentro. Tarda bastante más.'
+  );
+
+  const opcionesObjetivo = [objetivoEnlaces, objetivoFicheros];
+
+  const chipsSlot = el('div', { className: 'chips' });
+  const chipsBloque = el('div', {
+    className: 'chips-block',
+    children: [
+      el('p', { className: 'field__label', text: '¿Qué tipo de archivo?' }),
+      chipsSlot,
+      campoExtensiones,
+    ],
+  });
+
+  /** Chips de tipo: rellenan `fileExtensions` con extensiones reales. */
+  const chips = [
+    ...PRESETS_EXTENSION.map(preset => {
+      const boton = el('button', {
+        className: 'chip',
+        attrs: { type: 'button', 'aria-pressed': 'false' },
+        children: [
+          el('span', { className: 'chip__label', text: preset.etiqueta }),
+          el('code', { className: 'chip__ext', text: preset.extensiones }),
+        ],
+        on: {
+          click: () => {
+            fields.fileExtensions.value = preset.extensiones;
+            mostrarExtensionesLibres = false;
+            sincronizarUI();
+          },
+        },
+      });
+      uiInputs.push(boton);
+      return { id: preset.id, boton };
+    }),
+  ];
+
+  const chipOtro = el('button', {
+    className: 'chip chip--otro',
+    text: '+ Otro',
+    attrs: { type: 'button', 'aria-pressed': 'false', title: 'Escribir las extensiones a mano' },
+    on: {
+      click: () => {
+        mostrarExtensionesLibres = true;
+        sincronizarUI();
+        fields.fileExtensions.focus();
+      },
+    },
+  });
+  uiInputs.push(chipOtro);
+
+  setChildren(chipsSlot, [...chips.map(c => c.boton), chipOtro]);
+
+  // ── Ajustes avanzados ──────────────────────────────────────────────
+
+  /**
+   * `paginationMode` sigue siendo un campo con los mismos dos valores que
+   * entiende el servidor (`auto` / `scroll`). El tercer radio ("a mano") es
+   * solo la vista que enseña los patrones, así que no llega aquí.
+   */
+  fields.paginationMode = el('input', {
+    attrs: { type: 'hidden', name: 'paginationMode', value: 'auto' },
+  });
+
+  const modoAuto = makeChoice(
+    'modo',
+    'auto',
+    'Detectar automáticamente (recomendado)',
+    'Sirve para casi todos los sitios: usa lo que ya venga en la dirección.',
+    { checked: true }
+  );
+
+  const modoManual = makeChoice(
+    'modo',
+    'manual',
+    'Indicar los patrones a mano',
+    'Para decir exactamente qué enlaces seguir y cómo numera las páginas el sitio.'
+  );
+
+  const modoScroll = makeChoice(
+    'modo',
+    'scroll',
+    'Scroll infinito',
+    'Para sitios sin botonera de páginas, que cargan más resultados al bajar. Aquí «hasta» cuenta cargas, no páginas.'
+  );
+
+  const opcionesModo = [modoAuto, modoManual, modoScroll];
+
+  const campoPatronEnlace = makeField(
+    'linkPattern',
+    '¿Qué enlaces seguir? (patrón de enlace)',
+    'Vacío = todos. «/videos/» se queda con los que lo contengan. Entre barras y con algún símbolo es una expresión regular: /\\/videos\\/\\d+/ solo coge las fichas numeradas.',
+    { type: 'text', placeholder: '/videos/', spellcheck: 'false' }
+  );
+
+  const campoParametro = makeField(
+    'pageParam',
+    '¿Cómo numera las páginas? (nombre del parámetro)',
+    'Solo el nombre, por ejemplo «page». Si el número va dentro de la dirección, no rellenes esto: escribe {page} en la dirección de partida.',
+    { type: 'text', placeholder: 'page', spellcheck: 'false' }
+  );
+
+  const bloqueManual = el('div', {
+    className: 'grid',
+    children: [campoPatronEnlace, campoParametro, paginationExamples()],
+  });
+
+  /**
+   * Resumen de lo que sigue activo cuando los patrones están ocultos.
+   *
+   * Ocultar un campo NO lo vacía: un perfil guardado o un enlace compartido
+   * pueden traer patrones, y borrarlos al plegar la vista sería perder datos
+   * del usuario. Pero un patrón que actúa sin verse es justo el tipo de
+   * estado invisible que aquí se paga caro, así que si hay algo puesto se
+   * dice en texto plano.
+   */
+  const resumenModo = el('p', { className: 'mode-summary' });
+  show(resumenModo, false);
+
+  const campoDesde = makeField('startPage', 'Desde la página', null, {
+    type: 'number',
+    min: '1',
+    value: '1',
+  });
+
+  const campoHasta = makeField(
+    'endPage',
+    '¿Hasta qué página?',
+    `Como mucho ${limits.maxPages} páginas de una vez.`,
+    { type: 'number', min: '1', value: '5' }
+  );
+
+  const campoRapidez = makeField(
+    'concurrency',
+    '¿Con qué rapidez? (páginas a la vez)',
+    `Entre 1 y ${limits.maxConcurrency}. Cuanto más alto, antes acaba y más carga el sitio. Por defecto ${limits.defaultConcurrency}.`,
+    {
+      type: 'number',
+      min: '1',
+      max: String(limits.maxConcurrency),
+      value: String(limits.defaultConcurrency),
+    }
+  );
+
+  const advanced = el('details', {
+    className: 'disclosure',
+    children: [
+      el('summary', {
+        className: 'disclosure__summary',
+        text: 'Ajustes avanzados (opcional)',
+      }),
+      el('div', {
+        className: 'disclosure__content grid',
+        children: [
+          el('div', {
+            className: 'field',
+            children: [
+              // Va dentro del formulario, no suelto: así form.reset() lo
+              // devuelve a "auto" como a cualquier otro campo.
+              fields.paginationMode,
+              el('p', { className: 'field__label', text: '¿Cómo pasa de página el sitio?' }),
+              el('div', {
+                className: 'choices choices--stack',
+                children: opcionesModo.map(o => o.root),
+              }),
+              resumenModo,
+              bloqueManual,
+            ],
+          }),
+
+          el('div', {
+            className: 'grid grid--3',
+            children: [campoDesde, campoHasta, campoRapidez],
+          }),
+
+          makeSwitch(
+            'useJavaScript',
+            'Abrir con navegador',
+            'Abre cada página como lo haría un navegador de verdad, ejecutando su JavaScript. Hace falta si el sitio no enseña nada sin él. Mucho más lento: cuenta varios segundos por enlace.'
+          ),
+          makeSwitch(
+            'withSizes',
+            'Averiguar cuánto pesa cada archivo',
+            'Pregunta el peso de cada archivo sin descargarlo. Permite ordenar por tamaño y distinguir un vídeo entero de un clip de vista previa. Va más lento.'
+          ),
+          makeSwitch(
+            'openLicenseOnly',
+            'Solo material con licencia abierta',
+            'Se queda únicamente con las páginas que declaran una licencia abierta (Creative Commons, dominio público, CC0…). Lo que no declara licencia se descarta: por defecto una obra nace con todos los derechos reservados, así que la ausencia de licencia no significa que sea libre.'
+          ),
+        ],
+      }),
+    ],
+  });
+
+  // ── Paso 3: lanzar ─────────────────────────────────────────────────
+
   const submitButton = el('button', {
     className: 'button',
-    text: 'Explorar',
+    text: 'Empezar a explorar',
     attrs: { type: 'submit' },
+  });
+
+  const detectButton = el('button', {
+    className: 'button button--secondary',
+    text: 'Que lo configure por mí',
+    attrs: {
+      type: 'button',
+      title:
+        'Abre la dirección, la analiza y rellena el formulario. Siempre es una sugerencia: revísala.',
+    },
   });
 
   const resetButton = el('button', {
@@ -127,136 +445,37 @@ export function createExplorerView(container, { limits }) {
     attrs: { type: 'button' },
   });
 
-  const detectButton = el('button', {
-    className: 'button button--secondary',
-    text: 'Detectar configuración',
-    attrs: {
-      type: 'button',
-      title: 'Abre la URL y propone una configuración. Siempre es una sugerencia: revísala.',
-    },
-  });
-
   /** Panel con la propuesta y el porqué de cada campo. */
   const detectSlot = el('div');
   show(detectSlot, false);
 
   const form = el('form', {
-    className: 'grid',
+    className: 'steps',
     attrs: { novalidate: true },
     children: [
-      makeField(
-        'searchUrl',
-        'URL de partida',
-        'Admite dos marcadores: {q} para el término a buscar y {page} para paginar. Ejemplo: sitio.com/search/{q}/?page={page}',
-        {
-          type: 'url',
-          placeholder: 'https://ejemplo.com/galeria?q=gatos',
-          required: true,
-          autocomplete: 'url',
-          spellcheck: 'false',
-        }
+      makeStep(
+        1,
+        '¿Qué página quieres recorrer?',
+        'Ve a la página 2 en el sitio y copia esa dirección: así se ve cómo numera las páginas.',
+        [campoUrl, campoTermino]
       ),
 
-      makeField(
-        'searchTerm',
-        'Término a buscar',
-        'Lo que quieres buscar. Se inserta donde la URL de partida tenga {q}, así el sitio se guarda una vez y solo cambias esta palabra.',
-        { type: 'text', placeholder: 'argentina', spellcheck: 'false' }
+      makeStep(
+        2,
+        '¿Qué quieres obtener?',
+        'Los enlaces se recogen siempre. Los archivos obligan a entrar en cada enlace, y eso tarda.',
+        [
+          el('div', { className: 'choices', children: opcionesObjetivo.map(o => o.root) }),
+          chipsBloque,
+        ]
       ),
 
-      el('div', {
-        className: 'grid grid--2',
-        children: [
-          makeField(
-            'linkPattern',
-            'Patrón de enlace',
-            'Vacío = todos. "/videos/" busca en el href original; "https://…" compara desde el principio. Entre barras y con algún símbolo es una expresión regular: /\\/videos\\/\\d+/ solo coge las fichas numeradas.',
-            { type: 'text', placeholder: '/videos/', spellcheck: 'false' }
-          ),
-          makeField(
-            'fileExtensions',
-            'Extensiones a buscar',
-            'Vacío = solo se recogen enlaces (sin fase 2). Separadas por comas.',
-            { type: 'text', placeholder: '.mp4, .webm', spellcheck: 'false' }
-          ),
-        ],
-      }),
+      advanced,
 
-      el('details', {
-        className: 'disclosure',
-        children: [
-          el('summary', {
-            className: 'disclosure__summary',
-            text: 'Paginación y opciones avanzadas',
-          }),
-          el('div', {
-            className: 'disclosure__content grid',
-            children: [
-              makeSelect(
-                'paginationMode',
-                'Cómo pagina el sitio',
-                'Automático sirve para casi todo: usa el parámetro de página o la plantilla {page} de la URL. Elige "scroll" solo si el sitio no tiene botonera de páginas y carga más resultados al bajar.',
-                [
-                  { value: 'auto', label: 'Automático (parámetro o plantilla)' },
-                  { value: 'scroll', label: 'Scroll infinito (carga al bajar)' },
-                ]
-              ),
+      makeStep(3, 'Todo listo', null, [
+        el('div', { className: 'button-row', children: [submitButton, detectButton, resetButton] }),
+      ]),
 
-              el('div', {
-                className: 'grid grid--3',
-                children: [
-                  makeField(
-                    'pageParam',
-                    'Parámetro de página',
-                    'Solo el nombre. Si lo copias como "&page" o "page=" se limpia solo.',
-                    { type: 'text', placeholder: 'page', spellcheck: 'false' }
-                  ),
-                  makeField('startPage', 'Desde', null, {
-                    type: 'number',
-                    min: '1',
-                    value: '1',
-                  }),
-                  makeField('endPage', 'Hasta', `Máximo ${limits.maxPages} páginas por búsqueda.`, {
-                    type: 'number',
-                    min: '1',
-                    value: '5',
-                  }),
-                ],
-              }),
-
-              paginationExamples(),
-              makeField(
-                'concurrency',
-                'Peticiones simultáneas',
-                `Entre 1 y ${limits.maxConcurrency}. Por defecto ${limits.defaultConcurrency}.`,
-                {
-                  type: 'number',
-                  min: '1',
-                  max: String(limits.maxConcurrency),
-                  value: String(limits.defaultConcurrency),
-                }
-              ),
-              makeSwitch(
-                'useJavaScript',
-                'Renderizar con navegador',
-                'Ejecuta el JavaScript en las dos fases: al recorrer la paginación y al entrar en cada enlace. Necesario si el sitio carga el contenido dinámicamente o bloquea a los clientes sin navegador. Mucho más lento: cuenta varios segundos por enlace.'
-              ),
-              makeSwitch(
-                'withSizes',
-                'Obtener el tamaño de cada fichero',
-                'Hace una petición extra por fichero para saber cuánto pesa, sin descargarlo. Permite ordenar por tamaño y distinguir un vídeo completo de un clip de vista previa. Va más lento.'
-              ),
-              makeSwitch(
-                'openLicenseOnly',
-                'Solo material con licencia abierta',
-                'Se queda únicamente con las páginas que declaran una licencia abierta (Creative Commons, dominio público, CC0…). Lo que no declara licencia se descarta: por defecto una obra nace con todos los derechos reservados, así que la ausencia de licencia no significa que sea libre.'
-              ),
-            ],
-          }),
-        ],
-      }),
-
-      el('div', { className: 'button-row', children: [submitButton, detectButton, resetButton] }),
       detectSlot,
     ],
   });
@@ -274,12 +493,12 @@ export function createExplorerView(container, { limits }) {
         children: [
           el('h2', {
             className: 'card__title',
-            text: 'Explorar un sitio',
+            text: 'Recorrer un sitio página a página',
             attrs: { id: 'explorer-heading' },
           }),
           el('p', {
             className: 'card__hint',
-            text: 'Recorre las páginas de una sección y extrae los enlaces que coincidan con el patrón.',
+            text: 'Pasa por las páginas de una sección y te devuelve lo que encuentre. Tres pasos.',
           }),
         ],
       }),
@@ -303,11 +522,104 @@ export function createExplorerView(container, { limits }) {
 
   const results = createResultList({
     emptyTitle: 'Todavía no hay resultados',
-    emptyText: 'Introduce una URL y pulsa Explorar para empezar.',
+    emptyText: 'Rellena los tres pasos y pulsa «Empezar a explorar».',
     filename: 'urlexplorer-resultados.txt',
   });
 
   setChildren(container, [formCard, alertSlot, progressCard, statsCard, results.root]);
+
+  // ── Sincronización de la interfaz con los campos ────────────────────
+
+  const modoActual = () => opcionesModo.find(o => o.input.checked)?.value ?? 'auto';
+
+  /**
+   * Recalcula tarjetas, chips y radios a partir de los CAMPOS.
+   *
+   * Siempre en esta dirección. Los campos son la verdad —son los que se
+   * envían, se guardan en los perfiles y viajan en los enlaces compartidos—;
+   * si la UI fuese la verdad, abrir un enlace compartido enseñaría una
+   * configuración distinta de la que se ejecuta.
+   */
+  function sincronizarUI() {
+    const extensiones = fields.fileExtensions.value;
+    const objetivo = objetivoDe(extensiones);
+    const preset = presetDe(extensiones);
+
+    for (const opcion of opcionesObjetivo) opcion.input.checked = opcion.value === objetivo;
+
+    show(chipsBloque, objetivo === 'ficheros');
+
+    const libre = mostrarExtensionesLibres || preset === 'otro';
+    for (const chip of chips) {
+      const activo = !libre && preset === chip.id;
+      chip.boton.setAttribute('aria-pressed', String(activo));
+      chip.boton.classList.toggle('chip--activo', activo);
+    }
+    chipOtro.setAttribute('aria-pressed', String(libre));
+    chipOtro.classList.toggle('chip--activo', libre);
+    show(campoExtensiones, libre);
+
+    const modo = modoAvanzadoDe({
+      paginationMode: fields.paginationMode.value,
+      linkPattern: fields.linkPattern.value,
+      pageParam: fields.pageParam.value,
+    });
+    for (const opcion of opcionesModo) opcion.input.checked = opcion.value === modo;
+
+    aplicarVistaModo();
+  }
+
+  /** Muestra u oculta los patrones según el radio, sin tocar sus valores. */
+  function aplicarVistaModo() {
+    const modo = modoActual();
+    show(bloqueManual, modo === 'manual');
+
+    const puestos = [
+      fields.linkPattern.value.trim() ? `enlaces «${fields.linkPattern.value.trim()}»` : null,
+      fields.pageParam.value.trim() ? `parámetro «${fields.pageParam.value.trim()}»` : null,
+    ].filter(Boolean);
+
+    // Si hay patrones puestos y no se están viendo, se dice: un patrón que
+    // filtra sin aparecer en pantalla es indistinguible de un sitio que no
+    // devuelve nada.
+    const ocultos = modo !== 'manual' && puestos.length > 0;
+    show(resumenModo, ocultos);
+    if (ocultos) {
+      resumenModo.textContent = `Sigues usando ${puestos.join(' y ')}. Pulsa «Indicar los patrones a mano» para verlos o cambiarlos.`;
+    }
+  }
+
+  for (const opcion of opcionesObjetivo) {
+    opcion.input.addEventListener('change', () => {
+      if (opcion.value === 'enlaces') {
+        // Sin extensiones no hay fase 2: es la misma regla del backend.
+        fields.fileExtensions.value = '';
+        mostrarExtensionesLibres = false;
+      } else if (!fields.fileExtensions.value.trim()) {
+        // Elegir "archivos" y no mandar ninguna extensión daría exactamente el
+        // mismo resultado que "solo enlaces", sin decir por qué. Se arranca
+        // con el primer preset para que la elección signifique algo.
+        fields.fileExtensions.value = PRESETS_EXTENSION[0].extensiones;
+      }
+      sincronizarUI();
+    });
+  }
+
+  for (const opcion of opcionesModo) {
+    opcion.input.addEventListener('change', () => {
+      fields.paginationMode.value = paginationModeDe(opcion.value);
+      aplicarVistaModo();
+    });
+  }
+
+  // Escribir a mano en los patrones cambia el resumen del modo
+  for (const campo of [fields.linkPattern, fields.pageParam]) {
+    campo.addEventListener('input', () => aplicarVistaModo());
+  }
+  fields.fileExtensions.addEventListener('input', () => {
+    mostrarExtensionesLibres = true;
+    sincronizarUI();
+  });
 
   // ── Estado del formulario ──────────────────────────────────────────
 
@@ -337,6 +649,9 @@ export function createExplorerView(container, { limits }) {
       if (input.type === 'checkbox') input.checked = value === true || value === 'true';
       else input.value = value;
     }
+    // La configuración manda sobre lo que hubiera marcado a mano
+    mostrarExtensionesLibres = false;
+    sincronizarUI();
   }
 
   /** Configuración actual, para guardarla o convertirla en enlace. */
@@ -375,8 +690,9 @@ export function createExplorerView(container, { limits }) {
 
   function setBusy(busy) {
     submitButton.disabled = busy;
-    submitButton.textContent = busy ? 'Explorando…' : 'Explorar';
+    submitButton.textContent = busy ? 'Explorando…' : 'Empezar a explorar';
     for (const input of Object.values(fields)) input.disabled = busy;
+    for (const input of uiInputs) input.disabled = busy;
   }
 
   function showError(title, body) {
@@ -446,19 +762,24 @@ export function createExplorerView(container, { limits }) {
     const { sugerencia, motivos, confianza, avisos, analizado, alternativas } = resultado;
 
     const filas = [
-      filaPropuesta('Patrón de enlace', sugerencia.linkPattern, motivos.patron, confianza.patron),
       filaPropuesta(
-        'Paginación',
+        '¿Qué enlaces seguir?',
+        sugerencia.linkPattern,
+        motivos.patron,
+        confianza.patron
+      ),
+      filaPropuesta(
+        'Cómo pasa de página',
         sugerencia.pageParam ? `parámetro "${sugerencia.pageParam}"` : sugerencia.searchUrl,
         motivos.paginacion,
         confianza.paginacion
       ),
       filaPropuesta(
-        'Renderizar con navegador',
+        'Abrir con navegador',
         sugerencia.useJavaScript ? 'sí' : 'no',
         motivos.navegador
       ),
-      filaPropuesta('Extensiones', sugerencia.fileExtensions, motivos.extensiones),
+      filaPropuesta('Qué obtener', sugerencia.fileExtensions, motivos.extensiones),
     ];
 
     if (alternativas?.linkPattern) {
@@ -478,7 +799,7 @@ export function createExplorerView(container, { limits }) {
           el('div', {
             className: 'card__header',
             children: [
-              el('h3', { className: 'card__title', text: 'Propuesta de configuración' }),
+              el('h3', { className: 'card__title', text: 'Esto es lo que propongo' }),
               el('p', {
                 className: 'card__hint',
                 text: `Es una sugerencia, no una verdad: revísala y corrige lo que no encaje. Se han analizado ${analizado.enlacesConNavegador} enlaces con navegador y ${analizado.enlacesSinNavegador} sin él.`,
@@ -504,7 +825,10 @@ export function createExplorerView(container, { limits }) {
     const url = fields.searchUrl.value.trim();
 
     if (!url || !/^https?:\/\//i.test(url)) {
-      showError('Falta la URL', 'Escribe la URL de la página de resultados que quieres analizar.');
+      showError(
+        'Falta la dirección',
+        'Escribe en el paso 1 la dirección de la página que quieres analizar.'
+      );
       fields.searchUrl.focus();
       return;
     }
@@ -533,13 +857,18 @@ export function createExplorerView(container, { limits }) {
       if (sugerencia.paginationMode === 'scroll') aplicar.useJavaScript = true;
       applyConfig(aplicar);
 
+      // Si la propuesta trae patrones, se abre el panel y se enseña el modo a
+      // mano: la detección acaba de escribir en campos que en "automático"
+      // estarían plegados, y hay que poder revisarlos.
+      if (aplicar.linkPattern || aplicar.pageParam) advanced.open = true;
+
       mostrarPropuesta(resultado);
       toast('Propuesta lista: revísala antes de explorar');
     } catch (error) {
       showError('No se pudo analizar la página', error.message);
     } finally {
       detectButton.disabled = false;
-      detectButton.textContent = 'Detectar configuración';
+      detectButton.textContent = 'Que lo configure por mí';
     }
   });
 
@@ -614,7 +943,7 @@ export function createExplorerView(container, { limits }) {
             alertBox({
               variant: 'warning',
               title: 'El scroll se detuvo antes de agotar el listado',
-              body: `Tras ${collected.scroll.rounds} cargas, ${motivoTope}. Es muy probable que el sitio tuviera más resultados: los que ves están incompletos. Sube "Hasta" para pedir más cargas, o afina el patrón para traer menos por carga.`,
+              body: `Tras ${collected.scroll.rounds} cargas, ${motivoTope}. Es muy probable que el sitio tuviera más resultados: los que ves están incompletos. Sube «¿Hasta qué página?» para pedir más cargas, o afina el patrón de enlace para traer menos por carga.`,
             })
           );
           show(alertSlot, true);
@@ -630,8 +959,8 @@ export function createExplorerView(container, { limits }) {
             alertSlot,
             alertBox({
               variant: 'warning',
-              title: 'Solo se han recogido enlaces, no ficheros',
-              body: 'El campo "Extensiones a buscar" está vacío, así que no se ha entrado en cada enlace. Escribe por ejemplo ".mp4" y vuelve a explorar para que la segunda fase busque los ficheros dentro de cada página.',
+              title: 'Solo se han recogido enlaces, no archivos',
+              body: 'En el paso 2 está elegido «Solo la lista de enlaces», así que no se ha entrado en cada enlace. Elige «Los archivos de dentro», marca el tipo que buscas y vuelve a explorar.',
             })
           );
           show(alertSlot, true);
@@ -671,7 +1000,7 @@ export function createExplorerView(container, { limits }) {
               title: 'Resultados truncados',
               body: `Se alcanzó el tope de la aplicación (${event.limits?.maxLinks ?? '?'} enlaces / ${
                 event.limits?.maxFiles ?? '?'
-              } ficheros). Acota el patrón o el rango de páginas para obtener menos resultados.`,
+              } ficheros). Acota el patrón de enlace o el rango de páginas para obtener menos resultados.`,
             })
           );
           show(alertSlot, true);
@@ -693,7 +1022,7 @@ export function createExplorerView(container, { limits }) {
             alertBox({
               variant: 'warning',
               title: 'Se agotó el tiempo máximo',
-              body: `El recorrido superó los ${Math.round((event.maxDurationMs ?? 0) / 60000)} minutos y se detuvo, así que los resultados están incompletos. Con "Renderizar con navegador" cada enlace tarda varios segundos: reduce el rango de páginas o afina el patrón para revisar menos enlaces.`,
+              body: `El recorrido superó los ${Math.round((event.maxDurationMs ?? 0) / 60000)} minutos y se detuvo, así que los resultados están incompletos. Con «Abrir con navegador» cada enlace tarda varios segundos: reduce el rango de páginas o afina el patrón de enlace para revisar menos enlaces.`,
             })
           );
           show(alertSlot, true);
@@ -703,10 +1032,10 @@ export function createExplorerView(container, { limits }) {
             alertSlot,
             alertBox({
               variant: 'warning',
-              title: 'Se encontraron enlaces pero ningún fichero',
+              title: 'Se encontraron enlaces pero ningún archivo',
               body: usedBrowser
-                ? `Se revisaron ${event.links.length} páginas con navegador sin encontrar ficheros con esas extensiones. Puede que los enlaces no sean páginas de detalle (por ejemplo, redirecciones a otros sitios) o que el fichero se pida por una API que no deja rastro en el HTML.`
-                : `Se revisaron ${event.links.length} páginas sin encontrar ficheros con esas extensiones. Prueba a activar "Renderizar con navegador": ahora también se aplica al entrar en cada enlace.`,
+                ? `Se revisaron ${event.links.length} páginas con navegador sin encontrar archivos de ese tipo. Puede que los enlaces no sean páginas de detalle (por ejemplo, redirecciones a otros sitios) o que el archivo se pida por una API que no deja rastro en el HTML.`
+                : `Se revisaron ${event.links.length} páginas sin encontrar archivos de ese tipo. Prueba a activar «Abrir con navegador» en los ajustes avanzados: ahora también se aplica al entrar en cada enlace.`,
             })
           );
           show(alertSlot, true);
@@ -731,21 +1060,24 @@ export function createExplorerView(container, { limits }) {
     const params = readForm();
 
     if (!params.searchUrl) {
-      showError('Falta la URL', 'Introduce la URL desde la que quieres empezar.');
+      showError(
+        'Falta la dirección',
+        'En el paso 1, escribe la página desde la que quieres empezar.'
+      );
       fields.searchUrl.focus();
       return;
     }
 
     if (!/^https?:\/\//i.test(params.searchUrl)) {
-      showError('URL no válida', 'La URL debe empezar por http:// o https://');
+      showError('Dirección no válida', 'La dirección debe empezar por http:// o https://');
       fields.searchUrl.focus();
       return;
     }
 
     if (/\{(?:q|query|termino|término)\}/i.test(params.searchUrl) && !params.searchTerm) {
       showError(
-        'Falta el término a buscar',
-        'La URL de partida usa {q}, así que hay que indicar qué buscar en "Término a buscar".'
+        'Falta la palabra a buscar',
+        'La dirección de partida lleva {q}, así que hay que indicar qué buscar en «¿Buscas una palabra concreta?».'
       );
       fields.searchTerm.focus();
       return;
@@ -761,19 +1093,20 @@ export function createExplorerView(container, { limits }) {
     // sitios que llevan el número de página dentro de la ruta.
     // En modo scroll no hay URL por página que construir: "Hasta" son cargas,
     // no páginas, así que ni se exige parámetro ni aplica el tope de páginas.
-    const modoScroll = params.paginationMode === 'scroll';
+    const esScroll = params.paginationMode === 'scroll';
 
     const paginaPorPlantilla = /\{page(?::\d+)?\}/i.test(params.searchUrl);
     if (
-      !modoScroll &&
+      !esScroll &&
       !params.pageParam &&
       !paginaPorPlantilla &&
       params.endPage > params.startPage
     ) {
       showError(
-        'Falta el parámetro de página',
-        `Has pedido de la ${params.startPage} a la ${params.endPage}, pero sin "Parámetro de página" solo se descarga una. Ábrelo en "Paginación y opciones avanzadas" e indica el nombre del parámetro que usa el sitio (por ejemplo "page").`
+        'Falta decir cómo numera las páginas',
+        `Has pedido de la ${params.startPage} a la ${params.endPage}, pero sin saber cómo pasa de página el sitio solo se descargará una. Abre «Ajustes avanzados», elige «Indicar los patrones a mano» y escribe el nombre del parámetro (por ejemplo «page»), o pon {page} en la dirección de partida.`
       );
+      advanced.open = true;
       return;
     }
 
@@ -785,10 +1118,10 @@ export function createExplorerView(container, { limits }) {
     // Antes esta comprobación solo corría si había pageParam, así que un rango
     // inválido llegaba al servidor y volvía como un 400 que el EventSource no
     // sabe leer.
-    if (!modoScroll && params.endPage - params.startPage + 1 > limits.maxPages) {
+    if (!esScroll && params.endPage - params.startPage + 1 > limits.maxPages) {
       showError(
         'Rango de páginas demasiado grande',
-        `Has pedido ${params.endPage - params.startPage + 1} páginas y el máximo por búsqueda es ${limits.maxPages}. Reduce el valor de "Hasta" a ${params.startPage + limits.maxPages - 1} o menos.`
+        `Has pedido ${params.endPage - params.startPage + 1} páginas y el máximo por búsqueda es ${limits.maxPages}. Reduce «¿Hasta qué página?» a ${params.startPage + limits.maxPages - 1} o menos.`
       );
       return;
     }
@@ -810,9 +1143,12 @@ export function createExplorerView(container, { limits }) {
   resetButton.addEventListener('click', () => {
     stopStream();
     form.reset();
+    fields.paginationMode.value = 'auto';
     fields.startPage.value = '1';
     fields.endPage.value = '5';
     fields.concurrency.value = String(limits.defaultConcurrency);
+    mostrarExtensionesLibres = false;
+    sincronizarUI();
     clearAlert();
     results.clear();
     show(statsCard, false);
@@ -830,6 +1166,10 @@ export function createExplorerView(container, { limits }) {
   // usado: si alguien abre un enlace compartido, espera ver ESA configuración.
   const fromUrl = configFromUrl();
   if (fromUrl) applyConfig(fromUrl);
+
+  // Deja la interfaz acorde con los campos ya restaurados. Sin esto, un
+  // formulario recordado con extensiones enseñaría "solo enlaces".
+  sincronizarUI();
 
   return {
     focus() {

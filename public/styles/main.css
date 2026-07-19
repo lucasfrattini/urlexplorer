@@ -140,6 +140,20 @@ textarea {
   color: inherit;
 }
 
+/*
+ * `hidden` tiene que ganar SIEMPRE.
+ *
+ * La regla del navegador para [hidden] la pisa cualquier clase que declare
+ * display (.field, .grid, .card…), porque una hoja de autor manda sobre la
+ * del navegador. Sin esto, show(nodo, false) deja de ocultar en cuanto el
+ * nodo lleva una de esas clases: el elemento se sigue viendo Y —lo que
+ * importa— su valor se sigue enviando. Es el fallo silencioso de siempre,
+ * esta vez en CSS.
+ */
+[hidden] {
+  display: none !important;
+}
+
 a {
   color: var(--c-accent);
   text-decoration-thickness: 1px;
@@ -528,6 +542,225 @@ a {
   border-top: 1px solid var(--c-border);
 }
 
+/* ── Formulario por pasos ────────────────────────────────────────────
+   Los pasos son presentación pura: numeran la lectura sin cambiar ni un
+   parámetro de los que se envían. El número va en un círculo de acento
+   porque es lo único que tiene que verse de un vistazo. */
+
+.steps {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.step__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  color: var(--c-accent-text);
+  font-size: 13.5px;
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+}
+
+.step__body {
+  min-width: 0;
+}
+
+.step__title {
+  margin: 3px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.step__hint {
+  margin: var(--space-1) 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--c-text-muted);
+}
+
+.step__fields {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+/* El panel avanzado se alinea con el cuerpo de los pasos, no con su número */
+.steps > .disclosure {
+  margin-left: calc(28px + var(--space-4));
+}
+
+@media (max-width: 640px) {
+  .steps > .disclosure {
+    margin-left: 0;
+  }
+}
+
+/* ── Opciones con forma de tarjeta ───────────────────────────────────── */
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.choices--stack {
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+}
+
+@media (max-width: 720px) {
+  .choices {
+    grid-template-columns: 1fr;
+  }
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface-2);
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.choice:hover {
+  border-color: var(--c-border-strong);
+}
+
+.choice input {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--c-accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* La opción elegida se distingue por el borde de acento, no solo por el
+   punto del radio: en una tarjeta el punto es demasiado pequeño. */
+.choice:has(input:checked) {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.choice__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.choice__title {
+  font-size: 13.5px;
+  font-weight: 560;
+}
+
+.choice__hint {
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+  line-height: 1.4;
+}
+
+/* ── Chips de tipo de archivo ────────────────────────────────────────── */
+
+.chips-block {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.chips-block[hidden] {
+  display: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 7px var(--space-3);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 13px;
+  font-weight: 540;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.chip:hover:not(:disabled) {
+  background: var(--c-surface-2);
+}
+
+.chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.chip--activo {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.chip__ext {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--c-text-subtle);
+}
+
+.chip--activo .chip__ext {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/*
+ * Resumen de los patrones que siguen activos mientras están plegados.
+ *
+ * Ocultar un campo no lo vacía, y un patrón que filtra sin verse es
+ * indistinguible de un sitio que no devuelve nada. Por eso se dice.
+ */
+.mode-summary {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--c-accent);
+  background: var(--c-accent-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--c-text-muted);
+}
+
 /* ── Botones ─────────────────────────────────────────────────────────── */
 
 .button {
@@ -580,6 +813,27 @@ a {
 .button--small {
   padding: 6px var(--space-3);
   font-size: 13px;
+}
+
+/*
+ * Botón de un solo icono. Se repite en cada fila de resultados, así que va
+ * sin texto para no robarle ancho al enlace; el nombre lo lleva en
+ * aria-label, que es lo que anuncia el lector de pantalla.
+ */
+.button--icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--c-text-muted);
+}
+
+.button--icon:hover:not(:disabled) {
+  color: var(--c-accent);
+  border-color: var(--c-accent);
 }
 
 .button-row {
@@ -1049,6 +1303,14 @@ a {
   flex-shrink: 0;
 }
 
+/* El botón de copiar se pega al borde derecho de la columna del enlace, para
+   que quede en la misma vertical en todas las filas y sea fácil de apuntar.
+   Siempre visible: aparecer solo al pasar el ratón lo esconde de quien no
+   sabe que existe, y no funciona con teclado ni en táctil. */
+.result-item__main .button--icon {
+  margin-left: auto;
+}
+
 .result-item__col {
   text-align: right;
   font-size: 12.5px;
@@ -1179,10 +1441,27 @@ a {
   text-decoration: underline;
 }
 
+.video-card__link {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.video-card__link .video-card__url {
+  flex: 1;
+  min-width: 0;
+}
+
 .video-card__foot {
   display: flex;
   gap: var(--space-2);
   margin-top: auto;
+}
+
+/* Sin acciones (una URL no navegable) el pie no debe dejar hueco */
+.video-card__foot:empty {
+  display: none;
 }
 
 /* ── Estados ─────────────────────────────────────────────────────────── */

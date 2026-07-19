@@ -8,7 +8,7 @@ import {
   badge,
   safeLink,
   show,
-  copyToClipboard,
+  copyIconButton,
   downloadText,
   toast,
 } from '../dom.js';
@@ -68,13 +68,13 @@ export function createVideoView(container) {
         children: [
           el('label', {
             className: 'field__label',
-            text: 'URL de la página',
+            text: '¿De qué página quieres sacar los vídeos?',
             attrs: { for: 'video-url' },
           }),
           urlInput,
           el('p', {
             className: 'field__hint',
-            text: 'Se analiza una sola página: DOM renderizado, peticiones de red, players embebidos y URLs dentro de scripts.',
+            text: 'Se mira una sola página, y se mira por cuatro vías: lo que se ve tras cargarla, lo que pide por la red, los reproductores incrustados y las direcciones escondidas en su código.',
           }),
         ],
       }),
@@ -83,13 +83,13 @@ export function createVideoView(container) {
         children: [
           makeSwitch(
             jsInput,
-            'Renderizar con navegador',
-            'Ejecuta el JavaScript y captura las peticiones de red. Detecta videos que no están en el HTML.'
+            'Abrir con navegador',
+            'Abre la página como lo haría un navegador de verdad y mira qué pide. Encuentra vídeos que no están escritos en la página.'
           ),
           makeSwitch(
             metadataInput,
-            'Obtener tamaño de fichero',
-            'Hace una petición HEAD por cada video. Más lento.'
+            'Averiguar cuánto pesa cada archivo',
+            'Pregunta el peso de cada vídeo sin descargarlo. Va más lento.'
           ),
         ],
       }),
@@ -105,12 +105,12 @@ export function createVideoView(container) {
         children: [
           el('h2', {
             className: 'card__title',
-            text: 'Extraer videos',
+            text: 'Sacar los vídeos de una página',
             attrs: { id: 'video-heading' },
           }),
           el('p', {
             className: 'card__hint',
-            text: 'Detecta los videos de una página por cuatro vías complementarias.',
+            text: 'Pega una dirección y te dice qué vídeos hay en ella y por dónde los ha encontrado.',
           }),
         ],
       }),
@@ -173,19 +173,9 @@ export function createVideoView(container) {
     if (video.size) head.push(badge(video.size, 'success'));
     if (video.platform) head.push(badge(video.platform, 'warning'));
 
-    const actions = [
-      el('button', {
-        className: 'button button--secondary button--small',
-        text: 'Copiar URL',
-        attrs: { type: 'button' },
-        on: {
-          click: async () => {
-            const ok = await copyToClipboard(video.url);
-            toast(ok ? 'URL copiada' : 'No se pudo copiar', ok ? 'success' : 'error');
-          },
-        },
-      }),
-    ];
+    // Copiar pasa a ser un botón solo-icono pegado a la URL, como en la lista
+    // de resultados del Explorador: el pie se queda para "Abrir".
+    const actions = [];
 
     if (/^https?:\/\//i.test(video.url)) {
       actions.push(
@@ -197,8 +187,14 @@ export function createVideoView(container) {
       className: 'video-card',
       children: [
         el('div', { className: 'video-card__head', children: head }),
-        // safeLink: la URL viene del sitio analizado
-        safeLink(video.url, { className: 'video-card__url' }),
+        el('div', {
+          className: 'video-card__link',
+          children: [
+            // safeLink: la URL viene del sitio analizado
+            safeLink(video.url, { className: 'video-card__url' }),
+            copyIconButton(video.url, { label: 'Copiar esta URL' }),
+          ],
+        }),
         el('p', {
           className: 'field__hint',
           text: `Detectado por: ${video.element || 'desconocido'}`,
@@ -267,8 +263,8 @@ export function createVideoView(container) {
         grid,
         emptyState({
           icon: '🎬',
-          title: 'No se encontraron videos',
-          text: 'Prueba a activar "Renderizar con navegador": muchos sitios cargan el reproductor con JavaScript.',
+          title: 'No se encontraron vídeos',
+          text: 'Prueba a activar «Abrir con navegador»: muchos sitios no muestran el reproductor hasta que la página se abre de verdad.',
         })
       );
       return;
@@ -283,8 +279,8 @@ export function createVideoView(container) {
       grid,
       emptyState({
         icon: '🎬',
-        title: 'Todavía no hay videos',
-        text: 'Introduce la URL de una página y pulsa Analizar.',
+        title: 'Todavía no hay vídeos',
+        text: 'Pega la dirección de una página y pulsa «Analizar».',
       })
     );
   }
@@ -294,13 +290,13 @@ export function createVideoView(container) {
     const url = urlInput.value.trim();
 
     if (!url) {
-      showError('Falta la URL', 'Introduce la URL de la página que quieres analizar.');
+      showError('Falta la dirección', 'Pega la dirección de la página que quieres analizar.');
       urlInput.focus();
       return;
     }
 
     if (!/^https?:\/\//i.test(url)) {
-      showError('URL no válida', 'La URL debe empezar por http:// o https://');
+      showError('Dirección no válida', 'La dirección debe empezar por http:// o https://');
       urlInput.focus();
       return;
     }
@@ -330,9 +326,9 @@ export function createVideoView(container) {
         el('div', {
           className: 'stats',
           children: [
-            stat(allVideos.length, 'Videos'),
+            stat(allVideos.length, 'Vídeos'),
             stat(new Set(allVideos.map(v => v.type)).size, 'Formatos'),
-            stat(methods.length, 'Métodos con resultados'),
+            stat(methods.length, 'Vías con resultados'),
           ],
         })
       );

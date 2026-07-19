@@ -167,6 +167,31 @@ export async function copyToClipboard(text) {
   }
 }
 
+/**
+ * Botón de copiar de una sola línea, sin texto.
+ *
+ * Va solo con icono porque se repite en cada fila: con etiqueta robaría el
+ * ancho del enlace, que es lo que el usuario está leyendo. Por eso lleva
+ * `aria-label` y `title`: un botón sin texto accesible no lo anuncia ningún
+ * lector de pantalla.
+ */
+export function copyIconButton(value, { label = 'Copiar esta URL' } = {}) {
+  return el('button', {
+    className: 'button button--secondary button--icon',
+    text: '⧉',
+    attrs: { type: 'button', 'aria-label': label, title: label },
+    on: {
+      click: async clickEvent => {
+        // La fila entera puede ser clicable en el futuro; copiar no navega.
+        clickEvent.preventDefault();
+        clickEvent.stopPropagation();
+        const ok = await copyToClipboard(value);
+        toast(ok ? 'URL copiada' : 'No se pudo copiar', ok ? 'success' : 'error');
+      },
+    },
+  });
+}
+
 /** Descarga un texto como fichero, sin pasar por el servidor. */
 export function downloadText(filename, text) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
