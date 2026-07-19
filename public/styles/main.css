@@ -1898,3 +1898,86 @@ a {
     grid-column: 2;
   }
 }
+
+/* ── Cabecera ordenable ───────────────────────────────────────────────
+   Sustituye al desplegable "ordenar por": se pulsa la columna, como en
+   cualquier tabla. La flecha marca el sentido y `aria-sort` en la celda es
+   lo que lo anuncia a un lector de pantalla. */
+.result-head__celda {
+  min-width: 0;
+}
+
+.result-head__col.result-head__celda {
+  text-align: right;
+}
+
+.result-head__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.result-head__sort:hover {
+  color: var(--c-text);
+}
+
+.result-head__sort--activa {
+  color: var(--c-accent);
+}
+
+.result-head__flecha {
+  font-size: 9px;
+  line-height: 1;
+}
+
+/* La columna por la que se ordena mantiene su alineación a la derecha */
+.result-head__col .result-head__sort {
+  margin-left: auto;
+}
+
+/* Con miniaturas, la cabecera declara la MISMA rejilla que las filas o los
+   títulos quedan corridos respecto a los datos. */
+.result-head--con-miniatura {
+  grid-template-columns: 64px 2.5rem minmax(0, 1fr) 5.5rem 6rem;
+}
+
+.result-head--con-miniatura::before {
+  content: '';
+}
+
+@media (max-width: 640px) {
+  .result-head--con-miniatura {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+}
+
+/* La X de quitar: discreta hasta que se pasa por encima, y roja al apuntarla.
+   No pide confirmación porque es reversible (deshacer / restaurar ocultos). */
+.result-item__quitar {
+  opacity: 0.35;
+  transition:
+    opacity var(--transition),
+    color var(--transition),
+    border-color var(--transition);
+}
+
+.result-item:hover .result-item__quitar,
+.result-item__quitar:focus-visible {
+  opacity: 1;
+}
+
+.result-item__quitar:hover:not(:disabled) {
+  color: var(--c-danger);
+  border-color: var(--c-danger);
+}

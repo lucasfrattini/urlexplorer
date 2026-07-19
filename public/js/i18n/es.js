@@ -107,6 +107,12 @@ export const es = {
   'resultados.lista': 'Lista',
   'resultados.lista.title': 'Una URL por línea, para pegar en un gestor de descargas',
   'resultados.exportados': '{n} resultados exportados en {formato}',
+  'resultados.ocultar': 'Quitar este resultado',
+  'resultados.deshacer': 'Deshacer',
+  'resultados.deshacer.title': 'Devuelve lo último que quitaste',
+  'resultados.restaurar': 'Restaurar ocultos ({n})',
+  'resultados.restaurar.title': 'Devuelve todos los resultados que has quitado',
+  'resultados.ocultados': '{n} quitados',
   'resultados.sinCoincidencias': 'Sin coincidencias',
   'resultados.sinCoincidencias.texto':
     'Ningún resultado pasa los filtros actuales. Prueba a ampliar los rangos o a desactivar los interruptores.',

@@ -48,7 +48,27 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   let filtered = [];
   // url -> { duration, durationSeconds, size, sizeBytes, sizeApproximate }
   let meta = new Map();
-  let sortBy = 'orden';
+  /**
+   * Orden actual: qué columna y en qué sentido.
+   *
+   * Sustituye al desplegable "ordenar por", que solo sabía ordenar
+   * descendente y estaba lejos de los datos que ordenaba. Ahora se pulsa la
+   * cabecera de la columna, como en cualquier tabla.
+   */
+  let orden = { campo: 'orden', direccion: 'asc' };
+
+  /**
+   * Resultados quitados a mano, y en qué tandas.
+   *
+   * `ocultos` es el conjunto de lo que no se ve. `tandas` guarda cada
+   * borrado por separado para poder deshacer SOLO el último, que es lo que
+   * se espera de un "deshacer": no vaciar todo el historial de golpe.
+   *
+   * No se borra nada de `items`: quitar es una vista, igual que plegar
+   * duplicados. Por eso se puede restaurar entero.
+   */
+  let ocultos = new Set();
+  const tandas = [];
 
   /**
    * Agrupación de duplicados: `duplicadoDe` mapea cada URL plegada a su
@@ -98,6 +118,49 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     },
   });
   texto(downloadButton, 'resultados.descargar');
+
+  /**
+   * Deshacer y restaurar.
+   *
+   * Quitar un resultado NO pide confirmación —es reversible, así que
+   * preguntar solo estorba— pero por eso mismo hacen falta las dos salidas:
+   * deshacer la última tanda, y devolverlo todo.
+   */
+  const undoButton = el('button', {
+    className: 'button button--secondary button--small',
+    attrs: { type: 'button' },
+    on: {
+      click: () => {
+        const ultima = tandas.pop();
+        if (!ultima) return;
+        for (const url of ultima) ocultos.delete(url);
+        applyFilter();
+      },
+    },
+  });
+  texto(undoButton, 'resultados.deshacer');
+  atributo(undoButton, 'title', 'resultados.deshacer.title');
+
+  const restoreButton = el('button', {
+    className: 'button button--secondary button--small',
+    attrs: { type: 'button' },
+    on: {
+      click: () => {
+        ocultos = new Set();
+        tandas.length = 0;
+        applyFilter();
+      },
+    },
+  });
+  atributo(restoreButton, 'title', 'resultados.restaurar.title');
+
+  /** Quita un resultado. Sin confirmación: es reversible. */
+  function ocultar(url) {
+    if (ocultos.has(url)) return;
+    ocultos.add(url);
+    tandas.push([url]);
+    applyFilter();
+  }
 
   /**
    * Exportar en los otros tres formatos.
@@ -166,33 +229,6 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   atributo(exclude, 'aria-label', 'filtros.excluir.aria');
   atributo(exclude, 'title', 'filtros.excluir.title');
 
-  const sortSelect = el('select', {
-    className: 'input',
-    on: {
-      change: () => {
-        sortBy = sortSelect.value;
-        applyFilter();
-      },
-    },
-  });
-  atributo(sortSelect, 'aria-label', 'filtros.ordenar.aria');
-
-  // El <select> se reconstruye entero al cambiar de idioma, conservando la
-  // opcion elegida: reescribir el texto de cada <option> por separado seria
-  // mas codigo para el mismo resultado.
-  const OPCIONES_ORDEN = [
-    { value: 'orden', clave: 'filtros.orden.aparicion' },
-    { value: 'duracion', clave: 'filtros.orden.duracion' },
-    { value: 'tamano', clave: 'filtros.orden.tamano' },
-  ];
-  alCambiarIdioma(() => {
-    const elegido = sortSelect.value || 'orden';
-    sortSelect.replaceChildren(
-      ...OPCIONES_ORDEN.map(o => el('option', { text: t(o.clave), attrs: { value: o.value } }))
-    );
-    sortSelect.value = elegido;
-  });
-
   /* ── Filtros de rango ────────────────────────────────────────────── */
 
   const filtroDuracion = createRangeFilter({
@@ -253,40 +289,28 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   );
 
   /**
-   * Selector del modo de agrupación.
+   * Interruptor del modo agresivo de duplicados.
    *
-   * El agresivo NO es el defecto y el motivo está medido: con mil resultados,
+   * Va con los demás flags y no en un desplegable aparte: es una decisión de
+   * sí o no, y escondida en un menú no se encontraba.
+   *
+   * NO está activo por defecto y el motivo está medido: con mil resultados,
    * agrupar solo por duración esconde uno de cada cuatro vídeos buenos detrás
-   * de otro que no tiene nada que ver. Se ofrece porque a veces es justo lo
-   * que se quiere, pero es una elección explícita y avisada.
+   * de otro que no tiene nada que ver. Ver lib/dedupe.js.
    *
-   * En los dos modos la agrupación sigue siendo REVERSIBLE: nada se borra,
-   * el interruptor de plegado los devuelve y cada representante dice cuántos
-   * lleva detrás.
+   * Sigue siendo AGRUPACIÓN reversible: nada se borra, el representante lleva
+   * su insignia "+N" y desmarcar esto los devuelve a todos.
    */
-  const modoDupSelect = el('select', {
-    className: 'input',
-    on: {
-      change: () => {
-        modoDuplicados = modoDupSelect.value;
-        aplicarGruposDelModo();
-        applyFilter();
-      },
-    },
-  });
-  atributo(modoDupSelect, 'aria-label', 'filtros.modoDup.label');
-
-  const MODOS_DUP = [
-    { value: 'seguro', clave: 'filtros.modoDup.seguro' },
-    { value: 'duracion', clave: 'filtros.modoDup.duracion' },
-  ];
-  alCambiarIdioma(() => {
-    const elegido = modoDupSelect.value || 'seguro';
-    modoDupSelect.replaceChildren(
-      ...MODOS_DUP.map(m => el('option', { text: t(m.clave), attrs: { value: m.value } }))
-    );
-    modoDupSelect.value = elegido;
-  });
+  const dupDuracionToggle = crearToggle(
+    'dup-solo-duracion',
+    'filtros.modoDup.duracion',
+    'filtros.modoDup.aviso',
+    valor => {
+      modoDuplicados = valor ? 'duracion' : 'seguro';
+      aplicarGruposDelModo();
+      applyFilter();
+    }
+  );
 
   // Aviso del modo agresivo: solo se ve cuando está activo
   const avisoModoDup = el('p', { className: 'filters__note filters__note--warn' });
@@ -320,7 +344,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     children: [
       el('div', {
         className: 'filters__row filters__row--text',
-        children: [search, exclude, sortSelect],
+        children: [search, exclude],
       }),
       el('div', {
         className: 'filters__row filters__row--ranges',
@@ -328,7 +352,12 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       }),
       el('div', {
         className: 'filters__row filters__row--flags',
-        children: [toggleSinDuracion.root, toggleSinPeso.root, dupeToggle.root, modoDupSelect],
+        children: [
+          toggleSinDuracion.root,
+          toggleSinPeso.root,
+          dupeToggle.root,
+          dupDuracionToggle.root,
+        ],
       }),
       nota,
       avisoModoDup,
@@ -343,21 +372,98 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       contador,
       el('div', {
         className: 'results__actions',
-        children: [copyButton, downloadButton, csvButton, jsonButton, listaButton],
+        children: [
+          copyButton,
+          downloadButton,
+          csvButton,
+          jsonButton,
+          listaButton,
+          undoButton,
+          restoreButton,
+        ],
       }),
     ],
   });
 
   // Fila de títulos de columna: es lo que hace que la lista se lea como una
   // tabla sin serlo. Comparte el mismo grid que cada fila.
+  /**
+   * Cabecera con columnas ordenables.
+   *
+   * Cada título es un botón: pulsarlo ordena por esa columna y volver a
+   * pulsarlo invierte el sentido. `aria-sort` es lo que hace que un lector de
+   * pantalla anuncie por dónde está ordenada la tabla; sin él la flecha es
+   * decoración que solo existe para quien ve.
+   */
+  const COLUMNAS = [
+    { campo: 'orden', claveTexto: null, texto: '#', clase: 'result-head__index' },
+    { campo: 'url', claveTexto: 'columnas.enlace', clase: '' },
+    { campo: 'duracion', claveTexto: 'columnas.duracion', clase: 'result-head__col' },
+    { campo: 'peso', claveTexto: 'columnas.peso', clase: 'result-head__col' },
+  ];
+
+  const celdasCabecera = COLUMNAS.map(columna => {
+    const etiqueta = el('span', { className: 'result-head__etiqueta' });
+    if (columna.claveTexto) texto(etiqueta, columna.claveTexto);
+    else etiqueta.textContent = columna.texto;
+
+    const flecha = el('span', {
+      className: 'result-head__flecha',
+      attrs: { 'aria-hidden': 'true' },
+    });
+
+    const boton = el('button', {
+      className: 'result-head__sort',
+      attrs: { type: 'button' },
+      children: [etiqueta, flecha],
+      on: {
+        click: () => {
+          // Misma columna: se invierte. Columna nueva: se empieza por el
+          // sentido más útil de cada dato (ver `direccionInicial`).
+          orden =
+            orden.campo === columna.campo
+              ? { campo: columna.campo, direccion: orden.direccion === 'asc' ? 'desc' : 'asc' }
+              : { campo: columna.campo, direccion: direccionInicial(columna.campo) };
+          applyFilter();
+        },
+      },
+    });
+
+    const celda = el('div', {
+      className: `result-head__celda ${columna.clase}`.trim(),
+      children: [boton],
+    });
+
+    return { ...columna, celda, boton, flecha };
+  });
+
+  /**
+   * Sentido con el que se empieza al pulsar una columna nueva.
+   *
+   * Lo que se quiere ver primero no es lo mismo en cada columna: de duración
+   * y peso interesa lo más grande, del orden de aparición y del enlace lo
+   * primero alfabéticamente.
+   */
+  function direccionInicial(campo) {
+    return campo === 'duracion' || campo === 'peso' ? 'desc' : 'asc';
+  }
+
+  function pintarCabecera() {
+    for (const columna of celdasCabecera) {
+      const activa = orden.campo === columna.campo;
+      columna.celda.setAttribute(
+        'aria-sort',
+        activa ? (orden.direccion === 'asc' ? 'ascending' : 'descending') : 'none'
+      );
+      columna.boton.classList.toggle('result-head__sort--activa', activa);
+      columna.flecha.textContent = activa ? (orden.direccion === 'asc' ? '▲' : '▼') : '';
+    }
+  }
+
   const columnas = el('div', {
     className: 'result-head',
-    children: [
-      el('span', { className: 'result-head__index', text: '#' }),
-      texto(el('span', {}), 'columnas.enlace'),
-      texto(el('span', { className: 'result-head__col' }), 'columnas.duracion'),
-      texto(el('span', { className: 'result-head__col' }), 'columnas.peso'),
-    ],
+    attrs: { role: 'row' },
+    children: celdasCabecera.map(c => c.celda),
   });
 
   const list = el('ul', { className: 'result-list' });
@@ -402,6 +508,12 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     downloadButton.disabled = !hayResultados;
     for (const boton of [csvButton, jsonButton, listaButton]) boton.disabled = !hayResultados;
     columnas.hidden = !hayResultados;
+
+    // Con miniaturas cada fila lleva una columna más al principio: la
+    // cabecera tiene que declarar la misma rejilla o los títulos quedan
+    // corridos respecto a los datos.
+    const conMiniaturas = filtered.some(url => meta.get(url)?.thumbnail);
+    columnas.classList.toggle('result-head--con-miniatura', conMiniaturas);
 
     if (!hayResultados) {
       const estabaFiltrado = items.length > 0;
@@ -508,6 +620,20 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
               // Copiar una sola línea. Los botones globales copian la lista
               // filtrada entera, que no sirve cuando solo quieres esta URL.
               copyIconButton(url),
+              // Quitar: sin confirmación, porque es reversible. Deshacer y
+              // "restaurar ocultos" son las dos salidas.
+              el('button', {
+                className: 'button button--secondary button--icon result-item__quitar',
+                text: '✕',
+                attrs: { type: 'button', 'aria-label': t('resultados.ocultar') },
+                on: {
+                  click: clickEvent => {
+                    clickEvent.preventDefault();
+                    clickEvent.stopPropagation();
+                    ocultar(url);
+                  },
+                },
+              }),
             ],
           }),
           celda(info?.duration || null, 'columnas.duracion'),
@@ -567,6 +693,9 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     filtered = items.filter(url => {
       // Los duplicados se pliegan bajo su representante, no se descartan:
       // siguen en `items` y el interruptor los devuelve a la lista.
+      // Quitados a mano: siguen en `items`, solo no se muestran
+      if (ocultos.has(url)) return false;
+
       if (plegarDuplicados && duplicadoDe.has(url)) return false;
 
       const lower = url.toLowerCase();
@@ -595,16 +724,41 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       return true;
     });
 
-    if (sortBy === 'duracion') {
-      filtered = [...filtered].sort(
-        (a, b) => (segundosDe(meta.get(b)) ?? -1) - (segundosDe(meta.get(a)) ?? -1)
-      );
-    } else if (sortBy === 'tamano') {
-      filtered = [...filtered].sort(
-        (a, b) => (bytesDe(meta.get(b)) ?? -1) - (bytesDe(meta.get(a)) ?? -1)
-      );
+    /**
+     * Orden por la columna elegida.
+     *
+     * Los resultados SIN dato van siempre al final, ordene como ordene: es la
+     * misma regla que rige los filtros de rango. Colarlos arriba al ordenar
+     * ascendente llenaría la primera pantalla de guiones justo cuando el
+     * usuario está buscando el valor más pequeño.
+     */
+    if (orden.campo !== 'orden') {
+      const signo = orden.direccion === 'asc' ? 1 : -1;
+
+      const valorDe = url => {
+        const info = meta.get(url);
+        if (orden.campo === 'duracion') return segundosDe(info);
+        if (orden.campo === 'peso') return bytesDe(info);
+        return url.toLowerCase();
+      };
+
+      filtered = [...filtered].sort((a, b) => {
+        const va = valorDe(a);
+        const vb = valorDe(b);
+
+        // Sin dato, siempre al final
+        const faltaA = va === null || va === undefined;
+        const faltaB = vb === null || vb === undefined;
+        if (faltaA && faltaB) return 0;
+        if (faltaA) return 1;
+        if (faltaB) return -1;
+
+        if (typeof va === 'string') return signo * va.localeCompare(vb);
+        return signo * (va - vb);
+      });
     }
 
+    pintarCabecera();
     actualizarContador();
     render();
   }
@@ -623,6 +777,15 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     }
 
     contador.classList.toggle('results__count--filtrado', filtered.length !== total);
+
+    // Deshacer solo tiene sentido si hay algo que deshacer
+    undoButton.disabled = tandas.length === 0;
+    restoreButton.disabled = ocultos.size === 0;
+    restoreButton.hidden = ocultos.size === 0;
+    undoButton.hidden = tandas.length === 0;
+    if (ocultos.size > 0) {
+      restoreButton.textContent = t('resultados.restaurar', { n: ocultos.size });
+    }
 
     dupeToggle.root.hidden = duplicadoDe.size === 0;
     dupeToggle.texto.textContent = tp('filtros.agrupar', duplicadoDe.size);
@@ -653,6 +816,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   alCambiarIdioma(() => {
     aplicarGruposDelModo();
     actualizarContador();
+    pintarCabecera();
     render();
   });
 
@@ -694,14 +858,15 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       meta = new Map();
       duplicadoDe = new Map();
       grupos = new Map();
+      ocultos = new Set();
+      tandas.length = 0;
       gruposPorModo = { seguro: [], duracion: [] };
       modoDuplicados = 'seguro';
-      modoDupSelect.value = 'seguro';
+      dupDuracionToggle.input.checked = false;
       avisoModoDup.hidden = true;
       search.value = '';
       exclude.value = '';
-      sortSelect.value = 'orden';
-      sortBy = 'orden';
+      orden = { campo: 'orden', direccion: 'asc' };
       ocultarSinDuracion = false;
       ocultarSinPeso = false;
       toggleSinDuracion.input.checked = false;

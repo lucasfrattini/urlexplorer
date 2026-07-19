@@ -5,6 +5,7 @@ const express = require('express');
 
 const config = require('./config');
 const apiRoutes = require('./routes');
+const thumbnailRoutes = require('./routes/thumbnail');
 const { createRateLimiter } = require('./middleware/rateLimit');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
@@ -48,6 +49,17 @@ function createApp() {
     );
     next();
   });
+
+  /**
+   * Las miniaturas van con su PROPIO límite, y antes del general.
+   *
+   * El límite de /api son 30 peticiones por minuto porque está pensado para
+   * lo caro: un crawl, un análisis de vídeo. Una miniatura es una imagen
+   * pequeña que además se sirve de caché, y una sola lista de resultados
+   * necesita decenas. Cuando compartían límite, las primeras 30 cargaban y
+   * el resto aparecía como imagen rota.
+   */
+  app.use('/api', createRateLimiter(config.thumbnails.rateLimit), thumbnailRoutes);
 
   app.use('/api', createRateLimiter(), apiRoutes);
 

@@ -47,6 +47,22 @@ const NOMBRE_ESPECIFICO_MIN = 12;
 const TOLERANCIA_TAMANO = 0.02;
 
 /**
+ * A partir de cuántas repeticiones una miniatura deja de identificar.
+ *
+ * Compartir miniatura es una señal FUERTE: dos vídeos distintos casi nunca
+ * declaran la misma imagen de vista previa. La excepción son los
+ * marcadores de posición —el logo del sitio, un "sin vista previa"— que
+ * aparecen en muchísimas fichas y no dicen nada.
+ *
+ * Se distinguen por lo que son: si la misma imagen sale en más de la mitad
+ * de los resultados que traen miniatura, no es la portada de un vídeo, es el
+ * relleno del sitio. Se pide además un mínimo de repeticiones para no
+ * descartar la señal en listas diminutas, donde "la mitad" son dos.
+ */
+const MINIATURA_FRACCION_RELLENO = 0.5;
+const MINIATURA_MIN_PARA_RELLENO = 5;
+
+/**
  * Normaliza el nombre de fichero de una URL.
  *
  * Se quitan la extensión, los sufijos de calidad y resolución, los
@@ -102,8 +118,24 @@ function sameSize(a, b) {
  * precalcular se recomputaba el nombre del MISMO elemento una vez por cada
  * elemento de la lista. Ver `groupDuplicates`.
  */
-function senalesComunes(a, b, nombreAPrecalculado, nombreBPrecalculado) {
+function senalesComunes(a, b, nombreAPrecalculado, nombreBPrecalculado, miniaturasDeRelleno) {
   const senales = [];
+
+  /**
+   * Misma miniatura declarada.
+   *
+   * Es la señal más fuerte de las cuatro, porque la miniatura la elige el
+   * sitio para representar ESE vídeo: dos vídeos distintos casi nunca
+   * declaran la misma. Por eso agrupa ella sola, igual que un nombre largo.
+   *
+   * Salvo que sea un marcador de posición, claro: ahí no identifica nada y
+   * agruparía media lista. Ver MINIATURA_FRACCION_RELLENO.
+   */
+  if (a.thumbnail && b.thumbnail && a.thumbnail === b.thumbnail) {
+    if (!miniaturasDeRelleno?.has(a.thumbnail)) {
+      senales.push({ tipo: 'miniatura', valor: a.thumbnail, especifica: true });
+    }
+  }
 
   const nombreA = nombreAPrecalculado ?? normalizeName(a.url);
   const nombreB = nombreBPrecalculado ?? normalizeName(b.url);
@@ -153,7 +185,11 @@ function bastan(senales, { soloDuracion = false } = {}) {
   if (senales.length >= 2) return true;
   if (senales.length !== 1) return false;
 
-  if (senales[0].tipo === 'nombre' && senales[0].especifica === true) return true;
+  // Un nombre normalizado largo, o una miniatura que no sea relleno, ya
+  // identifican por sí solos.
+  if (senales[0].especifica === true) {
+    if (senales[0].tipo === 'nombre' || senales[0].tipo === 'miniatura') return true;
+  }
 
   // Modo agresivo: la duracion sola agrupa. Solo si se pide expresamente.
   return soloDuracion && senales[0].tipo === 'duracion';
@@ -165,8 +201,29 @@ function describir(senales) {
     nombre: 'mismo nombre de fichero',
     duracion: 'misma duración',
     tamano: 'mismo tamaño',
+    miniatura: 'misma miniatura',
   };
   return senales.map(s => nombres[s.tipo]).join(' y ');
+}
+
+/** Miniaturas demasiado repetidas para servir de identificador. */
+function detectarMiniaturasDeRelleno(items) {
+  const cuenta = new Map();
+  let conMiniatura = 0;
+
+  for (const item of items) {
+    if (!item?.thumbnail) continue;
+    conMiniatura += 1;
+    cuenta.set(item.thumbnail, (cuenta.get(item.thumbnail) || 0) + 1);
+  }
+
+  const relleno = new Set();
+  for (const [miniatura, veces] of cuenta) {
+    if (veces >= MINIATURA_MIN_PARA_RELLENO && veces > conMiniatura * MINIATURA_FRACCION_RELLENO) {
+      relleno.add(miniatura);
+    }
+  }
+  return relleno;
 }
 
 /**
@@ -205,6 +262,16 @@ function groupDuplicates(items, opciones = {}) {
    */
   const nombres = items.map(item => normalizeName(item.url));
 
+  /**
+   * Miniaturas que se repiten tanto que ya no identifican a nadie.
+   *
+   * El logo del sitio o un "sin vista previa" aparecen en casi todas las
+   * fichas. Sin este filtro, la señal de miniatura agruparía media lista en
+   * un solo grupo, que es exactamente el falso positivo que este módulo
+   * existe para evitar.
+   */
+  const miniaturasDeRelleno = detectarMiniaturasDeRelleno(items);
+
   for (let i = 0; i < items.length; i += 1) {
     if (asignado.has(i)) continue;
 
@@ -222,7 +289,13 @@ function groupDuplicates(items, opciones = {}) {
       // grupo. Encadenar (A~B, B~C ⇒ A,B,C juntos) arrastra elementos que no
       // se parecen entre sí, y es como una agrupación por duración acaba
       // tragándose media lista.
-      const senales = senalesComunes(items[i], items[j], nombres[i], nombres[j]);
+      const senales = senalesComunes(
+        items[i],
+        items[j],
+        nombres[i],
+        nombres[j],
+        miniaturasDeRelleno
+      );
       if (!bastan(senales, { soloDuracion })) continue;
 
       grupo.miembros.push(items[j]);
@@ -248,6 +321,7 @@ module.exports = {
   sameSize,
   senalesComunes,
   bastan,
+  detectarMiniaturasDeRelleno,
   NOMBRE_ESPECIFICO_MIN,
   TOLERANCIA_TAMANO,
 };

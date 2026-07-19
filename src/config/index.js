@@ -220,6 +220,20 @@ const config = {
     cacheMaxBytes: intFromEnv('THUMBNAILS_CACHE_MAX_BYTES', 64 * 1024 * 1024),
     // Cuánto puede cachear el navegador lo que ya servimos nosotros
     browserCacheSeconds: intFromEnv('THUMBNAILS_BROWSER_CACHE_SECONDS', 3600),
+    /**
+     * Límite PROPIO, mucho más alto que el general.
+     *
+     * El de /api son 30 peticiones por minuto, pensado para operaciones
+     * caras: un crawl, un análisis de vídeo. Una miniatura no es eso —es una
+     * imagen pequeña y cacheada— y una sola lista de resultados necesita
+     * decenas. Compartiendo el límite general, las primeras 30 cargaban y el
+     * resto salía con el icono de imagen rota. Reproducido: de 50 peticiones
+     * seguidas, 30 con 200 y 20 con 429.
+     */
+    rateLimit: {
+      windowMs: intFromEnv('THUMBNAILS_RATE_WINDOW_MS', 60 * 1000),
+      maxRequests: intFromEnv('THUMBNAILS_RATE_MAX', 600),
+    },
   },
 
   video: {

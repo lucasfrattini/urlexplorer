@@ -214,3 +214,63 @@ test('sin duracion conocida, el modo agresivo no inventa grupos', () => {
   const { totalDuplicados } = groupDuplicates(items, { soloDuracion: true });
   assert.equal(totalDuplicados, 0, 'la ausencia de dato no es una coincidencia');
 });
+
+test('misma miniatura agrupa: es la senal mas fuerte', async t => {
+  await t.test('dos resultados con la misma miniatura se agrupan', () => {
+    const items = [
+      { url: 'https://cdn1.com/x/aaa.mp4', thumbnail: 'https://s.com/portada-77.jpg' },
+      { url: 'https://cdn2.com/y/bbb.mp4', thumbnail: 'https://s.com/portada-77.jpg' },
+    ];
+    const { totalDuplicados } = groupDuplicates(items);
+    assert.equal(totalDuplicados, 1, 'la miniatura sola deberia bastar');
+  });
+
+  await t.test('miniaturas distintas NO agrupan', () => {
+    const items = [
+      { url: 'https://a.com/uno.mp4', thumbnail: 'https://s.com/p1.jpg' },
+      { url: 'https://b.com/dos.mp4', thumbnail: 'https://s.com/p2.jpg' },
+    ];
+    assert.equal(groupDuplicates(items).totalDuplicados, 0);
+  });
+});
+
+test('una miniatura de relleno NO agrupa media lista', () => {
+  /**
+   * El logo del sitio o un "sin vista previa" aparecen en casi todas las
+   * fichas. Tratarlos como identificador meteria toda la lista en un grupo,
+   * que es justo el falso positivo que este modulo evita.
+   */
+  const relleno = 'https://s.com/sin-vista-previa.png';
+  const items = Array.from({ length: 10 }, (_, i) => ({
+    url: `https://s.com/v/video-distinto-${i}.mp4`,
+    thumbnail: relleno,
+  }));
+
+  const { totalDuplicados } = groupDuplicates(items);
+  assert.equal(totalDuplicados, 0, 'una miniatura repetida en toda la lista no identifica nada');
+});
+
+test('detectarMiniaturasDeRelleno distingue relleno de portada real', () => {
+  const { detectarMiniaturasDeRelleno } = require('../src/lib/dedupe');
+
+  // 8 con el logo, 2 con portadas propias: el logo es relleno
+  const items = [
+    ...Array.from({ length: 8 }, (_, i) => ({ url: `u${i}`, thumbnail: 'logo.png' })),
+    { url: 'a', thumbnail: 'portada-a.jpg' },
+    { url: 'b', thumbnail: 'portada-a.jpg' },
+  ];
+
+  const relleno = detectarMiniaturasDeRelleno(items);
+  assert.ok(relleno.has('logo.png'));
+  assert.ok(!relleno.has('portada-a.jpg'), 'una portada compartida por dos no es relleno');
+});
+
+test('en una lista pequena, una miniatura repetida sigue identificando', () => {
+  // Con 2 de 2, "la mitad" se cumple pero no hay evidencia de relleno: hace
+  // falta un minimo de repeticiones para creerse que es un marcador generico.
+  const items = [
+    { url: 'https://a.com/uno.mp4', thumbnail: 'https://s.com/p.jpg' },
+    { url: 'https://b.com/dos.mp4', thumbnail: 'https://s.com/p.jpg' },
+  ];
+  assert.equal(groupDuplicates(items).totalDuplicados, 1);
+});

@@ -107,6 +107,12 @@ export const en = {
   'resultados.lista': 'List',
   'resultados.lista.title': 'One URL per line, to paste into a download manager',
   'resultados.exportados': '{n} results exported as {formato}',
+  'resultados.ocultar': 'Remove this result',
+  'resultados.deshacer': 'Undo',
+  'resultados.deshacer.title': 'Brings back the last ones you removed',
+  'resultados.restaurar': 'Restore removed ({n})',
+  'resultados.restaurar.title': 'Brings back every result you have removed',
+  'resultados.ocultados': '{n} removed',
   'resultados.sinCoincidencias': 'No matches',
   'resultados.sinCoincidencias.texto':
     'No result passes the current filters. Try widening the ranges or turning the switches off.',
