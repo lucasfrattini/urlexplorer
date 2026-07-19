@@ -292,6 +292,15 @@ export const es = {
   'aviso.tope.tiempo': 'se agotó el tiempo máximo de scroll',
   'aviso.tope.navegador': 'el navegador dejó de responder',
 
+  'aviso.patronSinCasar': 'El patrón de enlace dejó fuera todos los enlaces',
+  'aviso.patronSinCasar.body':
+    'Se encontraron {vistos} enlaces en las páginas recorridas y NINGUNO casa con «{patron}». Prueba con uno de los más frecuentes: {pistas}. O déjalo vacío para recoger todos.',
+  'aviso.patronSinCasar.sinPistas':
+    'Se encontraron {vistos} enlaces en las páginas recorridas y NINGUNO casa con «{patron}». Prueba a dejar el patrón vacío para ver qué trae la página.',
+  'aviso.bloqueo': 'Puede que el sitio esté bloqueando peticiones automáticas',
+  'aviso.bloqueo.body':
+    'No es seguro, es una sospecha: {motivos}. Si los resultados vienen vacíos o a medias, prueba a activar «Abrir con navegador» en los ajustes avanzados, y a bajar la rapidez.',
+
   'aviso.soloEnlaces': 'Solo se han recogido enlaces, no archivos',
   'aviso.soloEnlaces.body':
     'En el paso 2 está elegido «Solo la lista de enlaces», así que no se ha entrado en cada enlace. Elige «Los archivos de dentro», marca el tipo que buscas y vuelve a explorar.',

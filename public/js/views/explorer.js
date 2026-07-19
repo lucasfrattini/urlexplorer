@@ -1005,6 +1005,39 @@ export function createExplorerView(container, { limits }) {
           });
         }
 
+        /**
+         * POR QUÉ SALIERON CERO RESULTADOS.
+         *
+         * Son los dos avisos que atacan la causa número uno de frustración:
+         * una lista vacía sin explicación. Van ANTES que el resto porque
+         * responden a la pregunta que el usuario se está haciendo.
+         */
+        const diag = event.diagnostico;
+
+        // El patrón se lo llevó todo por delante: hay enlaces, pero ninguno
+        // casa. Sin esto es indistinguible de "el sitio no tiene nada".
+        if (diag && event.links.length === 0 && diag.enlacesVistos > 0) {
+          const pistas = (diag.prefijos || []).map(p => `${p.prefijo} (${p.veces})`).join(', ');
+          mostrarAviso(
+            'warning',
+            'aviso.patronSinCasar',
+            pistas ? 'aviso.patronSinCasar.body' : 'aviso.patronSinCasar.sinPistas',
+            {
+              vistos: diag.enlacesVistos,
+              patron: readForm().linkPattern || '',
+              pistas,
+            }
+          );
+        }
+
+        // Sospecha de bloqueo. SIEMPRE como sospecha: hay falsos positivos y
+        // afirmar una causa que no se puede probar sería peor que callarse.
+        if (diag?.bloqueo?.sospechoso) {
+          mostrarAviso('warning', 'aviso.bloqueo', 'aviso.bloqueo.body', {
+            motivos: diag.bloqueo.motivos.join('; '),
+          });
+        }
+
         // Sin extensiones no hay fase 2, y hasta ahora eso no se decía en
         // ninguna parte: el usuario veía una lista de enlaces, ningún
         // fichero y ningún error, y no tenía forma de saber que faltaba

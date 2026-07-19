@@ -4,7 +4,7 @@ const config = require('../config');
 const logger = require('../lib/logger');
 const { AppError } = require('../lib/errors');
 const { renderPage } = require('../lib/browser');
-const { fetchHtmlWithRetry, tryFetchHtml, fetchContentLength } = require('../lib/http');
+const { fetchHtml, fetchHtmlWithRetry, fetchContentLength } = require('../lib/http');
 const { assertUrlIsSafe, isUrlSafe } = require('../lib/ssrf');
 const {
   toAbsoluteUrl,
@@ -22,6 +22,7 @@ const {
 } = require('../lib/media');
 const { groupDuplicates } = require('../lib/dedupe');
 const { asDocument } = require('../lib/document');
+const { analizarRespuesta, analizarError, combinar } = require('../lib/blocking');
 const { findExtension } = require('./extensions');
 const { selectRelevantFiles, sizeLooksInconsistent } = require('../lib/relevance');
 const { createLinkMatcher } = require('../lib/pattern');
@@ -46,7 +47,7 @@ const FILE_SELECTORS =
  * de la defensa contra ReDoS, porque el presupuesto de tiempo se acumula en
  * el propio matcher a lo largo de toda la exploración.
  */
-function extractMatchingLinks(html, baseUrl, pattern) {
+function extractMatchingLinks(html, baseUrl, pattern, diagnostico = null) {
   const $ = asDocument(html);
   const links = new Set();
   // Compatible con las llamadas que aún pasan la cadena del patrón
@@ -58,10 +59,56 @@ function extractMatchingLinks(html, baseUrl, pattern) {
     const absolute = toAbsoluteUrl(rawHref, baseUrl);
     if (!absolute) return;
 
+    // DIAGNÓSTICO (QW-D): se cuenta TODO enlace resoluble, case o no. Es lo
+    // que luego permite decir "había 240 enlaces y ninguno casaba", en vez
+    // de devolver una lista vacía sin explicación. No cambia lo que se
+    // descarga ni lo que se devuelve: solo se apunta.
+    if (diagnostico) {
+      diagnostico.enlacesVistos += 1;
+      anotarPrefijo(diagnostico, absolute);
+    }
+
     if (matcher.test(rawHref, absolute)) links.add(absolute);
   });
 
   return [...links];
+}
+
+/**
+ * Apunta el primer segmento de la ruta de un enlace.
+ *
+ * Sirve para proponer pistas cuando el patrón no casa con nada: los prefijos
+ * más repetidos de la página son, casi siempre, el patrón que el usuario
+ * buscaba. Se guarda solo el primer segmento porque es lo que se parece a un
+ * patrón escribible ("/videos/"), no la ruta entera.
+ */
+function anotarPrefijo(diagnostico, absolute) {
+  try {
+    const { pathname } = new URL(absolute);
+    const segmento = pathname.split('/').filter(Boolean)[0];
+    if (!segmento) return;
+    const prefijo = `/${segmento}/`;
+    diagnostico.prefijos.set(prefijo, (diagnostico.prefijos.get(prefijo) || 0) + 1);
+  } catch {
+    // Una URL que no se puede parsear no aporta pista
+  }
+}
+
+/** Estructura vacía de diagnóstico de la fase 1. */
+function nuevoDiagnostico() {
+  return {
+    enlacesVistos: 0,
+    prefijos: new Map(),
+    bloqueo: { sospechoso: false, motivos: [] },
+  };
+}
+
+/** Los `n` prefijos más frecuentes, como pista para el usuario. */
+function prefijosMasFrecuentes(diagnostico, n = 3) {
+  return [...diagnostico.prefijos.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([prefijo, veces]) => ({ prefijo, veces }));
 }
 
 /** Busca en un HTML las URLs cuya extensión real esté en `extensions`. */
@@ -97,17 +144,41 @@ async function renderPageOrFallback(url, { signal }) {
   }
 }
 
-/** Descarga una página con el motor elegido. */
-async function fetchPage(url, { useJavaScript, signal }) {
+/**
+ * Descarga una página con el motor elegido, observando señales de bloqueo.
+ *
+ * El cliente HTTP rechaza los 4xx, así que un bloqueo por código de estado
+ * llega dentro del error y nunca por el camino normal: hay que mirar las dos
+ * vías. Lo que se observa es SOSPECHA, no diagnóstico; ver lib/blocking.js.
+ */
+async function fetchPage(url, { useJavaScript, signal, diagnostico = null }) {
+  const anotar = observacion => {
+    if (diagnostico && observacion?.sospechoso) {
+      diagnostico.bloqueo = combinar([diagnostico.bloqueo, observacion]);
+    }
+  };
+
   if (useJavaScript) {
     try {
-      return await renderPage(url);
+      const html = await renderPage(url);
+      // Un challenge devuelto con 200 se ve igual de bien en el navegador:
+      // hay que mirar el contenido, no solo el estado.
+      anotar(analizarRespuesta({ html }));
+      return html;
     } catch (error) {
       logger.warn(`Puppeteer falló en ${url}, usando HTTP directo`, error.message);
-      return tryFetchHtml(url, { signal });
     }
   }
-  return tryFetchHtml(url, { signal });
+
+  try {
+    const html = await fetchHtml(url, { signal });
+    anotar(analizarRespuesta({ html }));
+    return html;
+  } catch (error) {
+    anotar(analizarError(error));
+    logger.warn(`No se pudo descargar ${url}`, error.message);
+    return null;
+  }
 }
 
 /**
@@ -138,6 +209,11 @@ async function collectLinks(options) {
   // protección contra ReDoS no serviría de nada.
   const matcher = createLinkMatcher(linkPattern);
 
+  // Diagnóstico de la fase 1: cuántos enlaces se vieron, qué prefijos son los
+  // más frecuentes y si el sitio parece estar bloqueando. No influye en lo
+  // que se descarga; sirve para poder explicar un resultado vacío.
+  const diagnostico = nuevoDiagnostico();
+
   const modo = resolveMode({ paginationMode, searchUrl, pageParam });
   const estrategia = ESTRATEGIAS[modo];
 
@@ -156,12 +232,21 @@ async function collectLinks(options) {
     endPage,
     signal,
     onProgress,
-    fetchPage: url => fetchPage(url, { useJavaScript, signal }),
-    extract: (html, baseUrl) => extractMatchingLinks(html, baseUrl, matcher),
+    fetchPage: url => fetchPage(url, { useJavaScript, signal, diagnostico }),
+    extract: (html, baseUrl) => extractMatchingLinks(html, baseUrl, matcher, diagnostico),
     listar: extension?.listar ? extension.listar.bind(extension) : null,
   });
 
-  return { ...resultado, paginationMode: modo, extension: extension?.name || null };
+  return {
+    ...resultado,
+    paginationMode: modo,
+    extension: extension?.name || null,
+    diagnostico: {
+      enlacesVistos: diagnostico.enlacesVistos,
+      prefijos: prefijosMasFrecuentes(diagnostico),
+      bloqueo: diagnostico.bloqueo,
+    },
+  };
 }
 
 /**
@@ -444,6 +529,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     truncated: linksTruncated,
     scroll: scrollInfo,
     paginationMode: modoUsado,
+    diagnostico,
   } = await collectLinks({
     searchUrl,
     pageParam,
@@ -464,6 +550,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     pattern: linkPattern || null,
     paginationMode: modoUsado,
     scroll: scrollInfo || null,
+    diagnostico,
   });
 
   let files = [];
@@ -530,6 +617,16 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     // Ficheros que estaban en la página pero no eran suyos
     discardedFiles,
     suspectFiles: fileDetails.filter(d => d.suspect).length,
+    /**
+     * Por qué el resultado puede estar vacío.
+     *
+     * `enlacesVistos` cuenta TODOS los enlaces de las páginas recorridas,
+     * casen o no con el patrón: comparado con `totalLinks` dice si el patrón
+     * se lo llevó todo por delante. `prefijos` son las rutas más repetidas,
+     * como pista de qué patrón querría el usuario. `bloqueo` es una SOSPECHA
+     * de que el sitio esté rechazando peticiones automáticas.
+     */
+    diagnostico,
     aborted: cancelled,
     timedOut,
     maxDurationMs: config.crawl.maxDurationMs,

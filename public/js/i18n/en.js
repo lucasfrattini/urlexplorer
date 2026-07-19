@@ -291,6 +291,15 @@ export const en = {
   'aviso.tope.tiempo': 'the scrolling time ran out',
   'aviso.tope.navegador': 'the browser stopped responding',
 
+  'aviso.patronSinCasar': 'The link pattern left every link out',
+  'aviso.patronSinCasar.body':
+    '{vistos} links were found across the pages walked and NONE match “{patron}”. Try one of the most frequent ones: {pistas}. Or leave it empty to collect them all.',
+  'aviso.patronSinCasar.sinPistas':
+    '{vistos} links were found across the pages walked and NONE match “{patron}”. Try leaving the pattern empty to see what the page brings.',
+  'aviso.bloqueo': 'The site may be blocking automated requests',
+  'aviso.bloqueo.body':
+    'This is a suspicion, not a certainty: {motivos}. If results come back empty or partial, try turning on “Open with a browser” in the advanced settings, and lowering the speed.',
+
   'aviso.soloEnlaces': 'Only links were collected, not files',
   'aviso.soloEnlaces.body':
     'Step 2 has “Just the list of links” selected, so no link was opened. Pick “The files inside”, choose the type you are after and explore again.',
