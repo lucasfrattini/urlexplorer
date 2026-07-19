@@ -1,140 +1,140 @@
 <div align="center">
 
+<img src="public/img/logo.png" alt="" width="96" height="96" />
+
 # URL Explorer
 
-**Explorador de enlaces y recursos multimedia para sitios paginados.**
+**A link and media explorer for paginated websites.**
 
-Recorre las páginas de una sección, extrae los enlaces que te interesan y
-localiza los ficheros que hay dentro de cada uno. Todo desde una interfaz web,
-con progreso en tiempo real.
+Walk through the pages of a section, extract the links you care about, and find
+the files inside each one — from a web interface, with live progress.
 
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
 ![Docker](https://img.shields.io/badge/docker-compose-informational)
-![Licencia](https://img.shields.io/badge/licencia-MIT-informational)
-![Tests](https://img.shields.io/badge/tests-263-success)
+![License](https://img.shields.io/badge/license-MIT-informational)
+![Tests](https://img.shields.io/badge/tests-269-success)
 
 </div>
 
 ---
 
-## Qué es
+## What it is
 
-URL Explorer es una herramienta **self-hosted** para explorar sitios web
-paginados de forma sistemática. Le indicas por dónde empezar, cómo pagina el
-sitio y qué buscas; ella recorre, filtra y te devuelve una lista limpia.
+URL Explorer is a **self-hosted** tool for exploring paginated websites
+systematically. You tell it where to start, how the site paginates and what you
+are looking for; it walks, filters and hands you back a clean list.
 
-Funciona en dos fases:
+It works in two phases:
 
-1. **Recorrer** — sigue la paginación y recoge los enlaces que coinciden con tu
-   patrón.
-2. **Explorar** — entra en cada enlace y localiza los ficheros de las
-   extensiones que hayas indicado.
+1. **Crawl** — follows the pagination and collects the links matching your
+   pattern.
+2. **Inspect** — opens each link and locates files with the extensions you
+   asked for.
 
-La segunda fase es opcional: si sólo quieres la lista de enlaces, la omite.
+The second phase is optional: if you only want the list of links, it is
+skipped.
 
-Incluye además un **analizador de página individual** que examina una única URL
-a fondo por cuatro vías: DOM renderizado, peticiones de red, reproductores
-incrustados y URLs dentro de scripts.
-
----
-
-## Características
-
-**Motor de recorrido**
-
-- Tres modos de paginación: por **parámetro** (`?page=2`), por **plantilla** en
-  la URL —que cubre rutas (`/page/{page}`), numeración con ceros (`{page:02}`)
-  y formatos poco habituales— y **scroll infinito**, para sitios que cargan más
-  resultados al bajar en vez de tener una URL por página.
-- **Autodetección de configuración**: pega la URL de resultados y la
-  herramienta propone patrón, paginación, extensiones y si hace falta
-  navegador, explicando el porqué de cada campo. Es una sugerencia editable,
-  nunca una configuración impuesta.
-- **Término de búsqueda parametrizado** con `{q}`: guardas el sitio una vez y
-  sólo cambias la palabra.
-- Filtro de enlaces por patrón —texto o **expresión regular** entre barras,
-  `/\/videos\/\d+/`, para distinguir fichas de páginas de sección— y filtro de
-  ficheros por **extensión real** del pathname, no por coincidencia de texto.
-- **Renderizado con navegador** opcional, aplicable a las dos fases, para sitios
-  que construyen el contenido con JavaScript.
-
-**Resultados**
-
-- **Progreso en tiempo real** por Server-Sent Events, con fases, barra de avance
-  y consola de hallazgos según aparecen.
-- **Cancelación efectiva**: al cancelar, el servidor deja de trabajar de verdad.
-- **Duración y tamaño de cada fichero** extraídos del HTML, sin peticiones
-  adicionales. El tamaño del servidor es exacto; el leído de la ficha se marca
-  con `~` para no confundirlos.
-- **Agrupación de duplicados** dentro de una misma búsqueda: el mismo contenido
-  servido desde dos sitios se pliega bajo un solo resultado. Nunca se descarta
-  nada, y un interruptor deshace la agrupación.
-- Filtro de inclusión y de **exclusión** (oculta lo que contenga ciertos
-  textos), ordenación por duración o tamaño, copia y exportación.
-
-**Configuraciones**
-
-- Guarda configuraciones de sitio y recupéralas desde un desplegable.
-- **Comparte una configuración como enlace**: la URL lleva todos los campos.
-- Filtro opcional que conserva sólo el material que declara **licencia abierta**
-  (Creative Commons, dominio público), leyendo los metadatos que publica el
-  sitio.
-
-**Extensibilidad**
-
-- Los sitios que el motor genérico no cubre se resuelven con **módulos
-  aislados** en `src/extensions/`, en vez de acumular casos particulares en el
-  núcleo. El cargador solo lee de ese directorio del repositorio: añadir una
-  extensión es añadir código revisado, nunca cargarlo desde fuera.
-
-**Operación**
-
-- **Docker** con reinicio automático y healthcheck.
-- Protección **SSRF**, rate limiting, límites de memoria y duración.
-- 263 tests, ESLint y Prettier.
+It also includes a **single-page analyzer** that examines one URL in depth
+through four routes: rendered DOM, network requests, embedded players and URLs
+found inside scripts.
 
 ---
 
-## Requisitos
+## Features
 
-- **Docker** y Docker Compose _(recomendado)_, **o**
-- **Node.js ≥ 20** y npm
+**Crawling engine**
 
-Para el modo navegador se usa Chromium. La imagen de Docker ya lo incluye; en
-instalación local lo aporta Puppeteer.
+- Three pagination modes: by **query parameter** (`?page=2`), by **template**
+  in the URL — which covers path-based pagination (`/page/{page}`), zero-padded
+  numbering (`{page:02}`) and less common shapes — and **infinite scroll**, for
+  sites that load more results as you scroll instead of having one URL per
+  page.
+- **Configuration auto-detection**: paste a results URL and the tool proposes a
+  link pattern, a pagination mechanism, file extensions and whether a browser is
+  needed, explaining the reasoning behind each field. It is an editable
+  suggestion, never an imposed configuration.
+- **Parameterized search term** with `{q}`: save a site once and only change the
+  keyword.
+- Link filtering by pattern — plain text or a **regular expression** between
+  slashes, `/\/videos\/\d+/`, to tell detail pages apart from section pages —
+  and file filtering by the **real extension** of the pathname, not by
+  substring matching.
+- Optional **browser rendering**, applied to both phases, for sites that build
+  their content with JavaScript.
+
+**Results**
+
+- **Live progress** over Server-Sent Events, with phases, a progress bar and
+  findings appearing as they are discovered.
+- **Real cancellation**: cancelling actually stops the work on the server.
+- **Duration and size** for each file, extracted from HTML that was already
+  downloaded, with no extra requests. Sizes reported by the server are exact;
+  sizes read from the page are marked with `~` so the two are never confused.
+- **Range filters** for duration and size, with two handles each. The bounds
+  come from the results you actually loaded, and filtering happens in the
+  browser — nothing is re-crawled.
+- **Duplicate grouping** within a single search: the same content served from
+  two places collapses into one row. Nothing is ever discarded, and a toggle
+  undoes the grouping.
+- Include and **exclude** text filters, sorting by duration or size, copy and
+  export.
+
+**Extensibility**
+
+- Sites the generic engine cannot handle are solved with **isolated modules**
+  under `src/extensions/`, instead of accumulating special cases in the core.
+  The loader only reads from that directory, so adding an extension means
+  adding reviewed code — never loading it from somewhere else.
+
+**Operations**
+
+- **Docker** with automatic restart and a healthcheck.
+- **SSRF** protection, rate limiting, memory and duration caps.
+- 269 tests, ESLint and Prettier.
 
 ---
 
-## Instalación
+## Requirements
 
-### Con Docker (recomendado)
+- **Docker** and Docker Compose _(recommended)_, **or**
+- **Node.js ≥ 20** and npm
+
+Browser mode uses Chromium. The Docker image already includes it; on a local
+install Puppeteer provides it.
+
+---
+
+## Installation
+
+### With Docker (recommended)
 
 ```bash
-git clone https://github.com/<tu-usuario>/urlexplorer.git
+git clone https://github.com/<your-user>/urlexplorer.git
 cd urlexplorer
 
-cp .env.example .env      # y edítalo a tu gusto
+cp .env.example .env      # then edit it
 docker compose up -d --build
 ```
 
-Disponible en **http://localhost:3001**.
+Available at **http://localhost:3001**.
 
-El contenedor se reinicia solo si el proceso muere y al arrancar la máquina.
+The container restarts on its own if the process dies, and when the machine
+boots.
 
 ```bash
-docker compose logs -f        # ver registro
-docker compose restart        # reiniciar
-docker compose down           # parar
-docker compose up -d --build  # tras cambiar el código
+docker compose logs -f        # follow the log
+docker compose restart        # restart
+docker compose down           # stop
+docker compose up -d --build  # after changing the code
 ```
 
-> El `--build` no es opcional: `docker compose up -d` a secas no recompila y
-> dejaría la imagen con el código anterior.
+> `--build` is not optional: a plain `docker compose up -d` does not rebuild,
+> and would leave the image running the previous code.
 
-### Sin Docker
+### Without Docker
 
 ```bash
-git clone https://github.com/<tu-usuario>/urlexplorer.git
+git clone https://github.com/<your-user>/urlexplorer.git
 cd urlexplorer
 
 npm install
@@ -142,226 +142,174 @@ cp .env.example .env
 npm start
 ```
 
-En el puerto que indiques en `.env` (3000 por defecto).
+Runs on the port set in `.env` (3000 by default).
 
 ```bash
-npm run dev     # recarga automática
+npm run dev     # auto-reload
 npm test        # tests
 npm run lint    # linter
-npm run check   # linter + formato + tests
+npm run check   # linter + formatting + tests
 ```
 
 ---
 
-## Configuración
+## Configuration
 
-Todo se ajusta por variables de entorno. `.env.example` documenta las opciones
-con sus valores por defecto; sólo `PORT` es necesaria para arrancar.
+Everything is set through environment variables. `.env.example` documents every
+option with its default; only `PORT` is required to boot.
 
-Las más relevantes:
+The most relevant ones:
 
-| Variable                           | Por defecto | Para qué                                             |
-| ---------------------------------- | ----------- | ---------------------------------------------------- |
-| `PORT`                             | `3000`      | Puerto del servidor                                  |
-| `ADMIN_TOKEN`                      | _(vacío)_   | Desbloquea las configuraciones guardadas (ver abajo) |
-| `CRAWL_MAX_PAGES`                  | `50`        | Máximo de páginas por exploración                    |
-| `CRAWL_MAX_FILES`                  | `5000`      | Tope de ficheros en memoria                          |
-| `CRAWL_MAX_DURATION_MS`            | `600000`    | Duración máxima de una exploración                   |
-| `BROWSER_ENABLED`                  | `true`      | Permitir el modo navegador                           |
-| `BROWSER_POOL_SIZE`                | `2`         | Pestañas simultáneas                                 |
-| `SCROLL_MAX_ROUNDS`                | `50`        | Cargas máximas en modo scroll                        |
-| `SCROLL_MAX_DURATION_MS`           | `120000`    | Tiempo máximo de la fase de scroll                   |
-| `SCROLL_MAX_ELEMENTS`              | `3000`      | Enlaces acumulados a partir de los cuales para       |
-| `THROTTLE_MIN_INTERVAL_MS`         | `250`       | Intervalo mínimo entre peticiones al mismo dominio   |
-| `THROTTLE_MAX_CONCURRENT_PER_HOST` | `4`         | Peticiones simultáneas por dominio                   |
-| `SECURITY_BLOCK_PRIVATE_ADDRESSES` | `true`      | Protección SSRF                                      |
-| `SECURITY_ALLOWED_HOSTS`           | _(vacío)_   | Lista blanca opcional de dominios                    |
-| `RATE_LIMIT_MAX_REQUESTS`          | `30`        | Peticiones por ventana                               |
-| `ADMIN_UNLOCK_MAX_ATTEMPTS`        | `5`         | Intentos de desbloqueo por minuto                    |
+| Variable                           | Default   | Purpose                                       |
+| ---------------------------------- | --------- | --------------------------------------------- |
+| `PORT`                             | `3000`    | Server port                                   |
+| `ADMIN_TOKEN`                      | _(empty)_ | Unlocks saved configurations (see below)      |
+| `CRAWL_MAX_PAGES`                  | `50`      | Maximum pages per exploration                 |
+| `CRAWL_MAX_FILES`                  | `5000`    | Cap on files held in memory                   |
+| `CRAWL_MAX_DURATION_MS`            | `600000`  | Maximum duration of one exploration           |
+| `BROWSER_ENABLED`                  | `true`    | Allow browser mode                            |
+| `BROWSER_POOL_SIZE`                | `2`       | Concurrent browser tabs                       |
+| `SCROLL_MAX_ROUNDS`                | `50`      | Maximum loads in infinite-scroll mode         |
+| `SCROLL_MAX_DURATION_MS`           | `120000`  | Time cap for the scrolling phase              |
+| `SCROLL_MAX_ELEMENTS`              | `3000`    | Accumulated links at which scrolling stops    |
+| `THROTTLE_MIN_INTERVAL_MS`         | `250`     | Minimum gap between requests to the same host |
+| `THROTTLE_MAX_CONCURRENT_PER_HOST` | `4`       | Concurrent requests per host                  |
+| `SECURITY_BLOCK_PRIVATE_ADDRESSES` | `true`    | SSRF protection                               |
+| `SECURITY_ALLOWED_HOSTS`           | _(empty)_ | Optional host allowlist                       |
+| `RATE_LIMIT_MAX_REQUESTS`          | `30`      | Requests per window                           |
+| `ADMIN_UNLOCK_MAX_ATTEMPTS`        | `5`       | Unlock attempts per minute                    |
 
 ### `ADMIN_TOKEN`
 
-Las configuraciones guardadas quedan detrás de un desbloqueo manual. Está
-pensado para el caso en que **varias personas comparten el mismo ordenador**:
-por defecto la herramienta aparece vacía, sin configuraciones visibles y sin
-posibilidad de guardar.
+Saved configurations sit behind a manual unlock. It is meant for the case where
+**several people share the same computer**: by default the tool shows up empty,
+with no visible configurations and no way to save one.
 
 ```env
-ADMIN_TOKEN=pon-aqui-tu-token
+ADMIN_TOKEN=put-your-own-token-here
 ```
 
-Si se deja vacío, el modo queda deshabilitado y la aplicación funciona con
-normalidad, simplemente sin configuraciones guardadas.
+Leave it empty and the mode is disabled entirely: the application works
+normally, simply without saved configurations, and the `/api/admin/*` routes
+answer `404` — there is no point advertising a door that is not there.
 
-Las configuraciones **se guardan en el servidor**, en `data/profiles.json`, no
-en el navegador. Ese directorio está en `.gitignore`: los sitios que configures
-no acaban en el repositorio. Una instalación nueva arranca sin ninguna, que es
-el comportamiento correcto.
+Configurations are stored **on the server**, in `data/profiles.json`, not in the
+browser. That directory is listed in `.gitignore`, so the sites you configure
+never reach the repository. A fresh install starts with none, which is the
+correct behaviour.
 
-Para desbloquear, **pulsa cinco veces el logo de la cabecera en menos de dos
-segundos** e introduce el token. El mismo gesto vuelve a bloquear. El
-desbloqueo vive en `sessionStorage`: al cerrar la pestaña, la herramienta
-vuelve a aparecer vacía para quien se siente después.
+To unlock, **click the header logo five times within two seconds** and enter the
+token. The same gesture locks it again. The unlock lives in `sessionStorage`:
+close the tab and the tool is blank again for whoever sits down next.
 
-Es un gate de uso cotidiano, no un control frente a un atacante decidido: quien
-comparte el ordenador puede mirar mientras escribes o leer el `sessionStorage`
-con la sesión abierta. Lo que sí garantiza es que las configuraciones no están
-en el código servido y que el guardado se valida en el servidor.
+This is a gate for everyday use, not a control against a determined attacker:
+anyone sharing the machine can watch you type, or read `sessionStorage` while
+the session is open. What it does guarantee is that configurations are not part
+of the served code, and that saving is validated on the server rather than by
+hiding a button.
 
-> **Nunca** pongas el token real en `.env.example` ni en ningún fichero
-> versionado. `.env` está en `.gitignore` precisamente por eso.
+> Never put a real token in `.env.example` or in any versioned file. `.env` is
+> in `.gitignore` for exactly this reason.
 
-### Seguridad
+### Security
 
-La protección SSRF viene activada e impide que la aplicación alcance
-direcciones de loopback, redes privadas, enlace local o multicast, incluso si
-un dominio público resuelve a una de ellas. Sólo desactívala para pruebas
-contra servidores locales, nunca en un despliegue accesible.
+SSRF protection is on by default and stops the application from reaching
+loopback, private, link-local or multicast addresses, even when a public domain
+resolves to one of them. Only turn it off to test against local fixtures, never
+on a reachable deployment.
 
 ---
 
-## Cómo se usa
+## Usage
 
-### Explorar un sitio
+### Exploring a site
 
-1. **URL de partida** — desde dónde empieza el recorrido. Admite dos
-   marcadores:
-   - `{q}` — el término a buscar
-   - `{page}` — el número de página (`{page:02}` si el sitio usa `01`, `02`, …)
-2. **Término a buscar** — lo que se inserta donde esté `{q}`.
-3. **Patrón de enlace** — qué enlaces te interesan. Vacío los coge todos.
-4. **Extensiones a buscar** — separadas por comas. Vacío omite la segunda fase.
+1. **Start URL** — where the walk begins. It accepts two placeholders:
+   - `{q}` — the search term
+   - `{page}` — the page number (`{page:02}` if the site uses `01`, `02`, …)
+2. **Search term** — inserted wherever `{q}` appears.
+3. **Link pattern** — which links you care about. Empty takes them all.
+4. **File extensions** — comma-separated. Empty skips the second phase.
 
-Si no quieres deducirlo a mano, pulsa **Detectar configuración**: abre la URL y
-propone los campos explicando en qué se basa. Revísalo antes de lanzar la
-búsqueda, porque es una sugerencia y puede equivocarse.
+If you would rather not work it out by hand, press **Detect configuration**: it
+opens the URL and proposes the fields, explaining what each guess is based on.
+Review it before launching, because it is a suggestion and it can be wrong.
 
-Averiguar cómo pagina un sitio a mano también es sencillo: pasa a la página 2 y
-mira qué cambia en su URL.
+Working it out manually is straightforward too: go to page 2 on the site and
+look at what changes in its URL.
 
-### Patrones de enlace
+### Link patterns
 
-| Patrón                 | Qué hace                                           |
-| ---------------------- | -------------------------------------------------- |
-| _(vacío)_              | Coge todos los enlaces                             |
-| `/videos/`             | El href original contiene ese texto                |
-| `https://sitio.com/v/` | La URL absoluta empieza así                        |
-| `gatos`                | La URL absoluta contiene ese texto                 |
-| `/\/videos\/\d+/`      | Expresión regular: `/videos/` seguido de un número |
+| Pattern                  | What it does                                      |
+| ------------------------ | ------------------------------------------------- |
+| _(empty)_                | Takes every link                                  |
+| `/videos/`               | The raw href contains that text                   |
+| `https://example.com/v/` | The absolute URL starts with it                   |
+| `cats`                   | The absolute URL contains that text               |
+| `/\/videos\/\d+/`        | Regular expression: `/videos/` followed by digits |
 
-Un patrón se interpreta como expresión regular si va **entre barras y contiene
-algún símbolo** (`\`, `^`, `$`, `\d`, `+`, …). `/videos/` a secas sigue siendo
-texto literal, para que las configuraciones ya guardadas no cambien de
-significado.
+A pattern is read as a regular expression when it is wrapped in slashes **and
+contains at least one metacharacter** (`\`, `^`, `$`, `\d`, `+`, …). A bare
+`/videos/` stays literal text, so configurations saved earlier keep their
+meaning.
 
-### Sitios con scroll infinito
+### Sites with infinite scroll
 
-Si el sitio no tiene botonera de páginas y va cargando al bajar, abre
-**Paginación y opciones avanzadas** y elige el modo _scroll_. Entonces:
+If a site has no pagination controls and loads more content as you scroll, open
+**Pagination and advanced options** and pick the _scroll_ mode. Then:
 
-- Hace falta **Renderizar con navegador**: sin él no hay scroll que valga.
-- El campo **Hasta** pasa a significar «número de cargas», no «número de
-  páginas».
-- La exploración para cuando dejan de aparecer resultados nuevos o cuando
-  alcanza uno de los topes de seguridad. Si para por un tope, la interfaz lo
-  dice: los resultados están incompletos.
+- **Browser rendering** is required: without it there is no scrolling.
+- The **To** field means "number of loads", not "number of pages".
+- The run stops when no new results appear, or when it hits one of the safety
+  caps. If it stops because of a cap the interface says so, because the results
+  are incomplete.
 
-| Lo que ves al pasar de página | Qué configuras                                     |
-| ----------------------------- | -------------------------------------------------- |
-| `ejemplo.com/videos?page=2`   | Parámetro de página: `page`                        |
-| `ejemplo.com/videos/page/2`   | URL de partida: `ejemplo.com/videos/page/{page}`   |
-| `ejemplo.com/lista/02.html`   | URL de partida: `ejemplo.com/lista/{page:02}.html` |
+### Filtering results
 
-Si la URL no cambia, el sitio pagina con JavaScript: abre las herramientas de
-desarrollo, pestaña **Red → Fetch/XHR**, pulsa la página 2 y copia la URL que
-aparece. Esa es la que funciona.
+Everything inside the results card acts on what is already loaded and filters in
+the browser; nothing there starts a new crawl.
 
-### Analizar una página
-
-En la pestaña **Videos**, introduce una URL para examinarla a fondo. Útil para
-diagnosticar: si el explorador encuentra enlaces pero ningún fichero, esta
-pestaña te dice qué hay realmente en esa página.
+The two range sliders take their bounds from the loaded results. The rule worth
+knowing: **a result with no known duration is not removed by the duration
+slider**. Filtering by data you do not have can only throw away good results, so
+that decision belongs to the "Hide without duration" and "Hide without size"
+toggles instead. The counter reads "showing X of Y", so it is always clear how
+much is being filtered out.
 
 ---
 
 ## API
 
-| Método | Ruta                 | Descripción                                            |
-| ------ | -------------------- | ------------------------------------------------------ |
-| `GET`  | `/api/health`        | Estado del servicio y límites vigentes                 |
-| `POST` | `/api/scrape`        | Exploración completa, respuesta única                  |
-| `GET`  | `/api/scrape/stream` | La misma exploración con progreso en tiempo real (SSE) |
-| `POST` | `/api/video/extract` | Análisis de una URL individual                         |
+| Method | Route                 | Purpose                               |
+| ------ | --------------------- | ------------------------------------- |
+| GET    | `/api/health`         | Status and active limits              |
+| POST   | `/api/scrape`         | Full exploration, single response     |
+| GET    | `/api/scrape/stream`  | The same, with SSE progress           |
+| POST   | `/api/scrape/detect`  | Propose a configuration for a URL     |
+| POST   | `/api/video/extract`  | Analyze a single URL                  |
+| POST   | `/api/admin/unlock`   | Validate the admin token              |
+| GET    | `/api/admin/profiles` | Saved configurations — token required |
+| PUT    | `/api/admin/profiles` | Replace the list — token required     |
 
-```bash
-curl -X POST http://localhost:3001/api/scrape \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "searchUrl": "https://ejemplo.com/buscar?q={q}",
-    "searchTerm": "paisajes",
-    "pageParam": "page",
-    "linkPattern": "/videos/",
-    "fileExtensions": ".mp4,.webm",
-    "endPage": 3
-  }'
-```
+Any `GET` that does not start with `/api/` serves the frontend shell. Views are
+routed by hash: `#/explorer`, `#/video`.
 
 ---
 
-## Arquitectura
+## Responsible use
 
-```
-server.js              arranque y apagado ordenado
-src/
-  app.js               aplicación Express y cabeceras de seguridad
-  config/              toda la configuración, ajustable por entorno
-  lib/                 url, ssrf, http, throttle, browser, license, media
-  services/            scraper (dos fases) y video (análisis individual)
-  routes/              endpoints
-  middleware/          rate limiting y manejo de errores
-public/                interfaz web, ES modules sin build
-tests/                 133 tests con node:test
-```
+This tool sends requests to third-party websites. Use it on sites you are
+allowed to access, respect their terms of service and their `robots.txt`, and
+keep the throttling defaults in place — they exist so that a run does not hammer
+the site you point it at.
 
-El frontend es JavaScript nativo sin empaquetador: el despliegue es
-`npm start` sin pipeline de compilación, y eso permite servir una política de
-seguridad de contenido estricta sin `unsafe-inline`.
+The license filter can restrict results to material that declares an open
+license (Creative Commons, public domain), based on the metadata the site itself
+publishes. Note that the absence of a license means "all rights reserved", not
+"free to use".
 
 ---
 
-## Uso responsable
-
-Esta herramienta automatiza algo que ya puedes hacer a mano en un navegador,
-pero mucho más rápido. Con eso vienen responsabilidades:
-
-- **Respeta las condiciones de uso** de los sitios que explores. Muchos
-  prohíben expresamente el acceso automatizado.
-- **El contenido tiene autor.** Que un fichero sea accesible no significa que
-  sea libre de usar. La ausencia de licencia declarada equivale a _todos los
-  derechos reservados_, no a dominio público.
-- **No satures los servidores ajenos.** La herramienta limita por defecto las
-  peticiones simultáneas y el intervalo entre ellas por dominio; súbelos con
-  criterio.
-- La herramienta no elude ningún control de acceso ni protección técnica, y no
-  está pensada para ello.
-
-Úsala con contenido propio, con material de licencia abierta, o allí donde
-tengas permiso.
-
----
-
-## Contribuir
-
-```bash
-npm run check   # linter + formato + tests: debe pasar antes de un commit
-```
-
-Las incidencias y propuestas son bienvenidas. Si vas a añadir soporte para un
-tipo de paginación nuevo, `src/lib/url.js` y `src/services/scraper.js` son los
-puntos de entrada.
-
----
-
-## Licencia
+## License
 
 MIT.
