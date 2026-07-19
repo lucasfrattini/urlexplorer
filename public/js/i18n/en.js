@@ -102,6 +102,11 @@ export const en = {
   'resultados.copiados': '{n} links copied',
   'resultados.noCopiado': 'Could not copy to the clipboard',
   'resultados.descargados': '{n} links downloaded',
+  'resultados.csv': 'CSV',
+  'resultados.json': 'JSON',
+  'resultados.lista': 'List',
+  'resultados.lista.title': 'One URL per line, to paste into a download manager',
+  'resultados.exportados': '{n} results exported as {formato}',
   'resultados.sinCoincidencias': 'No matches',
   'resultados.sinCoincidencias.texto':
     'No result passes the current filters. Try widening the ranges or turning the switches off.',

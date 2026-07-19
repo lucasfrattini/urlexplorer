@@ -10,6 +10,7 @@ import {
 } from '../dom.js';
 import { createRangeFilter, formatDuration, formatBytes } from './rangeSlider.js';
 import { t, tp, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
+import { aCSV, aJSON, aListaDeDescarga, construirFilas } from '../exportFormats.js';
 
 /**
  * Lista de resultados con filtros y exportación.
@@ -87,6 +88,52 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     },
   });
   texto(downloadButton, 'resultados.descargar');
+
+  /**
+   * Exportar en los otros tres formatos.
+   *
+   * Todo el dato ya está aquí: no hace falta ninguna ruta nueva. Se exporta
+   * lo VISIBLE (`filtered`), no todo, porque es lo que el usuario tiene
+   * delante y ha filtrado a propósito.
+   */
+  function filasExportables() {
+    return construirFilas(filtered, {
+      info: url => meta.get(url),
+      grupoDe: url => (plegarDuplicados ? grupos.get(url) : null),
+    });
+  }
+
+  const crearBotonExportar = (claveTexto, extension, formato, construir, tipo) => {
+    const boton = el('button', {
+      className: 'button button--secondary button--small',
+      attrs: { type: 'button' },
+      on: {
+        click: () => {
+          const filas = filasExportables();
+          downloadText(filename.replace(/\.txt$/, extension), construir(filas), tipo);
+          toast(t('resultados.exportados', { n: filas.length, formato }));
+        },
+      },
+    });
+    texto(boton, claveTexto);
+    return boton;
+  };
+
+  const csvButton = crearBotonExportar('resultados.csv', '.csv', 'CSV', aCSV, 'text/csv');
+  const jsonButton = crearBotonExportar(
+    'resultados.json',
+    '.json',
+    'JSON',
+    filas => aJSON(filas, { filtrado: filtered.length !== items.length }),
+    'application/json'
+  );
+  const listaButton = crearBotonExportar(
+    'resultados.lista',
+    '-lista.txt',
+    'lista',
+    aListaDeDescarga
+  );
+  atributo(listaButton, 'title', 'resultados.lista.title');
 
   /* ── Filtros de texto ────────────────────────────────────────────── */
 
@@ -243,7 +290,10 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     children: [
       texto(el('h3', { className: 'card__title' }), 'resultados.titulo'),
       contador,
-      el('div', { className: 'results__actions', children: [copyButton, downloadButton] }),
+      el('div', {
+        className: 'results__actions',
+        children: [copyButton, downloadButton, csvButton, jsonButton, listaButton],
+      }),
     ],
   });
 
@@ -299,6 +349,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     const hayResultados = filtered.length > 0;
     copyButton.disabled = !hayResultados;
     downloadButton.disabled = !hayResultados;
+    for (const boton of [csvButton, jsonButton, listaButton]) boton.disabled = !hayResultados;
     columnas.hidden = !hayResultados;
 
     if (!hayResultados) {

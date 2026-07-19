@@ -102,6 +102,11 @@ export const es = {
   'resultados.copiados': '{n} enlaces copiados',
   'resultados.noCopiado': 'No se pudo copiar al portapapeles',
   'resultados.descargados': '{n} enlaces descargados',
+  'resultados.csv': 'CSV',
+  'resultados.json': 'JSON',
+  'resultados.lista': 'Lista',
+  'resultados.lista.title': 'Una URL por línea, para pegar en un gestor de descargas',
+  'resultados.exportados': '{n} resultados exportados en {formato}',
   'resultados.sinCoincidencias': 'Sin coincidencias',
   'resultados.sinCoincidencias.texto':
     'Ningún resultado pasa los filtros actuales. Prueba a ampliar los rangos o a desactivar los interruptores.',

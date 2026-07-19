@@ -198,9 +198,15 @@ export function copyIconButton(value, { labelKey = 'copiar.estaUrl' } = {}) {
   return boton;
 }
 
-/** Descarga un texto como fichero, sin pasar por el servidor. */
-export function downloadText(filename, text) {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+/**
+ * Descarga un texto como fichero, sin pasar por el servidor.
+ *
+ * `tipo` importa para que el sistema operativo y la hoja de cálculo abran el
+ * fichero con el programa correcto: un CSV servido como text/plain se abre
+ * en un editor de texto.
+ */
+export function downloadText(filename, text, tipo = 'text/plain') {
+  const blob = new Blob([text], { type: `${tipo};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   const anchor = el('a', { attrs: { href: url, download: filename } });
   document.body.append(anchor);
