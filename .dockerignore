@@ -15,3 +15,6 @@ Dockerfile
 .dockerignore
 compose.yaml
 *.md
+# Los perfiles llevan nombres de sitios: no se hornean en la imagen.
+# compose.yaml los monta en tiempo de ejecucion.
+data
