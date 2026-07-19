@@ -140,7 +140,7 @@ export function createExplorerView(container, { limits }) {
           makeField(
             'linkPattern',
             'Patrón de enlace',
-            'Vacío = todos. "/videos/" busca en el href original; "https://…" compara desde el principio.',
+            'Vacío = todos. "/videos/" busca en el href original; "https://…" compara desde el principio. Entre barras y con algún símbolo es una expresión regular: /\\/videos\\/\\d+/ solo coge las fichas numeradas.',
             { type: 'text', placeholder: '/videos/', spellcheck: 'false' }
           ),
           makeField(

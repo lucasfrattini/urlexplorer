@@ -19,6 +19,7 @@ const {
 } = require('../lib/url');
 const { detectLicense } = require('../lib/license');
 const { extractDuration, extractSizeBytes, formatFileSize } = require('../lib/media');
+const { createLinkMatcher } = require('../lib/pattern');
 const { fetchContentLength } = require('../lib/http');
 
 /** Selectores donde puede aparecer una referencia a un fichero. */
@@ -28,37 +29,31 @@ const FILE_SELECTORS =
 /**
  * Extrae los links de un HTML que coinciden con `pattern`.
  *
- * Modos de `pattern`, según cómo empiece:
- *   - vacío        → todos los links
- *   - "/..."       → se compara contra el href ORIGINAL del documento
- *   - "http..."    → se compara con startsWith sobre la URL absoluta
- *   - otra cosa    → se compara con includes sobre la URL absoluta
+ * Modos de `pattern`, según cómo esté escrito:
+ *   - vacío             → todos los links
+ *   - "/^\/videos\/\d+/" → expresión regular (barras + algún metacarácter)
+ *   - "/..."            → se compara contra el href ORIGINAL del documento
+ *   - "http..."         → se compara con startsWith sobre la URL absoluta
+ *   - otra cosa         → se compara con includes sobre la URL absoluta
+ *
+ * Acepta un matcher ya compilado como tercer argumento. Compilar una vez por
+ * exploración y no una por enlace no es solo cuestión de velocidad: es parte
+ * de la defensa contra ReDoS, porque el presupuesto de tiempo se acumula en
+ * el propio matcher a lo largo de toda la exploración.
  */
 function extractMatchingLinks(html, baseUrl, pattern) {
   const $ = cheerio.load(html);
   const links = new Set();
-  const hasPattern = typeof pattern === 'string' && pattern.trim() !== '';
+  // Compatible con las llamadas que aún pasan la cadena del patrón
+  const matcher =
+    typeof pattern === 'object' && pattern !== null ? pattern : createLinkMatcher(pattern);
 
   $('a[href]').each((_, element) => {
     const rawHref = $(element).attr('href');
     const absolute = toAbsoluteUrl(rawHref, baseUrl);
     if (!absolute) return;
 
-    if (!hasPattern) {
-      links.add(absolute);
-      return;
-    }
-
-    let matches;
-    if (pattern.startsWith('/')) {
-      matches = rawHref.includes(pattern);
-    } else if (/^https?:\/\//i.test(pattern)) {
-      matches = absolute.startsWith(pattern);
-    } else {
-      matches = absolute.includes(pattern);
-    }
-
-    if (matches) links.add(absolute);
+    if (matcher.test(rawHref, absolute)) links.add(absolute);
   });
 
   return [...links];
@@ -128,6 +123,10 @@ async function collectLinks(options) {
   } = options;
 
   const links = new Set();
+  // El patrón se compila UNA vez para toda la exploración: si fuese una vez
+  // por página, cada una empezaría con el presupuesto de tiempo a cero y la
+  // protección contra ReDoS no serviría de nada.
+  const matcher = createLinkMatcher(linkPattern);
   // Hay paginación si se dio un parámetro O si la URL trae una plantilla {page}
   const usePagination = hasPageTemplate(searchUrl) || Boolean(pageParam && pageParam.trim() !== '');
   let pagesScraped = 0;
@@ -137,7 +136,7 @@ async function collectLinks(options) {
     const html = await fetchPage(searchUrl, { useJavaScript, signal });
     if (html) {
       pagesScraped = 1;
-      for (const link of extractMatchingLinks(html, searchUrl, linkPattern)) {
+      for (const link of extractMatchingLinks(html, searchUrl, matcher)) {
         if (links.size >= config.crawl.maxLinks) {
           truncated = true;
           break;
@@ -161,7 +160,7 @@ async function collectLinks(options) {
     }
 
     pagesScraped += 1;
-    const pageLinks = extractMatchingLinks(html, pageUrl, linkPattern);
+    const pageLinks = extractMatchingLinks(html, pageUrl, matcher);
 
     for (const link of pageLinks) {
       if (links.size >= config.crawl.maxLinks) {
