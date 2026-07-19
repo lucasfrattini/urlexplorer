@@ -96,6 +96,11 @@ export function saveAdminProfiles(profiles) {
  * Devuelve un objeto con `close()` para que la UI pueda cancelar: al cerrar el
  * EventSource, el servidor recibe el 'close' y aborta el trabajo.
  */
+/** Frena una exploración en curso. El stream sigue abierto y cierra solo. */
+export function pauseScrape(jobId) {
+  return request('/scrape/pause', { method: 'POST', body: JSON.stringify({ jobId }) });
+}
+
 export function openScrapeStream(params, handlers = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

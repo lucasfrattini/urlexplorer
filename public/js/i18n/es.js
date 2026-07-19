@@ -83,6 +83,19 @@ export const es = {
   'progreso.deTotal': '{actual} de {total} · {url}',
   'progreso.hallados.uno': '{n} fichero encontrado',
   'progreso.hallados.varios': '{n} ficheros encontrados',
+  'progreso.frenar': 'Frenar',
+  'progreso.frenar.title':
+    'Para aquí y agrupa lo encontrado. Después puedes continuar donde lo dejaste.',
+  'progreso.frenando': 'Frenando…',
+  'progreso.frenada': 'Frenada: {n} enlaces sin mirar',
+  'explorer.continuar': 'Continuar donde lo dejé',
+  'explorer.continuar.title': 'Sigue con los {n} enlaces que quedaron sin mirar',
+  'aviso.frenada': 'Exploración frenada',
+  'aviso.frenada.body':
+    'Quedan {n} enlaces sin mirar. Lo encontrado hasta aquí ya está agrupado y ordenado. Pulsa «Continuar donde lo dejé» para seguir, o quédate con esto.',
+  'error.trabajoCaducado': 'La exploración frenada ya no está disponible',
+  'error.trabajoCaducado.body':
+    'Se guarda en memoria y caduca, o el servidor se ha reiniciado. Hay que empezar de nuevo.',
   'progreso.cancelada': 'Búsqueda cancelada',
 
   /* ── Filtros de rango ──────────────────────────────────────────── */
@@ -119,6 +132,8 @@ export const es = {
   'resultados.grupo.noEsDuplicado.title': 'Sácalo del grupo y devuélvelo a la lista principal',
   'resultados.grupo.sacado': 'Sacado del grupo',
   'resultados.grupo.agrupadoPor': 'Agrupado por {motivo}',
+  'resultados.grupo.elegido': 'elegido',
+  'resultados.grupo.elegido.title': 'Es el que se muestra plegado: el más pesado del grupo',
   'resultados.sinCoincidencias': 'Sin coincidencias',
   'resultados.sinCoincidencias.texto':
     'Ningún resultado pasa los filtros actuales. Prueba a ampliar los rangos o a desactivar los interruptores.',

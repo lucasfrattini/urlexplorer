@@ -272,6 +272,13 @@ async function findFiles(urls, options) {
     withThumbnails = false,
     licenseFilter,
     signal,
+    /**
+     * Objeto con `.pausado`. Cuando se pone a true, los workers dejan de
+     * COGER trabajo nuevo pero los que ya están en vuelo terminan: frenar no
+     * es abortar, y tirar a medias una página ya descargada sería perder
+     * trabajo hecho por nada.
+     */
+    pausa = null,
     onProgress,
     onFilesFound,
   } = options;
@@ -305,6 +312,9 @@ async function findFiles(urls, options) {
   async function worker() {
     while (cursor < urls.length) {
       if (signal?.aborted || truncated) return;
+      // Frenado: no se coge nada más. `cursor` queda justo en el primer
+      // pendiente, que es lo que se guarda para poder continuar.
+      if (pausa?.pausado) return;
 
       const index = cursor;
       cursor += 1;
@@ -494,6 +504,9 @@ async function findFiles(urls, options) {
     truncated,
     discardedFiles: descartados,
     skippedByLicense,
+    // Lo que faltaba por mirar cuando se frenó
+    pendientes: pausa?.pausado ? urls.slice(cursor) : [],
+    paused: Boolean(pausa?.pausado),
   };
 }
 
@@ -501,7 +514,16 @@ async function findFiles(urls, options) {
  * Crawl completo: fase 1 (+ fase 2 si hay extensiones).
  * `emit` recibe los eventos de progreso; es lo que alimenta el SSE.
  */
-async function crawl(params, { signal, emit = () => {} } = {}) {
+async function crawl(params, opciones = {}) {
+  const {
+    signal,
+    emit = () => {},
+    pausa = null,
+    /** Enlaces ya obtenidos: al continuar, la fase 1 no se repite. */
+    linksPrevios = null,
+    /** Ficheros ya encontrados antes de frenar, para fundirlos al final. */
+    detallesPrevios = [],
+  } = opciones;
   const {
     searchUrl,
     pageParam = '',
@@ -529,37 +551,52 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
     AbortSignal.timeout(config.crawl.maxDurationMs),
   ]);
 
-  emit({ type: 'phase1_start' });
+  /**
+   * Al CONTINUAR no se repite la fase 1.
+   *
+   * Los enlaces ya se recorrieron antes de frenar; volver a pedirlos sería
+   * machacar el sitio para llegar exactamente a la misma lista.
+   */
+  let links = linksPrevios;
+  let pagesScraped = 0;
+  let linksTruncated = false;
+  let scrollInfo = null;
+  let modoUsado = paginationMode;
+  let diagnostico = null;
 
-  const {
-    links,
-    pagesScraped,
-    truncated: linksTruncated,
-    scroll: scrollInfo,
-    paginationMode: modoUsado,
-    diagnostico,
-  } = await collectLinks({
-    searchUrl,
-    pageParam,
-    paginationMode,
-    linkPattern,
-    startPage,
-    endPage,
-    useJavaScript,
-    signal: timeoutSignal,
-    onProgress: progress => emit({ type: 'phase1_progress', ...progress }),
-  });
+  if (links === null) {
+    emit({ type: 'phase1_start' });
 
-  emit({
-    type: 'phase1_complete',
-    totalLinks: links.length,
-    pagesScraped,
-    truncated: linksTruncated,
-    pattern: linkPattern || null,
-    paginationMode: modoUsado,
-    scroll: scrollInfo || null,
-    diagnostico,
-  });
+    const fase1 = await collectLinks({
+      searchUrl,
+      pageParam,
+      paginationMode,
+      linkPattern,
+      startPage,
+      endPage,
+      useJavaScript,
+      signal: timeoutSignal,
+      onProgress: progress => emit({ type: 'phase1_progress', ...progress }),
+    });
+
+    links = fase1.links;
+    pagesScraped = fase1.pagesScraped;
+    linksTruncated = fase1.truncated;
+    scrollInfo = fase1.scroll;
+    modoUsado = fase1.paginationMode;
+    diagnostico = fase1.diagnostico;
+
+    emit({
+      type: 'phase1_complete',
+      totalLinks: links.length,
+      pagesScraped,
+      truncated: linksTruncated,
+      pattern: linkPattern || null,
+      paginationMode: modoUsado,
+      scroll: scrollInfo || null,
+      diagnostico,
+    });
+  }
 
   let files = [];
   let fileDetails = [];
@@ -567,6 +604,8 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
   let filesTruncated = false;
   let skippedByLicense = [];
   let discardedFiles = 0;
+  let pendientes = [];
+  let paused = false;
 
   if (extensions.length > 0 && links.length > 0 && !timeoutSignal.aborted) {
     emit({ type: 'phase2_start', totalPages: links.length });
@@ -578,6 +617,7 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
       licenseFilter,
       withSizes,
       withThumbnails,
+      pausa,
       signal: timeoutSignal,
       onProgress: progress => emit({ type: 'phase2_progress', ...progress }),
       onFilesFound: payload => emit({ type: 'files_found', ...payload }),
@@ -585,6 +625,8 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
 
     files = result.files;
     fileDetails = result.details ?? [];
+    pendientes = result.pendientes ?? [];
+    paused = result.paused === true;
     failures = result.failures;
     filesTruncated = result.truncated;
     skippedByLicense = result.skippedByLicense ?? [];
@@ -601,6 +643,21 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
   // igual que antes, y los grupos van aparte para que la interfaz pueda
   // plegarlos y el usuario deshacerlo. Descartar en silencio le haría perder
   // resultados legítimos sin enterarse.
+  /**
+   * Al continuar, lo de antes y lo nuevo son UNA sola lista.
+   *
+   * Se funden ANTES de agrupar duplicados: si se agrupara cada tanda por su
+   * cuenta, dos copias del mismo vídeo encontradas en tandas distintas no se
+   * verían nunca como duplicadas. El usuario frenó y siguió; para él es una
+   * exploración, no dos.
+   */
+  if (detallesPrevios.length > 0) {
+    const porUrl = new Map(detallesPrevios.map(d => [d.url, d]));
+    for (const detalle of fileDetails) porUrl.set(detalle.url, detalle);
+    fileDetails = [...porUrl.values()];
+    files = [...new Set([...detallesPrevios.map(d => d.url), ...files])];
+  }
+
   const { grupos, totalDuplicados } = groupDuplicates(fileDetails);
 
   /**
@@ -657,6 +714,13 @@ async function crawl(params, { signal, emit = () => {} } = {}) {
      * de que el sitio esté rechazando peticiones automáticas.
      */
     diagnostico,
+    /**
+     * Frenado a medias: quedan enlaces por mirar y se pueden continuar.
+     * `pendientes` NO va al cliente —son miles de URLs— sino que lo guarda
+     * el registro de trabajos; ver routes/scrape.js.
+     */
+    paused,
+    pendientes,
     aborted: cancelled,
     timedOut,
     maxDurationMs: config.crawl.maxDurationMs,

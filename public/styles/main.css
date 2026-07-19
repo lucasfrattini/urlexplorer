@@ -2096,3 +2096,21 @@ a {
     justify-content: flex-end;
   }
 }
+
+/* El representante encabeza el panel, marcado: sin él no se puede juzgar si
+   la elección fue buena, porque no hay contra qué comparar los pesos. */
+.miembro--elegido {
+  border-color: var(--c-success);
+  background: var(--c-success-soft);
+}
+
+.miembro__cabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.miembro__elegido {
+  flex-shrink: 0;
+}

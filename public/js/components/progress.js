@@ -61,13 +61,24 @@ export function createProgressPanel() {
   atributo(feed, 'aria-label', 'progreso.ficherosAria');
   feed.hidden = true;
 
-  const cancelButton = texto(
-    el('button', {
-      className: 'button button--secondary button--small',
-      attrs: { type: 'button' },
-    }),
-    'progreso.cancelar'
-  );
+  /**
+   * "Frenar", no "Cancelar".
+   *
+   * Cancelar tiraba el trabajo hecho. Frenar para la fase 2 donde esté,
+   * agrupa lo encontrado y deja poder continuar: es lo que se quiere casi
+   * siempre cuando una exploración se está haciendo larga.
+   */
+  const cancelButton = el('button', {
+    className: 'button button--secondary button--small',
+    attrs: { type: 'button' },
+  });
+  atributo(cancelButton, 'title', 'progreso.frenar.title');
+
+  let frenando = false;
+  const refrescarFrenar = () => {
+    cancelButton.textContent = t(frenando ? 'progreso.frenando' : 'progreso.frenar');
+  };
+  alCambiarIdioma(refrescarFrenar);
 
   const summary = el('p', { className: 'field__hint', text: '' });
 
@@ -122,7 +133,14 @@ export function createProgressPanel() {
   return {
     root,
     onCancel(handler) {
-      cancelButton.addEventListener('click', handler);
+      cancelButton.addEventListener('click', () => {
+        // Se marca en el acto: frenar tarda lo que tarden las páginas en
+        // vuelo, y sin señal parecería que el botón no ha hecho nada.
+        frenando = true;
+        cancelButton.disabled = true;
+        refrescarFrenar();
+        handler();
+      });
     },
 
     reset() {
@@ -130,6 +148,8 @@ export function createProgressPanel() {
       clear(feed);
       feed.hidden = true;
       cancelButton.disabled = false;
+      frenando = false;
+      refrescarFrenar();
       resumenClave = null;
       summary.textContent = '';
       setPhase(phase1, phase1Detail, 'idle', 'progreso.enEspera');

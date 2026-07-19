@@ -767,7 +767,16 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     const grupo = grupos.get(representante);
     const motivo = grupo?.motivos?.[0]?.texto || t('resultados.duplicados.motivoPorDefecto');
 
-    const filas = miembros.map(miembroUrl => {
+    /**
+     * El REPRESENTANTE va el primero, marcado como "elegido".
+     *
+     * Sin él no se puede juzgar la elección: para ver si el que quedó fuera
+     * era mejor hay que tener los dos pesos y las dos duraciones uno debajo
+     * del otro, con el mismo formato. Tenerlo arriba en la fila y a los demás
+     * aquí obliga a comparar entre dos sitios distintos.
+     */
+    const filas = [representante, ...miembros].map(miembroUrl => {
+      const esElegido = miembroUrl === representante;
       const info = meta.get(miembroUrl);
 
       const mini = info?.thumbnail
@@ -787,13 +796,25 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       const aprox = info?.sizeApproximate === true;
 
       return el('div', {
-        className: 'miembro',
+        className: esElegido ? 'miembro miembro--elegido' : 'miembro',
         children: [
           mini,
           el('div', {
             className: 'miembro__datos',
             children: [
-              safeLink(miembroUrl, { className: 'miembro__url' }),
+              el('div', {
+                className: 'miembro__cabecera',
+                children: [
+                  safeLink(miembroUrl, { className: 'miembro__url' }),
+                  esElegido
+                    ? el('span', {
+                        className: 'badge badge--success miembro__elegido',
+                        text: t('resultados.grupo.elegido'),
+                        attrs: { title: t('resultados.grupo.elegido.title') },
+                      })
+                    : null,
+                ],
+              }),
               el('div', {
                 className: 'miembro__meta',
                 children: [
@@ -815,18 +836,22 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
             className: 'miembro__acciones',
             children: [
               copyIconButton(miembroUrl),
-              el('button', {
-                className: 'button button--secondary button--small miembro__sacar',
-                text: t('resultados.grupo.noEsDuplicado'),
-                attrs: { type: 'button', title: t('resultados.grupo.noEsDuplicado.title') },
-                on: {
-                  click: clickEvent => {
-                    clickEvent.preventDefault();
-                    clickEvent.stopPropagation();
-                    sacarDelGrupo(miembroUrl);
-                  },
-                },
-              }),
+              // El elegido no lleva "no es duplicado": es el que representa
+              // al grupo, sacarlo de sí mismo no significa nada.
+              esElegido
+                ? null
+                : el('button', {
+                    className: 'button button--secondary button--small miembro__sacar',
+                    text: t('resultados.grupo.noEsDuplicado'),
+                    attrs: { type: 'button', title: t('resultados.grupo.noEsDuplicado.title') },
+                    on: {
+                      click: clickEvent => {
+                        clickEvent.preventDefault();
+                        clickEvent.stopPropagation();
+                        sacarDelGrupo(miembroUrl);
+                      },
+                    },
+                  }),
             ],
           }),
         ],

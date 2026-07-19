@@ -1,5 +1,5 @@
 import { el, setChildren, clear, alertBox, stat, show, toast } from '../dom.js';
-import { openScrapeStream, detectConfig } from '../api.js';
+import { openScrapeStream, detectConfig, pauseScrape } from '../api.js';
 import { createProgressPanel } from '../components/progress.js';
 import { createResultList } from '../components/resultList.js';
 import { createProfileBar, configFromUrl } from '../components/profiles.js';
@@ -84,6 +84,15 @@ export function createExplorerView(container, { limits }) {
   // hay que deshabilitarlos mientras se explora.
   const uiInputs = [];
   let stream = null;
+  /**
+   * Exploración frenada a medias, si la hay.
+   *
+   * `jobIdActual` es el trabajo en curso, para poder decirle "frena".
+   * `jobIdPendiente` es el que quedó a medias y se puede continuar; el
+   * servidor guarda sus enlaces pendientes, aquí solo vive el identificador.
+   */
+  let jobIdActual = null;
+  let jobIdPendiente = null;
   /**
    * Marca "Otro" a mano, para escribir extensiones que no son ningún preset.
    *
@@ -464,6 +473,13 @@ export function createExplorerView(container, { limits }) {
     attrs: { type: 'button' },
   });
 
+  /** Aparece solo cuando hay una exploración frenada que continuar. */
+  const continueButton = el('button', {
+    className: 'button',
+    attrs: { type: 'button' },
+  });
+  show(continueButton, false);
+
   /**
    * Los dos botones que cambian de texto mientras trabajan.
    *
@@ -480,7 +496,10 @@ export function createExplorerView(container, { limits }) {
     submitButton.textContent = t(explorando ? 'explorer.explorando' : 'explorer.explorar');
     detectButton.textContent = t(detectando ? 'explorer.analizando' : 'explorer.detectar');
   };
-  alCambiarIdioma(refrescarBotones);
+  alCambiarIdioma(() => {
+    refrescarBotones();
+    if (!continueButton.hidden) continueButton.textContent = t('explorer.continuar');
+  });
   atributo(detectButton, 'title', 'explorer.detectar.title');
   texto(resetButton, 'explorer.limpiar');
 
@@ -502,7 +521,10 @@ export function createExplorerView(container, { limits }) {
       advanced,
 
       makeStep(3, 'explorer.paso3.titulo', null, [
-        el('div', { className: 'button-row', children: [submitButton, detectButton, resetButton] }),
+        el('div', {
+          className: 'button-row',
+          children: [submitButton, continueButton, detectButton, resetButton],
+        }),
       ]),
 
       detectSlot,
@@ -967,14 +989,66 @@ export function createExplorerView(container, { limits }) {
   function stopStream({ aborted = false } = {}) {
     stream?.close();
     stream = null;
+    jobIdActual = null;
     setBusy(false);
     progress.finish({ aborted });
   }
 
-  progress.onCancel(() => stopStream({ aborted: true }));
+  /**
+   * Frenar NO cierra el stream.
+   *
+   * Se le pide al servidor que pare, y el propio crawl cierra normalmente
+   * —agrupando duplicados— con lo que lleve. Cerrar aquí a lo bruto tiraría
+   * justo el resumen que se quiere conservar.
+   */
+  progress.onCancel(async () => {
+    if (!jobIdActual) {
+      stopStream({ aborted: true });
+      return;
+    }
+    try {
+      await pauseScrape(jobIdActual);
+    } catch {
+      // Si no se pudo avisar, se corta a la antigua: mejor parar que seguir
+      stopStream({ aborted: true });
+    }
+  });
+
+  /** Muestra u oculta "continuar" según haya algo pendiente. */
+  function actualizarContinuar(pendientes) {
+    const hayPendiente = Boolean(jobIdPendiente) && pendientes > 0;
+    show(continueButton, hayPendiente);
+    if (hayPendiente) {
+      continueButton.textContent = t('explorer.continuar');
+      continueButton.setAttribute('title', t('explorer.continuar.title', { n: pendientes }));
+    }
+  }
+
+  continueButton.addEventListener('click', () => {
+    if (!jobIdPendiente) return;
+
+    clearAlert();
+    progress.reset();
+    show(progressCard, true);
+    setBusy(true);
+    show(continueButton, false);
+
+    // Se reanuda por id: los enlaces que faltan los tiene el servidor
+    const collected = { files: [] };
+    stream = openScrapeStream(
+      { resume: jobIdPendiente },
+      { onEvent: event => handleEvent(event, collected) }
+    );
+  });
 
   function handleEvent(event, collected) {
     switch (event.type) {
+      // El servidor manda el id ANTES de empezar: sin él no habría a quién
+      // decirle "frena" mientras la exploración corre.
+      case 'job':
+        jobIdActual = event.jobId;
+        break;
+
       case 'phase1_start':
         progress.startPhase1();
         break;
@@ -1007,6 +1081,15 @@ export function createExplorerView(container, { limits }) {
         break;
 
       case 'complete': {
+        /**
+         * Frenada a medias: queda por dónde seguir.
+         *
+         * Los enlaces pendientes NO llegan aquí —son miles— sino que los
+         * guarda el servidor. Lo único que se conserva es el identificador.
+         */
+        jobIdPendiente = event.jobId || null;
+        actualizarContinuar(event.pendientesTotal || 0);
+
         // Si hubo fase 2 se muestran los ficheros; si no, los enlaces
         const deepSearch = event.extensions?.length > 0;
         results.setItems(deepSearch ? event.files : event.links);
@@ -1117,12 +1200,33 @@ export function createExplorerView(container, { limits }) {
           );
         }
 
+        /**
+         * El aviso de "frenada" va el último a propósito.
+         *
+         * Cada aviso reemplaza al anterior, y cuando alguien acaba de pulsar
+         * "Frenar" lo que necesita saber es que puede continuar, no que el
+         * peso de tres ficheros no se pudo obtener.
+         */
+        if (event.paused && (event.pendientesTotal || 0) > 0) {
+          mostrarAviso('warning', 'aviso.frenada', 'aviso.frenada.body', {
+            n: event.pendientesTotal,
+          });
+        }
+
         stopStream();
         break;
       }
 
       case 'error':
-        showError('error.busquedaFallo', null, undefined, event.message);
+        // Un trabajo caducado no es un fallo de la búsqueda: es que lo
+        // pendiente vivía en memoria y ya no está. Merece su propio mensaje.
+        if (event.code === 'JOB_EXPIRED') {
+          jobIdPendiente = null;
+          show(continueButton, false);
+          showError('error.trabajoCaducado', 'error.trabajoCaducado.body');
+        } else {
+          showError('error.busquedaFallo', null, undefined, event.message);
+        }
         stopStream();
         break;
 
@@ -1198,6 +1302,10 @@ export function createExplorerView(container, { limits }) {
     }
 
     persistForm();
+    // Una exploración nueva invalida la frenada anterior: continuar aquella
+    // mezclaría resultados de dos búsquedas distintas.
+    jobIdPendiente = null;
+    show(continueButton, false);
     clearAlert();
     results.clear();
     show(statsCard, false);
@@ -1219,6 +1327,8 @@ export function createExplorerView(container, { limits }) {
     fields.endPage.value = '5';
     fields.concurrency.value = String(limits.defaultConcurrency);
     mostrarExtensionesLibres = false;
+    jobIdPendiente = null;
+    show(continueButton, false);
     sincronizarUI();
     clearAlert();
     results.clear();

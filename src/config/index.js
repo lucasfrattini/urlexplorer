@@ -236,6 +236,19 @@ const config = {
     },
   },
 
+  /**
+   * Exploraciones frenadas a medias, para poder continuarlas.
+   *
+   * EN MEMORIA: si el proceso se reinicia, lo pendiente se pierde. Es el
+   * precio de no persistir y está elegido; ver services/jobs.js.
+   */
+  jobs: {
+    // Cuánto se guarda un trabajo frenado antes de tirarlo
+    ttlMs: intFromEnv('JOBS_TTL_MS', 30 * 60 * 1000),
+    // Tope de trabajos vivos: al llenarse se tira el más viejo
+    maxJobs: intFromEnv('JOBS_MAX', 20),
+  },
+
   video: {
     /**
      * Peticiones de peso simultáneas.

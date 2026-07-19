@@ -83,6 +83,19 @@ export const en = {
   'progreso.deTotal': '{actual} of {total} · {url}',
   'progreso.hallados.uno': '{n} file found',
   'progreso.hallados.varios': '{n} files found',
+  'progreso.frenar': 'Stop',
+  'progreso.frenar.title':
+    'Stops here and groups what was found. You can continue where you left off.',
+  'progreso.frenando': 'Stopping…',
+  'progreso.frenada': 'Stopped: {n} links not checked',
+  'explorer.continuar': 'Continue where I left off',
+  'explorer.continuar.title': 'Carries on with the {n} links left unchecked',
+  'aviso.frenada': 'Exploration stopped',
+  'aviso.frenada.body':
+    '{n} links were left unchecked. What was found so far is already grouped and sorted. Press “Continue where I left off” to carry on, or keep just this.',
+  'error.trabajoCaducado': 'That stopped exploration is no longer available',
+  'error.trabajoCaducado.body':
+    'It is kept in memory and expires, or the server restarted. You have to start again.',
   'progreso.cancelada': 'Search cancelled',
 
   /* ── Range filters ─────────────────────────────────────────────── */
@@ -119,6 +132,9 @@ export const en = {
   'resultados.grupo.noEsDuplicado.title': 'Take it out of the group and back into the main list',
   'resultados.grupo.sacado': 'Taken out of the group',
   'resultados.grupo.agrupadoPor': 'Grouped by {motivo}',
+  'resultados.grupo.elegido': 'chosen',
+  'resultados.grupo.elegido.title':
+    'This is the one shown when collapsed: the heaviest of the group',
   'resultados.sinCoincidencias': 'No matches',
   'resultados.sinCoincidencias.texto':
     'No result passes the current filters. Try widening the ranges or turning the switches off.',
