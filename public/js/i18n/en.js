@@ -32,6 +32,7 @@ export const en = {
   'salud.navegador.disponible': 'available',
   'salud.navegador.desactivado': 'disabled',
   'salud.error': 'Could not reach the server. Falling back to the default limits.',
+  'footer.ultimaBusqueda': 'Last search: {hora}',
 
   /* ── Network errors ────────────────────────────────────────────── */
   'api.sinConexion': 'Could not reach the server: {mensaje}',

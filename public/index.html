@@ -107,6 +107,11 @@
           aria-hidden="true"
         ></span>
         <span id="health-text" data-i18n="salud.comprobando">Comprobando servicio…</span>
+        <!--
+          La hora la gobierna lastSearch.js, así que NO lleva data-i18n: el
+          traductor del documento la pisaría en cada cambio de idioma.
+        -->
+        <span id="last-search" class="footer__last-search" hidden></span>
       </footer>
     </div>
 

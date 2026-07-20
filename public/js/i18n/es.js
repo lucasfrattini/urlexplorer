@@ -32,6 +32,7 @@ export const es = {
   'salud.navegador.disponible': 'disponible',
   'salud.navegador.desactivado': 'desactivado',
   'salud.error': 'No se pudo contactar con el servidor. Se usan los límites por defecto.',
+  'footer.ultimaBusqueda': 'Última búsqueda: {hora}',
 
   /* ── Errores de red ────────────────────────────────────────────── */
   'api.sinConexion': 'No se pudo contactar con el servidor: {mensaje}',

@@ -1675,6 +1675,18 @@ a {
   color: var(--c-text-muted);
 }
 
+/*
+ * Separador discreto entre el estado del servicio y la hora de la última
+ * búsqueda. Va en el pseudoelemento y no como texto en el nodo para que el
+ * nodo entero sea la frase traducida y nada más; con `[hidden]` el elemento
+ * no se pinta, así que el separador desaparece con él.
+ */
+.footer__last-search::before {
+  content: '·';
+  margin-right: var(--space-2);
+  color: var(--c-border);
+}
+
 .status-dot {
   width: 7px;
   height: 7px;

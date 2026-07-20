@@ -84,7 +84,13 @@ function paginationExamples() {
   });
 }
 
-export function createExplorerView(container, { limits }) {
+/**
+ * `marcarUltimaBusqueda` viene de `lastSearch.js` (a través de `app.js`) y se
+ * llama SOLO al terminar una exploración. Sin valor por defecto a propósito:
+ * si algún día deja de llegar, la llamada revienta en consola en vez de dejar
+ * el pie mudo sin que nadie se entere.
+ */
+export function createExplorerView(container, { limits, marcarUltimaBusqueda }) {
   const fields = {};
   // Controles que solo existen en la interfaz: no viajan al servidor, pero sí
   // hay que deshabilitarlos mientras se explora.
@@ -1163,6 +1169,15 @@ export function createExplorerView(container, { limits }) {
           results.setDuplicateGroups(event.duplicateGroups, event.duplicateGroupsPorDuracion);
         }
         renderStats(event);
+
+        /**
+         * Único punto por el que pasa una exploración terminada: la que acabó
+         * sola y la que acabó porque el usuario frenó (frenar no es cancelar,
+         * el crawl cierra normalmente). Engancharlo además en `stopStream`
+         * marcaría la hora dos veces. Una exploración que aborta por error no
+         * llega aquí, y no debe marcar hora.
+         */
+        marcarUltimaBusqueda();
 
         // El scroll paró por un tope duro: hay más contenido que no se ha
         // llegado a ver. Decirlo es obligatorio, porque los resultados
