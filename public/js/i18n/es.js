@@ -27,7 +27,7 @@ export const es = {
   'idioma.cambiado': 'Idioma: español',
 
   /* ── Estado del servicio ───────────────────────────────────────── */
-  'salud.comprobando': 'Comprobando servicio…',
+  'salud.comprobando': 'Verificando el servicio…',
   'salud.activo': 'Servicio activo · navegador {estado} · máx. {paginas} páginas por búsqueda',
   'salud.navegador.disponible': 'disponible',
   'salud.navegador.desactivado': 'desactivado',

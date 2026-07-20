@@ -27,7 +27,7 @@ export const en = {
   'idioma.cambiado': 'Language: English',
 
   /* ── Service status ────────────────────────────────────────────── */
-  'salud.comprobando': 'Checking service…',
+  'salud.comprobando': 'Verifying service…',
   'salud.activo': 'Service up · browser {estado} · max. {paginas} pages per search',
   'salud.navegador.disponible': 'available',
   'salud.navegador.desactivado': 'disabled',
