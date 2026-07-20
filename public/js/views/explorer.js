@@ -5,7 +5,7 @@ import { createResultList } from '../components/resultList.js';
 import { createProfileBar, configFromUrl } from '../components/profiles.js';
 import {
   PRESETS_EXTENSION,
-  presetDe,
+  presetCompatibleDe,
   objetivoDe,
   modoAvanzadoDe,
   paginationModeDe,
@@ -497,10 +497,7 @@ export function createExplorerView(container, { limits }) {
             ],
           }),
 
-          el('div', {
-            className: 'grid grid--3',
-            children: [campoDesde, campoHasta, campoRapidez],
-          }),
+          campoRapidez,
 
           makeSwitch('useJavaScript', 'explorer.navegador.label', 'explorer.navegador.hint'),
           makeSwitch('openLicenseOnly', 'explorer.licencia.label', 'explorer.licencia.hint'),
@@ -586,6 +583,16 @@ export function createExplorerView(container, { limits }) {
 
       bloqueObjetivo,
       chipsBloque,
+
+      // El rango de páginas va FUERA de chipsBloque a propósito: ese bloque se
+      // oculta con «solo enlaces», y la paginación es de la fase 1, así que
+      // aplica también entonces. Dentro, el rango se ocultaría mientras se
+      // sigue enviando. Y va dentro del form para que form.reset() lo restaure.
+      el('div', {
+        className: 'grid grid--2',
+        children: [campoDesde, campoHasta],
+      }),
+
       advanced,
       detectSlot,
     ],
@@ -650,21 +657,25 @@ export function createExplorerView(container, { limits }) {
   function sincronizarUI() {
     const extensiones = fields.fileExtensions.value;
     const objetivo = objetivoDe(extensiones);
-    const preset = presetDe(extensiones);
+    const r = presetCompatibleDe(extensiones);
 
     for (const opcion of opcionesObjetivo) opcion.input.checked = opcion.value === objetivo;
 
     show(chipsBloque, objetivo === 'ficheros');
 
-    const libre = mostrarExtensionesLibres || preset === 'otro';
+    // "Chip encendido" y "campo de texto visible" NO son lo mismo. Un valor
+    // contenido en un preset (`.mp4` dentro de vídeo) enciende su chip, pero
+    // el campo se sigue viendo: con el chip solo, el usuario leería "Vídeo" y
+    // daría por hecho que también se trae `.webm`. Nada de estado invisible.
+    const otro = mostrarExtensionesLibres || r?.id === 'otro';
     for (const chip of chips) {
-      const activo = !libre && preset === chip.id;
+      const activo = !mostrarExtensionesLibres && r?.id === chip.id;
       chip.boton.setAttribute('aria-pressed', String(activo));
       chip.boton.classList.toggle('chip--activo', activo);
     }
-    chipOtro.setAttribute('aria-pressed', String(libre));
-    chipOtro.classList.toggle('chip--activo', libre);
-    show(campoExtensiones, libre);
+    chipOtro.setAttribute('aria-pressed', String(otro));
+    chipOtro.classList.toggle('chip--activo', otro);
+    show(campoExtensiones, otro || (r ? !r.exacto : false));
 
     const modo = modoAvanzadoDe({
       paginationMode: fields.paginationMode.value,

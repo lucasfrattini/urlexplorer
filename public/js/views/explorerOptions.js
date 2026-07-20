@@ -53,6 +53,38 @@ export function presetDe(valor) {
 }
 
 /**
+ * Como `presetDe`, pero admitiendo que el valor sea un SUBCONJUNTO de un
+ * preset: una configuración guardada con solo `.mp4` es una elección de vídeo,
+ * y encender "Otro" hacía creer que no había preset que la representara.
+ *
+ * Devuelve `null` si no hay extensiones, o `{ id, exacto }`. `exacto` es falso
+ * cuando el valor solo está CONTENIDO en el preset; quien lo use tiene que
+ * seguir enseñando la lista real, porque el chip por sí solo prometería
+ * extensiones que no se piden.
+ *
+ * La contención exige UN único preset candidato: si encaja en varios no hay
+ * forma de saber cuál quiso el usuario, y encender el que no es sería un fallo
+ * silencioso. En ese caso, y cuando no encaja en ninguno, `'otro'`.
+ */
+export function presetCompatibleDe(valor) {
+  const canon = normalizarExtensiones(valor);
+  if (canon === '') return null;
+
+  const exacto = PRESETS_EXTENSION.find(p => normalizarExtensiones(p.extensiones) === canon);
+  if (exacto) return { id: exacto.id, exacto: true };
+
+  const propias = canon.split(',');
+  const candidatos = PRESETS_EXTENSION.filter(p => {
+    const suyas = normalizarExtensiones(p.extensiones).split(',');
+    return propias.every(ext => suyas.includes(ext));
+  });
+
+  return candidatos.length === 1
+    ? { id: candidatos[0].id, exacto: false }
+    : { id: 'otro', exacto: true };
+}
+
+/**
  * Tarjeta del paso 2.
  *
  * La regla es la del backend, sin cambios: sin extensiones no hay fase 2. La

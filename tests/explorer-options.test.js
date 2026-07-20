@@ -60,6 +60,51 @@ test('presetDe llama "otro" a lo que no es ningún preset, y null a lo vacío', 
   assert.strictEqual(presetDe('   '), null);
 });
 
+test('presetCompatibleDe enciende el preset que CONTIENE la lista, marcándola no exacta', () => {
+  const { presetCompatibleDe } = opciones;
+
+  // El caso del ticket: un perfil guardado con solo .mp4 es vídeo.
+  assert.deepStrictEqual(presetCompatibleDe('.mp4'), { id: 'video', exacto: false });
+  assert.deepStrictEqual(presetCompatibleDe('.jpg'), { id: 'imagen', exacto: false });
+});
+
+test('presetCompatibleDe marca exacto lo que casa entero, sin importar el orden', () => {
+  const { presetCompatibleDe } = opciones;
+
+  assert.deepStrictEqual(presetCompatibleDe('.mp4, .webm'), { id: 'video', exacto: true });
+  assert.deepStrictEqual(presetCompatibleDe('.webm, .mp4'), { id: 'video', exacto: true });
+  // El preset de audio tiene una sola extensión: contención y exactitud coinciden.
+  assert.deepStrictEqual(presetCompatibleDe('.mp3'), { id: 'audio', exacto: true });
+});
+
+test('presetCompatibleDe cae en "otro" si no está contenido en ningún preset', () => {
+  const { presetCompatibleDe } = opciones;
+
+  assert.deepStrictEqual(presetCompatibleDe('.zip'), { id: 'otro', exacto: true });
+  // Basta una extensión ajena para que deje de estar contenido: encender
+  // "Vídeo" aquí ocultaría que también se va a buscar .zip.
+  assert.deepStrictEqual(presetCompatibleDe('.mp4, .zip'), { id: 'otro', exacto: true });
+  assert.deepStrictEqual(presetCompatibleDe('.mp4, .webm, .mkv'), { id: 'otro', exacto: true });
+});
+
+test('presetCompatibleDe devuelve null cuando no hay extensiones', () => {
+  const { presetCompatibleDe } = opciones;
+
+  assert.strictEqual(presetCompatibleDe(''), null);
+  assert.strictEqual(presetCompatibleDe('   '), null);
+  assert.strictEqual(presetCompatibleDe(null), null);
+  assert.strictEqual(presetCompatibleDe(undefined), null);
+});
+
+test('presetDe NO cambia: la contención es cosa de presetCompatibleDe', () => {
+  const { presetDe } = opciones;
+
+  // Si esto pasara a 'video', otras partes que comparan la lista exacta
+  // empezarían a dar por buena una configuración que no lo es.
+  assert.strictEqual(presetDe('.mp4'), 'otro');
+  assert.strictEqual(presetDe('.jpg'), 'otro');
+});
+
 test('objetivoDe aplica la misma regla que el backend: sin extensiones no hay fase 2', () => {
   const { objetivoDe } = opciones;
 
