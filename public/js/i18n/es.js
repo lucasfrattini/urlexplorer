@@ -186,7 +186,7 @@ export const es = {
   'explorer.titulo': 'Recorrer un sitio página a página',
   'explorer.subtitulo': 'Pasa por las páginas de una sección y te devuelve lo que encuentre.',
   'explorer.vacio.titulo': 'Todavía no hay resultados',
-  'explorer.vacio.texto': 'Pega una dirección y pulsa «Empezar a explorar».',
+  'explorer.vacio.texto': 'Pega una dirección y pulsa «Explorar ahora».',
 
   /* ── Explorador: de dónde se parte ─────────────────────────────── */
   'explorer.url.label': '¿Qué página quieres recorrer?',
@@ -220,7 +220,7 @@ export const es = {
   'explorer.extensiones.hint': 'Con el punto delante. Por ejemplo: .pdf, .zip',
 
   /* ── Explorador: acciones ──────────────────────────────────────── */
-  'explorer.explorar': 'Empezar a explorar',
+  'explorer.explorar': 'Explorar ahora',
   'explorer.explorando': 'Explorando…',
   'explorer.detectar': 'Que lo configure por mí',
   'explorer.detectar.title':

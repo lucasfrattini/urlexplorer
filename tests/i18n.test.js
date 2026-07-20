@@ -36,6 +36,24 @@ test('los dos diccionarios tienen EXACTAMENTE las mismas claves', () => {
   assert.deepStrictEqual(clavesEs, clavesEn);
 });
 
+/**
+ * El estado vacio CITA el rotulo del boton principal para decirle a quien
+ * llega que tiene que pulsar. Cambiar el rotulo y olvidar la cita no rompe
+ * nada, no falla ningun test y no da ningun error: la unica pantalla que
+ * explica que hacer se queda senalando a un boton que ya no se llama asi.
+ */
+test('el estado vacio cita el rotulo REAL del boton de explorar', () => {
+  for (const [idioma, dicc] of [
+    ['es', es],
+    ['en', en],
+  ]) {
+    assert.ok(
+      dicc['explorer.vacio.texto'].includes(dicc['explorer.explorar']),
+      `[${idioma}] el estado vacio no nombra el boton: "${dicc['explorer.vacio.texto']}" no cita "${dicc['explorer.explorar']}"`
+    );
+  }
+});
+
 test('ninguna traduccion esta vacia ni es igual a su clave', () => {
   for (const [idioma, dicc] of [
     ['es', es],

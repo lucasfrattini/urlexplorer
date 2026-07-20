@@ -186,7 +186,7 @@ export const en = {
   'explorer.titulo': 'Walk a site page by page',
   'explorer.subtitulo': 'Goes through the pages of a section and returns whatever it finds.',
   'explorer.vacio.titulo': 'No results yet',
-  'explorer.vacio.texto': 'Paste an address and press “Start exploring”.',
+  'explorer.vacio.texto': 'Paste an address and press “Explore now”.',
 
   /* ── Explorer: where to start ──────────────────────────────────── */
   'explorer.url.label': 'Which page do you want to walk through?',
@@ -220,7 +220,7 @@ export const en = {
   'explorer.extensiones.hint': 'With the leading dot. For example: .pdf, .zip',
 
   /* ── Explorer: actions ─────────────────────────────────────────── */
-  'explorer.explorar': 'Start exploring',
+  'explorer.explorar': 'Explore now',
   'explorer.explorando': 'Exploring…',
   'explorer.detectar': 'Set it up for me',
   'explorer.detectar.title':
