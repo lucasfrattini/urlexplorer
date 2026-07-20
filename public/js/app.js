@@ -3,7 +3,6 @@ import { createExplorerView } from './views/explorer.js';
 import { createVideoView } from './views/video.js';
 import { attachSecretGesture, setAdminToken, clearAdminToken, isUnlocked } from './admin.js';
 import { toast } from './dom.js';
-import { initUltimaBusqueda } from './lastSearch.js';
 import {
   t,
   IDIOMAS,
@@ -234,15 +233,8 @@ async function main() {
 
   const limits = { ...DEFAULT_LIMITS, ...(await initHealth()) };
 
-  // La hora la marca el explorador al terminar una exploración; el pie solo
-  // sabe pintarla. Vive en memoria: al recargar se pierde a propósito.
-  const marcarUltimaBusqueda = initUltimaBusqueda(document.getElementById('last-search'));
-
   const views = {
-    explorer: createExplorerView(document.getElementById('view-explorer'), {
-      limits,
-      marcarUltimaBusqueda,
-    }),
+    explorer: createExplorerView(document.getElementById('view-explorer'), { limits }),
     video: createVideoView(document.getElementById('view-video')),
   };
 
