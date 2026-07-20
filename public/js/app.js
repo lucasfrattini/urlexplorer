@@ -2,7 +2,7 @@ import { getHealth, adminUnlock } from './api.js';
 import { createExplorerView } from './views/explorer.js';
 import { createVideoView } from './views/video.js';
 import { attachSecretGesture, setAdminToken, clearAdminToken, isUnlocked } from './admin.js';
-import { toast, setTituloResultados } from './dom.js';
+import { toast } from './dom.js';
 import {
   t,
   IDIOMAS,
@@ -114,11 +114,6 @@ function initRouter(views) {
     for (const [key, section] of Object.entries(sections)) {
       section.hidden = key !== name;
     }
-
-    // El recuento es del explorador: en cualquier otra vista sería el número
-    // de una lista que ya no se ve. La vista de vídeo no tiene resultados que
-    // contar.
-    if (name !== 'explorer') setTituloResultados(null);
 
     if (updateHash) {
       const hash = `#/${name}`;

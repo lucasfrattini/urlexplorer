@@ -11,11 +11,6 @@
  */
 export const es = {
   /* ── Cabecera y navegación ─────────────────────────────────────── */
-  // El título de la pestaña. La marca no se traduce, pero el FORMATO sí es
-  // texto de interfaz: va por el diccionario porque aquí no se escriben
-  // frases en el código.
-  'app.titulo': 'URL Explorer',
-  'app.titulo.conResultados': '({n}) URL Explorer',
   'app.subtitulo': 'Explora enlaces y recursos de un sitio',
   'app.saltar': 'Saltar al contenido',
   'nav.aria': 'Herramientas',

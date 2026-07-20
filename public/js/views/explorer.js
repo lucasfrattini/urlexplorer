@@ -1,13 +1,4 @@
-import {
-  el,
-  setChildren,
-  clear,
-  alertBox,
-  stat,
-  show,
-  toast,
-  setTituloResultados,
-} from '../dom.js';
+import { el, setChildren, clear, alertBox, stat, show, toast } from '../dom.js';
 import { openScrapeStream, detectConfig, pauseScrape } from '../api.js';
 import { createProgressPanel } from '../components/progress.js';
 import { createResultList } from '../components/resultList.js';
@@ -1104,8 +1095,6 @@ export function createExplorerView(container, { limits }) {
     show(progressCard, true);
     setBusy(true);
     show(continueButton, false);
-    // El recuento anterior deja de ser cierto en cuanto se sigue explorando.
-    setTituloResultados(null);
 
     // Se reanuda por id: los enlaces que faltan los tiene el servidor
     const collected = { files: [] };
@@ -1167,10 +1156,6 @@ export function createExplorerView(container, { limits }) {
         // Si hubo fase 2 se muestran los ficheros; si no, los enlaces
         const deepSearch = event.extensions?.length > 0;
         results.setItems(deepSearch ? event.files : event.links);
-        // El número del título sale de la MISMA expresión que decide la lista:
-        // recontarlo por otro camino sería duplicar la regla y poder mentir.
-        // No sigue a los filtros ni al plegado de duplicados a propósito.
-        setTituloResultados((deepSearch ? event.files : event.links).length);
         if (event.fileDetails) results.setDetails(event.fileDetails);
         // Los duplicados se pliegan, no se descartan: la lista sigue entera y
         // el interruptor de la barra los devuelve.
@@ -1390,10 +1375,6 @@ export function createExplorerView(container, { limits }) {
     show(continueButton, false);
     clearAlert();
     results.clear();
-    // Si no se limpiara, el "(42)" de la búsqueda anterior sobreviviría a la
-    // nueva y el usuario leería el recuento de otra exploración. No da error
-    // ni lo ve ningún test: por eso se limpia en TODOS los arranques.
-    setTituloResultados(null);
     show(statsCard, false);
     progress.reset();
     show(progressCard, true);
@@ -1419,9 +1400,6 @@ export function createExplorerView(container, { limits }) {
     sincronizarUI();
     clearAlert();
     results.clear();
-    // Vaciar la lista y dejar el recuento en la pestaña sería justo el estado
-    // invisible que se quiere evitar.
-    setTituloResultados(null);
     show(statsCard, false);
     show(progressCard, false);
     try {
@@ -1448,7 +1426,6 @@ export function createExplorerView(container, { limits }) {
     },
     teardown() {
       stopStream();
-      setTituloResultados(null);
     },
   };
 }

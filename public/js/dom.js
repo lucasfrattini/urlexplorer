@@ -1,4 +1,4 @@
-import { t, atributo, alCambiarIdioma } from './i18n/index.js';
+import { t, atributo } from './i18n/index.js';
 
 /**
  * Helpers de DOM.
@@ -139,41 +139,6 @@ export function toast(message, variant = 'success', duration = 2600) {
     node.style.transition = 'opacity 180ms';
     setTimeout(() => node.remove(), 200);
   }, duration);
-}
-
-/**
- * Número de resultados en el título de la pestaña.
- *
- * Es un dato CALCULADO, así que no se puede enlazar con `texto()`: se guarda
- * el último valor y se repinta al cambiar de idioma, igual que `renderStats()`
- * en la vista del explorador.
- *
- * Vive aquí y no en `explorer.js` porque lo usan dos sitios: quien pone el
- * número (el explorador, al terminar) y quien lo quita (el router de
- * `app.js`, al salir de la vista).
- *
- * `n === 0` SÍ se muestra: "(0) URL Explorer" informa de que la exploración
- * terminó sin nada, que no es lo mismo que no haber explorado.
- */
-let ultimoTotalResultados = null;
-
-function pintarTitulo() {
-  if (typeof document === 'undefined') return;
-  document.title =
-    ultimoTotalResultados === null
-      ? t('app.titulo')
-      : t('app.titulo.conResultados', { n: ultimoTotalResultados });
-}
-
-// Se registra UNA sola vez, al cargar el módulo: si se registrara en cada
-// llamada, cada exploración dejaría un suscriptor más pintando el mismo
-// título.
-alCambiarIdioma(pintarTitulo);
-
-/** @param {number|null} n — null vuelve al título base. */
-export function setTituloResultados(n) {
-  ultimoTotalResultados = n;
-  pintarTitulo();
 }
 
 /** Copia texto al portapapeles con fallback para contextos no seguros. */
