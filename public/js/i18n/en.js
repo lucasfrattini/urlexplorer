@@ -11,6 +11,10 @@
  */
 export const en = {
   /* ── Header and navigation ─────────────────────────────────────── */
+  // Browser tab title. The brand name is not translated, but the FORMAT is
+  // interface text, so it goes through the dictionary like everything else.
+  'app.titulo': 'URL Explorer',
+  'app.titulo.conResultados': '({n}) URL Explorer',
   'app.subtitulo': "Explore a site's links and resources",
   'app.saltar': 'Skip to content',
   'nav.aria': 'Tools',

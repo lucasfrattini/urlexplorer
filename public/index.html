@@ -3,6 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      SIN data-i18n, a propósito. El título lo gobierna el código
+      (`setTituloResultados()` en js/dom.js), que le añade el número de
+      resultados: "(42) URL Explorer". `traducirDocumento()` recorre todo
+      [data-i18n] en cada cambio de idioma, así que marcarlo aquí borraría
+      ese número cada vez que alguien tocase el selector de idioma.
+    -->
     <title>URL Explorer</title>
     <meta name="description" content="Explorador de enlaces y recursos multimedia de sitios web." />
     <meta name="color-scheme" content="light dark" />

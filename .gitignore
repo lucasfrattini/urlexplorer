@@ -21,3 +21,8 @@ data/
 # alguien añade una extensión real y no se acuerda de nada, git no la coge.
 src/extensions/*.js
 !src/extensions/ejemplo-*.js
+
+# Configuración interna de los agentes: material del mismo tipo que CLAUDE.md
+# (documenta el gesto de admin y los identificadores del espacio de trabajo).
+# NO se versiona. Sin esta línea, un "git add -A" rutinario lo publicaría.
+.claude/

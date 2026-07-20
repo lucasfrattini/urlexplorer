@@ -134,6 +134,25 @@ test('t() conserva {q} y {page}: son plantillas de URL, no huecos', () => {
   assert.match(t('error.faltaParametro.body'), /\{page\}/);
 });
 
+test('el titulo de la pestana con resultados es "(42) URL Explorer" en los dos idiomas', () => {
+  // Es el criterio de aceptacion del ticket y lo unico aqui que se puede
+  // romper sin que nada avise: el titulo lo escribe el navegador, no el DOM,
+  // asi que un formato cambiado no lo delata ningun otro test.
+  for (const [idioma, dicc] of [
+    ['es', es],
+    ['en', en],
+  ]) {
+    const render = dicc['app.titulo.conResultados'].replace(/\{n\}/g, '42');
+    assert.strictEqual(render, '(42) URL Explorer', `formato roto en ${idioma}`);
+    assert.strictEqual(dicc['app.titulo'], 'URL Explorer', `titulo base roto en ${idioma}`);
+  }
+
+  // Y por el motor, que es como lo llama dom.js (en Node el idioma es ingles)
+  assert.strictEqual(i18n.t('app.titulo.conResultados', { n: 42 }), '(42) URL Explorer');
+  // El cero se muestra: "sin resultados" no es lo mismo que "sin explorar"
+  assert.strictEqual(i18n.t('app.titulo.conResultados', { n: 0 }), '(0) URL Explorer');
+});
+
 test('una clave inexistente se devuelve tal cual, no como hueco mudo', () => {
   const { t } = i18n;
   assert.strictEqual(t('esta.clave.no.existe'), 'esta.clave.no.existe');
