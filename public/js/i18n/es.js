@@ -188,6 +188,12 @@ export const es = {
   'explorer.vacio.titulo': 'Todavía no hay resultados',
   'explorer.vacio.texto': 'Pega una dirección y pulsa «Explorar ahora».',
 
+  /* ── Explorador: carril de pasos ────────────────────────────────── */
+  'explorer.pasos.titulo': 'Progreso del recorrido',
+  'explorer.pasos.configurar': 'Configurar',
+  'explorer.pasos.progreso': 'Progreso',
+  'explorer.pasos.resultados': 'Resultados',
+
   /* ── Explorador: de dónde se parte ─────────────────────────────── */
   'explorer.url.label': '¿Qué página quieres recorrer?',
   'explorer.url.hint':
@@ -218,6 +224,14 @@ export const es = {
   'explorer.preset.otro.title': 'Escribir las extensiones a mano',
   'explorer.extensiones.label': 'Extensiones a buscar, separadas por comas',
   'explorer.extensiones.hint': 'Con el punto delante. Por ejemplo: .pdf, .zip',
+
+  /* ── Explorador: resumen de configuración plegada ────────────────── */
+  'explorer.resumen.editar': 'Editar',
+  'explorer.resumen.url': 'Dirección',
+  'explorer.resumen.tipo': 'Tipo',
+  'explorer.resumen.rango': 'Páginas',
+  'explorer.resumen.tipo.soloEnlaces': 'solo enlaces',
+  'explorer.resumen.rango.valor': '{desde}–{hasta}',
 
   /* ── Explorador: acciones ──────────────────────────────────────── */
   'explorer.explorar': 'Explorar ahora',
@@ -257,6 +271,9 @@ export const es = {
   'explorer.desde.label': 'Desde la página',
   'explorer.hasta.label': '¿Hasta qué página?',
   'explorer.hasta.hint': 'Como mucho {max} páginas de una vez.',
+  'explorer.rango.titulo': 'Rango de páginas a explorar',
+  'explorer.rango.anterior': 'Rango de páginas anterior',
+  'explorer.rango.siguiente': 'Rango de páginas siguiente',
   'explorer.rapidez.label': '¿Con qué rapidez? (páginas a la vez)',
   'explorer.rapidez.hint':
     'Entre 1 y {max}. Cuanto más alto, antes acaba y más carga el sitio. Por defecto {defecto}.',

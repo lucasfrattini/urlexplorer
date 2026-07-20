@@ -188,6 +188,12 @@ export const en = {
   'explorer.vacio.titulo': 'No results yet',
   'explorer.vacio.texto': 'Paste an address and press “Explore now”.',
 
+  /* ── Explorer: step rail ─────────────────────────────────────────── */
+  'explorer.pasos.titulo': 'Walkthrough progress',
+  'explorer.pasos.configurar': 'Configure',
+  'explorer.pasos.progreso': 'Progress',
+  'explorer.pasos.resultados': 'Results',
+
   /* ── Explorer: where to start ──────────────────────────────────── */
   'explorer.url.label': 'Which page do you want to walk through?',
   'explorer.url.hint':
@@ -218,6 +224,14 @@ export const en = {
   'explorer.preset.otro.title': 'Type the extensions by hand',
   'explorer.extensiones.label': 'Extensions to look for, comma separated',
   'explorer.extensiones.hint': 'With the leading dot. For example: .pdf, .zip',
+
+  /* ── Explorer: collapsed setup summary ─────────────────────────── */
+  'explorer.resumen.editar': 'Edit',
+  'explorer.resumen.url': 'Address',
+  'explorer.resumen.tipo': 'Type',
+  'explorer.resumen.rango': 'Pages',
+  'explorer.resumen.tipo.soloEnlaces': 'links only',
+  'explorer.resumen.rango.valor': '{desde}–{hasta}',
 
   /* ── Explorer: actions ─────────────────────────────────────────── */
   'explorer.explorar': 'Explore now',
@@ -257,6 +271,9 @@ export const en = {
   'explorer.desde.label': 'From page',
   'explorer.hasta.label': 'Up to which page?',
   'explorer.hasta.hint': 'At most {max} pages at a time.',
+  'explorer.rango.titulo': 'Page range to explore',
+  'explorer.rango.anterior': 'Previous page range',
+  'explorer.rango.siguiente': 'Next page range',
   'explorer.rapidez.label': 'How fast? (pages at a time)',
   'explorer.rapidez.hint':
     'Between 1 and {max}. The higher it is, the sooner it finishes and the more it loads the site. Default is {defecto}.',

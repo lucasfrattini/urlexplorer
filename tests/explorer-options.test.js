@@ -143,6 +143,57 @@ test('paginationModeDe solo devuelve los dos modos que entiende el servidor', ()
   assert.strictEqual(paginationModeDe('scroll'), 'scroll');
 });
 
+test('siguienteRango avanza replicando el tamaño de la ventana', () => {
+  const { siguienteRango } = opciones;
+
+  assert.deepStrictEqual(siguienteRango(1, 5, 1), { desde: 6, hasta: 10 });
+});
+
+test('siguienteRango preserva el tamaño en varios avances seguidos', () => {
+  const { siguienteRango } = opciones;
+
+  let rango = { desde: 1, hasta: 5 };
+  const tamanoInicial = rango.hasta - rango.desde + 1;
+
+  for (let i = 0; i < 3; i += 1) {
+    rango = siguienteRango(rango.desde, rango.hasta, 1);
+    assert.strictEqual(
+      rango.hasta - rango.desde + 1,
+      tamanoInicial,
+      `tamaño cambió en el paso ${i}`
+    );
+  }
+
+  // 1-5 → 6-10 → 11-15 → 16-20
+  assert.deepStrictEqual(rango, { desde: 16, hasta: 20 });
+});
+
+test('siguienteRango retrocede sin tocar el piso', () => {
+  const { siguienteRango } = opciones;
+
+  assert.deepStrictEqual(siguienteRango(11, 15, -1), { desde: 6, hasta: 10 });
+});
+
+test('siguienteRango retrocede en el piso y se queda quieto', () => {
+  const { siguienteRango } = opciones;
+
+  assert.deepStrictEqual(siguienteRango(1, 5, -1), { desde: 1, hasta: 5 });
+});
+
+test('siguienteRango acota el retroceso con overflow parcial, preservando el tamaño', () => {
+  const { siguienteRango } = opciones;
+
+  // tamaño 3: 3-5 retrocedería a 0-2, se acota desplazando toda la ventana
+  assert.deepStrictEqual(siguienteRango(3, 5, -1), { desde: 1, hasta: 3 });
+});
+
+test('siguienteRango funciona con rangos de tamaño 1', () => {
+  const { siguienteRango } = opciones;
+
+  assert.deepStrictEqual(siguienteRango(5, 5, 1), { desde: 6, hasta: 6 });
+  assert.deepStrictEqual(siguienteRango(5, 5, -1), { desde: 4, hasta: 4 });
+});
+
 test('los presets declaran extensiones con punto y separadas por comas', () => {
   const { PRESETS_EXTENSION, presetDe } = opciones;
 

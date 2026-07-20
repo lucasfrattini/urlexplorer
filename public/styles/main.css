@@ -606,6 +606,199 @@ a {
   border-top: 1px solid var(--c-border);
 }
 
+/* ── Carril de pasos y panel único del explorador ─────────────────────
+   El explorador ya no es una sucesión de tarjetas sueltas. `.explorer-shell`
+   agrupa el carril de pasos y el contenido en un grid de dos columnas, y
+   `.explorer-panel` es la ÚNICA superficie (`.card.card--form`) que envuelve
+   formulario, aviso, progreso y cifras: antes eran tres `.card` apiladas por
+   `.card + .card { margin-top }`, ahora son secciones (`.explorer-panel__section`)
+   separadas por un borde interno, no por sombra y espacio propios.
+   Los resultados (`resultList.js`) siguen siendo su propia tarjeta a
+   continuación: ese componente no se toca en esta unidad. */
+
+.explorer-shell {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.explorer-shell__content {
+  min-width: 0;
+}
+
+.explorer-panel__section {
+  border-top: 1px solid var(--c-border);
+}
+
+/*
+ * Resumen de una línea, visible mientras `configBody` está plegado (U3).
+ *
+ * Reemplaza al formulario completo apenas arranca una exploración: compite
+ * por espacio con el progreso y los resultados justo cuando ya no hace falta
+ * verlo entero. "Editar" es la única forma de volver a abrirlo.
+ */
+.config-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface-2);
+}
+
+.config-summary__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-5);
+  min-width: 0;
+}
+
+.config-summary__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: 13px;
+}
+
+.config-summary__label {
+  color: var(--c-text-subtle);
+}
+
+.config-summary__value {
+  overflow: hidden;
+  max-width: 32ch;
+  color: var(--c-text);
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Carril de pasos: Configurar → Progreso → Resultados.
+ *
+ * Un indicador circular por paso, conectado por una línea vertical, con
+ * `data-state` pendiente/activo/completado. Lo pinta `actualizarCarril()` en
+ * explorer.js, en los mismos puntos donde antes solo cambiaba la visibilidad
+ * de progreso/cifras — no hay ciclo de vida nuevo.
+ */
+.steps-rail {
+  position: sticky;
+  top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-bottom: var(--space-6);
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+/* Línea que conecta un paso con el siguiente. */
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 26px;
+  bottom: 4px;
+  left: 13px;
+  width: 2px;
+  background: var(--c-border);
+}
+
+.step[data-state='completado']:not(:last-child)::before {
+  background: var(--c-accent);
+}
+
+.step__indicator {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--c-border-strong);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text-subtle);
+  font-size: 12px;
+  font-weight: 650;
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    color var(--transition);
+}
+
+.step__label {
+  margin-top: 3px;
+  color: var(--c-text-subtle);
+  font-size: 13.5px;
+  font-weight: 560;
+  transition: color var(--transition);
+}
+
+.step[data-state='activo'] .step__indicator {
+  border-color: var(--c-accent);
+  background: var(--c-accent);
+  color: var(--c-accent-text);
+}
+
+.step[data-state='activo'] .step__label {
+  color: var(--c-text);
+}
+
+.step[data-state='completado'] .step__indicator {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.step[data-state='completado'] .step__label {
+  color: var(--c-text-muted);
+}
+
+@media (max-width: 720px) {
+  .explorer-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .steps-rail {
+    position: static;
+    flex-direction: row;
+  }
+
+  .step {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 0;
+    text-align: center;
+  }
+
+  .step__label {
+    margin-top: var(--space-1);
+  }
+
+  /* En horizontal la línea va a la derecha del indicador, no debajo. */
+  .step:not(:last-child)::before {
+    top: 13px;
+    right: calc(-1 * var(--space-4));
+    bottom: auto;
+    left: 26px;
+    width: auto;
+    height: 2px;
+  }
+}
+
 /* ── Formulario del explorador ───────────────────────────────────────
    Una sola columna, sin numerar. Lo que se decide siempre —la dirección y
    el botón de lanzar— va arriba y visible; el resto son matices que se
@@ -834,6 +1027,119 @@ a {
 }
 
 .chip--toggle:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Fila de controles homogénea (U4) ─────────────────────────────────
+   Antes los chips de tipo, los toggles de peso/miniatura y el rango
+   Desde/Hasta vivían en bloques dispares: los chips en `.chips`, y el rango
+   en dos <input type="number"> sueltos dentro de una `.grid.grid--2` aparte,
+   sin ningún control de navegación. Ahora comparten una sola fila
+   (`.controls-row`) con la misma altura, padding y radio de píldora.
+
+   OJO: el rango de páginas es de la FASE 1 y sigue aplicando aunque
+   "archivos de dentro" (fase 2) esté desmarcado. `.controls-row__group`
+   agrupa SOLO los chips de tipo y los toggles de peso/miniatura -eso es lo
+   que se oculta con `show()` en `sincronizarUI()`-; la píldora de rango
+   (`.range-pill`) es un hermano directo dentro de `.controls-row` y no
+   forma parte de ese grupo, así que sigue viéndose con "solo enlaces". */
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/*
+ * `display: contents` deja que sus hijos se comporten como ítems directos de
+ * `.controls-row` (misma fila, mismo ajuste de línea) sin dejar de poder
+ * ocultar el grupo entero de un golpe. La regla `[hidden] { display: none
+ * !important }` de este fichero ya la pisa, así que `show()` lo sigue
+ * ocultando de verdad.
+ */
+.controls-row__group {
+  display: contents;
+}
+
+/* ── Píldora de rango de páginas ──────────────────────────────────────
+   Dos inputs numéricos angostos (Desde/Hasta) más un control [−][+] que
+   avanza o retrocede el rango preservando su tamaño (`siguienteRango()` en
+   explorerOptions.js). Misma forma que `.chip`: borde, radio 999px, fondo
+   de superficie. */
+
+.range-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px var(--space-2) 5px var(--space-3);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 13px;
+}
+
+.range-pill__label {
+  color: var(--c-text-subtle);
+  font-weight: 540;
+  white-space: nowrap;
+}
+
+.range-pill__input {
+  width: 3.2em;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--c-text);
+  font: inherit;
+  text-align: center;
+}
+
+.range-pill__input:focus {
+  outline: none;
+  color: var(--c-accent);
+}
+
+.range-pill__input:disabled {
+  color: var(--c-text-subtle);
+  cursor: not-allowed;
+}
+
+.range-pill__sep {
+  color: var(--c-text-subtle);
+}
+
+.range-pill__nav {
+  display: flex;
+  gap: 2px;
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--c-border);
+}
+
+.range-pill__nav-btn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.range-pill__nav-btn:hover:not(:disabled) {
+  background: var(--c-surface-2);
+  border-color: var(--c-accent);
+}
+
+.range-pill__nav-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }

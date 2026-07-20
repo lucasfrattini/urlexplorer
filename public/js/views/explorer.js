@@ -9,6 +9,7 @@ import {
   objetivoDe,
   modoAvanzadoDe,
   paginationModeDe,
+  siguienteRango,
 } from './explorerOptions.js';
 import { t, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
@@ -318,30 +319,118 @@ export function createExplorerView(container, { limits }) {
     ],
   });
 
-  const chipsSlot = el('div', { className: 'chips' });
+  /**
+   * `chipsSlot` agrupa los chips de tipo de archivo Y los toggles de
+   * peso/miniatura: es lo que se oculta entero cuando el objetivo es "solo
+   * enlaces" (ver `sincronizarUI`). `display: contents` (en main.css) hace
+   * que sus hijos se comporten como ítems directos de `.controls-row` — la
+   * misma fila que la píldora de rango — sin dejar de poder ocultarse como
+   * grupo.
+   */
+  const chipsSlot = el('div', { className: 'controls-row__group' });
+
   /**
    * Peso y miniaturas viven AQUÍ, no en los ajustes avanzados.
    *
    * Los dos son datos DE LOS ARCHIVOS, así que su sitio es justo debajo de
    * "¿qué tipo de archivo?" y no en un panel plegado que hay que saber abrir.
-   * Al estar dentro de este bloque aparecen y desaparecen con la tarjeta de
+   * Al estar dentro de `chipsSlot` aparecen y desaparecen con la tarjeta de
    * "los archivos de dentro", que es lo correcto: sin fase 2 no hay ni pesos
    * ni miniaturas que traer.
    */
+  const chipPeso = makeChipToggle('withSizes', 'explorer.peso.breve', 'explorer.peso.hint');
+  const chipMiniaturas = makeChipToggle(
+    'withThumbnails',
+    'explorer.miniaturas.breve',
+    'explorer.miniaturas.hint'
+  );
+
+  /**
+   * Píldora compacta del rango de páginas Desde/Hasta, con un control
+   * [−][+] que avanza o retrocede el rango preservando su tamaño (ver
+   * `siguienteRango`, en `explorerOptions.js`).
+   *
+   * Los inputs son los mismos `startPage`/`endPage` de siempre: cambia la
+   * disposición, no el contrato con `readForm()`.
+   */
+  const inputDesde = el('input', {
+    className: 'range-pill__input',
+    attrs: { id: 'explorer-startPage', name: 'startPage', type: 'number', min: '1', value: '1' },
+  });
+  fields.startPage = inputDesde;
+  atributo(inputDesde, 'aria-label', 'explorer.desde.label');
+
+  const inputHasta = el('input', {
+    className: 'range-pill__input',
+    attrs: { id: 'explorer-endPage', name: 'endPage', type: 'number', min: '1', value: '5' },
+  });
+  fields.endPage = inputHasta;
+  atributo(inputHasta, 'aria-label', 'explorer.hasta.label');
+  atributo(inputHasta, 'title', 'explorer.hasta.hint', { max: limits.maxPages });
+
+  /** Mueve la ventana Desde/Hasta sin tocar su tamaño. */
+  function moverRango(direccion) {
+    const desde = Number(fields.startPage.value) || 1;
+    const hasta = Number(fields.endPage.value) || desde;
+    const { desde: nuevoDesde, hasta: nuevoHasta } = siguienteRango(desde, hasta, direccion);
+    fields.startPage.value = String(nuevoDesde);
+    fields.endPage.value = String(nuevoHasta);
+  }
+
+  const rangoAnteriorBtn = el('button', {
+    className: 'range-pill__nav-btn',
+    text: '−',
+    attrs: { type: 'button' },
+    on: { click: () => moverRango(-1) },
+  });
+  // Solo un símbolo: sin aria-label no lo anuncia ningún lector de pantalla.
+  atributo(rangoAnteriorBtn, 'aria-label', 'explorer.rango.anterior');
+  uiInputs.push(rangoAnteriorBtn);
+
+  const rangoSiguienteBtn = el('button', {
+    className: 'range-pill__nav-btn',
+    text: '+',
+    attrs: { type: 'button' },
+    on: { click: () => moverRango(1) },
+  });
+  atributo(rangoSiguienteBtn, 'aria-label', 'explorer.rango.siguiente');
+  uiInputs.push(rangoSiguienteBtn);
+
+  const rangoPill = el('div', {
+    className: 'range-pill',
+    attrs: { role: 'group' },
+    children: [
+      texto(el('span', { className: 'range-pill__label' }), 'explorer.resumen.rango'),
+      inputDesde,
+      el('span', { className: 'range-pill__sep', text: '–', attrs: { 'aria-hidden': 'true' } }),
+      inputHasta,
+      el('div', { className: 'range-pill__nav', children: [rangoAnteriorBtn, rangoSiguienteBtn] }),
+    ],
+  });
+  atributo(rangoPill, 'aria-label', 'explorer.rango.titulo');
+
+  const etiquetaTipoArchivo = texto(el('p', { className: 'field__label' }), 'explorer.tipoArchivo');
+
+  /**
+   * Fila única de controles: chips de tipo de archivo, toggles de
+   * peso/miniatura y la píldora de rango, todos con la misma altura, padding
+   * y radio de píldora (ver `.chip`, `.chip--toggle` y `.range-pill` en
+   * main.css).
+   *
+   * OJO: el rango es de la FASE 1 y sigue aplicando aunque "archivos de
+   * dentro" (fase 2) esté desmarcado — por eso `rangoPill` NO vive dentro de
+   * `chipsSlot`, que es lo único que se oculta con `sincronizarUI()`. Juntar
+   * los dos en el mismo `show()` haría desaparecer el rango de páginas al
+   * elegir "solo enlaces", sin ningún error visible.
+   */
+  const controlsRow = el('div', {
+    className: 'controls-row',
+    children: [chipsSlot, rangoPill],
+  });
+
   const chipsBloque = el('div', {
     className: 'chips-block',
-    children: [
-      texto(el('p', { className: 'field__label' }), 'explorer.tipoArchivo'),
-      chipsSlot,
-      campoExtensiones,
-      el('div', {
-        className: 'chips',
-        children: [
-          makeChipToggle('withSizes', 'explorer.peso.breve', 'explorer.peso.hint'),
-          makeChipToggle('withThumbnails', 'explorer.miniaturas.breve', 'explorer.miniaturas.hint'),
-        ],
-      }),
-    ],
+    children: [etiquetaTipoArchivo, controlsRow, campoExtensiones],
   });
 
   /** Chips de tipo: rellenan `fileExtensions` con extensiones reales. */
@@ -382,7 +471,7 @@ export function createExplorerView(container, { limits }) {
   atributo(chipOtro, 'title', 'explorer.preset.otro.title');
   uiInputs.push(chipOtro);
 
-  setChildren(chipsSlot, [...chips.map(c => c.boton), chipOtro]);
+  setChildren(chipsSlot, [...chips.map(c => c.boton), chipOtro, chipPeso, chipMiniaturas]);
 
   // ── Ajustes avanzados ──────────────────────────────────────────────
 
@@ -449,20 +538,6 @@ export function createExplorerView(container, { limits }) {
    */
   const resumenModo = el('p', { className: 'mode-summary' });
   show(resumenModo, false);
-
-  const campoDesde = makeField('startPage', 'explorer.desde.label', null, {
-    type: 'number',
-    min: '1',
-    value: '1',
-  });
-
-  const campoHasta = makeField(
-    'endPage',
-    'explorer.hasta.label',
-    'explorer.hasta.hint',
-    { type: 'number', min: '1', value: '5' },
-    { hintParams: { max: limits.maxPages } }
-  );
 
   const campoRapidez = makeField(
     'concurrency',
@@ -582,16 +657,10 @@ export function createExplorerView(container, { limits }) {
       }),
 
       bloqueObjetivo,
+      // El rango de páginas (dentro de `chipsBloque`, en `rangoPill`) es de
+      // la FASE 1 y sigue aplicando aunque «solo enlaces» oculte el resto de
+      // este bloque: ver la nota junto a `controlsRow` más arriba.
       chipsBloque,
-
-      // El rango de páginas va FUERA de chipsBloque a propósito: ese bloque se
-      // oculta con «solo enlaces», y la paginación es de la fase 1, así que
-      // aplica también entonces. Dentro, el rango se ocultaría mientras se
-      // sigue enviando. Y va dentro del form para que form.reset() lo restaure.
-      el('div', {
-        className: 'grid grid--2',
-        children: [campoDesde, campoHasta],
-      }),
 
       advanced,
       detectSlot,
@@ -603,8 +672,170 @@ export function createExplorerView(container, { limits }) {
     applyConfig: config => applyConfig(config),
   });
 
-  const formCard = el('div', {
-    className: 'card card--form',
+  // ── Carril de pasos ──────────────────────────────────────────────
+  //
+  // Tres pasos fijos del recorrido: Configurar → Progreso → Resultados. La
+  // fase 1 y la fase 2 del crawl del backend son sub-estados de UN mismo paso
+  // ("Progreso"), no pasos distintos del carril.
+  //
+  // El carril se pinta SOLO desde `actualizarCarril()`, llamada desde los
+  // mismos puntos donde ya cambiaba la visibilidad de progressCard/statsCard
+  // o se reseteaba el formulario: no hay ciclo de vida nuevo, solo el
+  // pintado añadido a los callbacks existentes.
+  const ORDEN_PASOS = ['configurar', 'progreso', 'resultados'];
+
+  const crearPaso = (id, numero, labelKey) => {
+    const indicador = el('span', {
+      className: 'step__indicator',
+      text: String(numero),
+      attrs: { 'aria-hidden': 'true' },
+    });
+    const etiqueta = texto(el('span', { className: 'step__label' }), labelKey);
+    const root = el('div', {
+      className: 'step',
+      attrs: { 'data-step': id, 'data-state': 'pendiente' },
+      children: [indicador, etiqueta],
+    });
+    return { id, root };
+  };
+
+  const pasosCarril = [
+    crearPaso('configurar', 1, 'explorer.pasos.configurar'),
+    crearPaso('progreso', 2, 'explorer.pasos.progreso'),
+    crearPaso('resultados', 3, 'explorer.pasos.resultados'),
+  ];
+
+  const stepsRail = el('nav', {
+    className: 'steps-rail',
+    children: pasosCarril.map(p => p.root),
+  });
+  atributo(stepsRail, 'aria-label', 'explorer.pasos.titulo');
+
+  /**
+   * Pinta el carril según en qué paso del recorrido está el usuario.
+   *
+   * Solo el `data-state` cambia (pendiente/activo/completado): no hay texto
+   * visible que dependa del estado, así que no necesita registrarse en
+   * `alCambiarIdioma()` aparte de las etiquetas fijas, que ya se enlazan con
+   * `texto()` al crear cada paso.
+   */
+  function actualizarCarril(pasoActivo) {
+    const idx = ORDEN_PASOS.indexOf(pasoActivo);
+    pasosCarril.forEach((paso, i) => {
+      const estado = i < idx ? 'completado' : i === idx ? 'activo' : 'pendiente';
+      paso.root.setAttribute('data-state', estado);
+      if (estado === 'activo') paso.root.setAttribute('aria-current', 'step');
+      else paso.root.removeAttribute('aria-current');
+    });
+  }
+
+  // ── Panel único: formulario + progreso + cifras ─────────────────────
+  //
+  // Antes eran tres `.card` sueltas apiladas por `card + card { margin-top }`.
+  // Ahora son secciones de UNA sola superficie (`.explorer-panel`), separadas
+  // por un borde interno en vez de por espacio y sombra propia. Progreso y
+  // cifras siguen ocultándose igual que antes (`show()`), solo que ocultan la
+  // sección en vez de la tarjeta entera.
+  const progress = createProgressPanel();
+  const progressSection = el('div', {
+    className: 'card__body explorer-panel__section',
+    children: [progress.root],
+  });
+  show(progressSection, false);
+
+  const alertSlot = el('div');
+  show(alertSlot, false);
+
+  const statsSlot = el('div', { className: 'card__body explorer-panel__section' });
+  show(statsSlot, false);
+
+  /**
+   * Bloque de configuración: barra de perfiles + formulario completo.
+   *
+   * Se le da nombre propio (`configBody`) porque al lanzar una exploración se
+   * pliega a `configSummary` (ver más abajo): compite por espacio con el
+   * progreso y los resultados justo cuando ya no hace falta verlo entero.
+   */
+  const configBody = el('div', { className: 'card__body', children: [profileBar.root, form] });
+
+  /**
+   * Resumen de una línea, visible mientras `configBody` está plegado.
+   *
+   * SIEMPRE lee de `fields`/`readForm()` en el momento de pintarse
+   * (`pintarResumenConfig`), nunca guarda su propia copia de los valores: es
+   * la misma regla que sigue `sincronizarUI()`. Si guardara los suyos, un
+   * "Editar" podría reabrir el formulario con datos distintos de los que en
+   * realidad se enviaron, sin que nada lo avisara.
+   */
+  const resumenUrlValor = el('span', { className: 'config-summary__value' });
+  const resumenTipoValor = el('span', { className: 'config-summary__value' });
+  const resumenRangoValor = el('span', { className: 'config-summary__value' });
+
+  const resumenEditarBtn = el('button', {
+    className: 'button button--ghost button--small config-summary__editar',
+    attrs: { type: 'button' },
+  });
+  texto(resumenEditarBtn, 'explorer.resumen.editar');
+
+  const itemResumen = (labelKey, valorNodo) =>
+    el('span', {
+      className: 'config-summary__item',
+      children: [texto(el('span', { className: 'config-summary__label' }), labelKey), valorNodo],
+    });
+
+  const configSummary = el('div', {
+    className: 'config-summary',
+    children: [
+      el('div', {
+        className: 'config-summary__items',
+        children: [
+          itemResumen('explorer.resumen.url', resumenUrlValor),
+          itemResumen('explorer.resumen.tipo', resumenTipoValor),
+          itemResumen('explorer.resumen.rango', resumenRangoValor),
+        ],
+      }),
+      resumenEditarBtn,
+    ],
+  });
+  show(configSummary, false);
+
+  /**
+   * Repinta el resumen a partir de los CAMPOS. Nunca al revés.
+   *
+   * Se registra en `alCambiarIdioma()` porque es texto calculado (el tipo de
+   * archivo y el rango se arman con `t()`), no fijo.
+   */
+  function pintarResumenConfig() {
+    const params = readForm();
+    resumenUrlValor.textContent = params.searchUrl;
+
+    if (!params.fileExtensions) {
+      resumenTipoValor.textContent = t('explorer.resumen.tipo.soloEnlaces');
+    } else {
+      const preset = presetCompatibleDe(params.fileExtensions);
+      const presetInfo =
+        preset && preset.exacto ? PRESETS_EXTENSION.find(p => p.id === preset.id) : null;
+      resumenTipoValor.textContent = presetInfo ? t(presetInfo.etiquetaKey) : params.fileExtensions;
+    }
+
+    resumenRangoValor.textContent = t('explorer.resumen.rango.valor', {
+      desde: params.startPage,
+      hasta: params.endPage,
+    });
+  }
+  alCambiarIdioma(() => pintarResumenConfig());
+
+  resumenEditarBtn.addEventListener('click', () => {
+    show(configSummary, false);
+    show(configBody, true);
+    // Los valores YA están en `fields`; esto solo recalcula segmentados y
+    // chips para que la interfaz vuelva a ser consistente con ellos (nunca al
+    // revés, ver la nota de `sincronizarUI`).
+    sincronizarUI();
+  });
+
+  const explorerPanel = el('div', {
+    className: 'card card--form explorer-panel',
     children: [
       el('div', {
         className: 'card__header',
@@ -616,23 +847,13 @@ export function createExplorerView(container, { limits }) {
           texto(el('p', { className: 'card__hint' }), 'explorer.subtitulo'),
         ],
       }),
-      el('div', { className: 'card__body', children: [profileBar.root, form] }),
+      configBody,
+      configSummary,
+      alertSlot,
+      progressSection,
+      statsSlot,
     ],
   });
-
-  const progress = createProgressPanel();
-  const progressCard = el('div', {
-    className: 'card',
-    children: [el('div', { className: 'card__body', children: [progress.root] })],
-  });
-  show(progressCard, false);
-
-  const alertSlot = el('div');
-  show(alertSlot, false);
-
-  const statsSlot = el('div', { className: 'card__body' });
-  const statsCard = el('div', { className: 'card', children: [statsSlot] });
-  show(statsCard, false);
 
   const results = createResultList({
     emptyTitleKey: 'explorer.vacio.titulo',
@@ -640,7 +861,16 @@ export function createExplorerView(container, { limits }) {
     filename: 'urlexplorer-resultados.txt',
   });
 
-  setChildren(container, [formCard, alertSlot, progressCard, statsCard, results.root]);
+  const explorerShell = el('div', {
+    className: 'explorer-shell',
+    children: [
+      stepsRail,
+      el('div', { className: 'explorer-shell__content', children: [explorerPanel, results.root] }),
+    ],
+  });
+
+  setChildren(container, explorerShell);
+  actualizarCarril('configurar');
 
   // ── Sincronización de la interfaz con los campos ────────────────────
 
@@ -661,7 +891,14 @@ export function createExplorerView(container, { limits }) {
 
     for (const opcion of opcionesObjetivo) opcion.input.checked = opcion.value === objetivo;
 
-    show(chipsBloque, objetivo === 'ficheros');
+    // `chipsSlot` agrupa los chips de tipo Y los toggles de peso/miniatura:
+    // se ocultan juntos, sin extensiones no hay ni fase 2 ni esos datos. La
+    // píldora de rango (`rangoPill`) queda FUERA de este grupo a propósito:
+    // el rango es de la fase 1 y sigue aplicando con "solo enlaces". Ver la
+    // nota junto a `controlsRow`.
+    const mostrarFicheros = objetivo === 'ficheros';
+    show(etiquetaTipoArchivo, mostrarFicheros);
+    show(chipsSlot, mostrarFicheros);
 
     // "Chip encendido" y "campo de texto visible" NO son lo mismo. Un valor
     // contenido en un preset (`.mp4` dentro de vídeo) enciende su chip, pero
@@ -675,7 +912,7 @@ export function createExplorerView(container, { limits }) {
     }
     chipOtro.setAttribute('aria-pressed', String(otro));
     chipOtro.classList.toggle('chip--activo', otro);
-    show(campoExtensiones, otro || (r ? !r.exacto : false));
+    show(campoExtensiones, mostrarFicheros && (otro || (r ? !r.exacto : false)));
 
     const modo = modoAvanzadoDe({
       paginationMode: fields.paginationMode.value,
@@ -895,7 +1132,7 @@ export function createExplorerView(container, { limits }) {
     }
 
     setChildren(statsSlot, el('div', { className: 'stats', children: cards }));
-    show(statsCard, true);
+    show(statsSlot, true);
   }
 
   alCambiarIdioma(() => renderStats(null));
@@ -1103,7 +1340,8 @@ export function createExplorerView(container, { limits }) {
 
     clearAlert();
     progress.reset();
-    show(progressCard, true);
+    show(progressSection, true);
+    actualizarCarril('progreso');
     setBusy(true);
     show(continueButton, false);
 
@@ -1163,6 +1401,7 @@ export function createExplorerView(container, { limits }) {
          */
         jobIdPendiente = event.jobId || null;
         actualizarContinuar(event.pendientesTotal || 0);
+        actualizarCarril('resultados');
 
         // Si hubo fase 2 se muestran los ficheros; si no, los enlaces
         const deepSearch = event.extensions?.length > 0;
@@ -1386,10 +1625,19 @@ export function createExplorerView(container, { limits }) {
     show(continueButton, false);
     clearAlert();
     results.clear();
-    show(statsCard, false);
+    show(statsSlot, false);
     progress.reset();
-    show(progressCard, true);
+    show(progressSection, true);
+    actualizarCarril('progreso');
     setBusy(true);
+
+    // El bloque de configuración se pliega a una línea de resumen: ya no hace
+    // falta verlo entero mientras corre la exploración, y compite con el
+    // progreso y los resultados. "Editar" es la única forma de volver a
+    // abrirlo antes de resetear.
+    show(configBody, false);
+    pintarResumenConfig();
+    show(configSummary, true);
 
     const collected = { files: [] };
     stream = openScrapeStream(params, {
@@ -1411,8 +1659,13 @@ export function createExplorerView(container, { limits }) {
     sincronizarUI();
     clearAlert();
     results.clear();
-    show(statsCard, false);
-    show(progressCard, false);
+    show(statsSlot, false);
+    show(progressSection, false);
+    actualizarCarril('configurar');
+    // Vuelve a mostrarse el formulario completo y se pliega el resumen: tras
+    // "Limpiar" ya no hay nada que resumir.
+    show(configBody, true);
+    show(configSummary, false);
     try {
       sessionStorage.removeItem(STORAGE_KEY);
     } catch {

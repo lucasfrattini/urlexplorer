@@ -113,3 +113,24 @@ export function modoAvanzadoDe({ paginationMode, linkPattern, pageParam } = {}) 
 export function paginationModeDe(modoAvanzado) {
   return modoAvanzado === 'scroll' ? 'scroll' : 'auto';
 }
+
+/**
+ * Rango "Desde/Hasta" siguiente o anterior, preservando el tamaño de la
+ * ventana actual (1-5 → 6-10 → 11-15, o de 10 en 10 si el rango es de 10).
+ *
+ * `direccion`: 1 avanza, -1 retrocede. No hay techo superior porque el sitio
+ * puede tener cualquier cantidad de páginas, así que avanzar nunca se acota.
+ * Al retroceder, "desde" no puede bajar de 1: se acota desplazando la
+ * ventana entera (sin encoger el tamaño) para no invadir páginas negativas.
+ */
+export function siguienteRango(desde, hasta, direccion) {
+  const tamano = hasta - desde + 1;
+  const nuevoDesde = desde + direccion * tamano;
+  const nuevoHasta = hasta + direccion * tamano;
+
+  if (direccion < 0 && nuevoDesde < 1) {
+    return { desde: 1, hasta: tamano };
+  }
+
+  return { desde: nuevoDesde, hasta: nuevoHasta };
+}
