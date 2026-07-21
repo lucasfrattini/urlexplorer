@@ -192,13 +192,90 @@ function extractVideoUrlsFromContent(html) {
   return videos;
 }
 
-/** MÉTODO 2 — <video>, <source> y enlaces directos vía Cheerio. */
+/**
+ * Duración de UN vídeo concreto, buscada en su contenedor inmediato.
+ *
+ * Muchos sitios muestran la duración como una insignia de texto HERMANA del
+ * `<video>` (mismo contenedor, no dentro de él), no como un atributo. Se
+ * busca solo en el PADRE directo del vídeo —su propio contenedor— y no más
+ * arriba: subir más niveles arriesga cazar la insignia de un vídeo vecino en
+ * una lista, que es el mismo fallo que esto corrige para la miniatura.
+ */
+function buscarDuracionEnContenedor($video) {
+  const contenedor = $video.parent();
+  if (contenedor.length === 0) return null;
+  const texto = contenedor.find('[class*="duration"], [class*="length"]').first().text();
+  return formatDuration(parseClockDuration(texto));
+}
+
+/**
+ * MÉTODO 2 — <video>, <source> y enlaces directos vía Cheerio.
+ *
+ * El `poster` y la `duration` de un vídeo van en el `<video>` que lo
+ * envuelve, no en el `<source>` hijo que trae la URL real del fichero.
+ * Recorrer `video, source` como una lista plana —la versión anterior— pierde
+ * esa relación: el `<source>` no tiene ningún `poster` propio que leer, y el
+ * `<video>` sin `src` directo (todo en el `<source>`) no producía ninguna
+ * fila. El resultado eran vídeos con `poster: null`, que aguas abajo cae al
+ * `og:image` de TODA la página para cada uno de ellos: un álbum de 30 vídeos
+ * distintos acababa con la misma miniatura en los 30, y de ahí el falso
+ * positivo de duplicados.
+ *
+ * Aquí se recorren los `<video>` uno a uno; su `poster` y su `data-duration`
+ * se aplican a SU PROPIO `src` y al de cada `<source>` hijo —son la misma
+ * fuente en varias calidades, no vídeos distintos—. Solo un `<source>` sin
+ * `<video>` padre (poco habitual, pero posible) se procesa suelto, sin
+ * poster ni duración que heredar.
+ */
 function extractVideosFromHtml(html, baseUrl) {
   const $ = cheerio.load(html);
   const videos = [];
 
-  $('video, source').each((_, element) => {
+  $('video').each((_, videoEl) => {
+    const $video = $(videoEl);
+    const poster = toAbsoluteUrl($video.attr('poster'), baseUrl);
+    const duration = $video.attr('data-duration')
+      ? formatDuration(Number.parseInt($video.attr('data-duration'), 10))
+      : buscarDuracionEnContenedor($video);
+
+    const fuentes = [
+      {
+        el: videoEl,
+        raw: $video.attr('src') || $video.attr('data-src') || $video.attr('data-video-src'),
+        quality: $video.attr('data-quality'),
+      },
+    ];
+    $video.find('source').each((_, sourceEl) => {
+      const $source = $(sourceEl);
+      fuentes.push({
+        el: sourceEl,
+        raw: $source.attr('src') || $source.attr('data-src') || $source.attr('data-video-src'),
+        quality: $source.attr('data-quality'),
+      });
+    });
+
+    for (const fuente of fuentes) {
+      const url = toAbsoluteUrl(fuente.raw, baseUrl);
+      if (!url) continue;
+      const type = getVideoType(url);
+      if (!type) continue;
+
+      videos.push({
+        url,
+        type,
+        quality: fuente.quality || extractQualityFromUrl(url),
+        duration,
+        element: `cheerio-${fuente.el.tagName}`,
+        poster,
+      });
+    }
+  });
+
+  // <source> huérfano, sin <video> padre que reconocer: no hay de quién
+  // heredar poster ni duración.
+  $('source').each((_, element) => {
     const $el = $(element);
+    if ($el.parent().is('video')) return;
     const raw = $el.attr('src') || $el.attr('data-src') || $el.attr('data-video-src');
     const url = toAbsoluteUrl(raw, baseUrl);
     if (!url) return;
@@ -213,7 +290,7 @@ function extractVideosFromHtml(html, baseUrl) {
         ? formatDuration(Number.parseInt($el.attr('data-duration'), 10))
         : null,
       element: `cheerio-${element.tagName}`,
-      poster: toAbsoluteUrl($el.attr('poster'), baseUrl),
+      poster: null,
     });
   });
 
@@ -360,15 +437,23 @@ async function extractVideos(
      *
      * Los reproductores conocidos (YouTube y compañía) ya llegan con su
      * thumbnailUrl, así que no se les toca. Para el resto se prefiere el
-     * `poster` del propio <video> —es la imagen de ESE vídeo— y, si no lo
-     * hay, la de la página (og:image / twitter:image / JSON-LD), que sale
-     * gratis del HTML ya descargado.
+     * `poster` del propio <video> —es la imagen de ESE vídeo—, que ahora
+     * `extractVideosFromHtml` asocia bien incluso cuando el fichero real
+     * cuelga de un `<source>` hijo (ver el comentario de esa función).
+     *
+     * La miniatura de la PÁGINA (og:image / twitter:image / JSON-LD) solo se
+     * usa de respaldo cuando hay UN único vídeo: con varios, la página solo
+     * puede declarar una imagen para representarlos a todos, y estampársela
+     * al que no trae la suya propia es el mismo fallo que ya tenía la
+     * duración —un dato real, pero de otro vídeo—. Con una lista larga era
+     * lo que convertía docenas de vídeos distintos en "duplicados".
      *
      * Es una URL DECLARADA por el sitio: se devuelve para servirla luego vía
      * /api/thumbnail, NUNCA se descarga aquí (privacidad y CSP; ver
      * services/thumbnails.js). Solo http(s), igual que extractThumbnail.
      */
-    const paginaThumb = extractThumbnail(html, url);
+    const soloUnVideo = unique.length === 1;
+    const paginaThumb = soloUnVideo ? extractThumbnail(html, url) : null;
     for (const video of unique) {
       if (video.thumbnailUrl) continue;
       const propia = typeof video.poster === 'string' && /^https?:\/\//i.test(video.poster);

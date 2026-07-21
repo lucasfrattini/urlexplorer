@@ -10,6 +10,7 @@ const {
   extractQualityFromUrl,
   detectKnownPlayers,
   extractVideoUrlsFromContent,
+  extractVideosFromHtml,
   dedupeVideos,
 } = require('../src/services/video');
 
@@ -148,6 +149,80 @@ test('extractVideoUrlsFromContent', async t => {
   await t.test('ignora las URLs que no son de video', () => {
     const html = `<script>var a="https://cdn.com/app.js"; var b="https://cdn.com/style.css";</script>`;
     assert.deepEqual(extractVideoUrlsFromContent(html), []);
+  });
+});
+
+/**
+ * `<video poster="…"><source src="…"></video>` es el patrón real de un
+ * sitio con álbumes de varios vídeos: el fichero cuelga del `<source>` hijo,
+ * pero el `poster` y la duración van en el `<video>` padre. Recorrer
+ * `video, source` como lista plana —la versión anterior— perdía esa
+ * relación: el `<source>` no tiene `poster` propio y el `<video>` sin `src`
+ * directo no producía ninguna fila, así que todos los vídeos de la página
+ * acababan con `poster: null` y, aguas abajo, la og:image de la PÁGINA
+ * estampada a todos por igual: un álbum de N vídeos distintos con la MISMA
+ * miniatura.
+ */
+test('extractVideosFromHtml', async t => {
+  await t.test('asocia el poster del <video> padre a su <source> hijo', () => {
+    const html = `
+      <video poster="/img/uno.jpg"><source src="/media/uno.mp4"></video>
+      <video poster="/img/dos.jpg"><source src="/media/dos.mp4"></video>`;
+    const videos = extractVideosFromHtml(html, 'https://s.example.com/a/x');
+
+    const uno = videos.find(v => v.url.endsWith('/uno.mp4'));
+    const dos = videos.find(v => v.url.endsWith('/dos.mp4'));
+    assert.equal(uno.poster, 'https://s.example.com/img/uno.jpg');
+    assert.equal(dos.poster, 'https://s.example.com/img/dos.jpg');
+    assert.notEqual(uno.poster, dos.poster, 'dos vídeos distintos no pueden compartir poster');
+  });
+
+  await t.test(
+    'varias calidades del MISMO vídeo comparten poster (no son vídeos distintos)',
+    () => {
+      const html = `
+      <video poster="/img/uno.jpg">
+        <source src="/media/uno_720p.mp4">
+        <source src="/media/uno_1080p.mp4">
+      </video>`;
+      const videos = extractVideosFromHtml(html, 'https://s.example.com/a/x');
+      assert.equal(videos.length, 2);
+      assert.ok(videos.every(v => v.poster === 'https://s.example.com/img/uno.jpg'));
+    }
+  );
+
+  await t.test('<video src="…"> directo, sin <source>, sigue funcionando', () => {
+    const html = `<video src="/media/directo.mp4" poster="/img/directo.jpg" data-duration="90"></video>`;
+    const videos = extractVideosFromHtml(html, 'https://s.example.com/a/x');
+    assert.equal(videos.length, 1);
+    assert.equal(videos[0].poster, 'https://s.example.com/img/directo.jpg');
+    assert.equal(videos[0].duration, '1:30');
+  });
+
+  await t.test('un <source> sin <video> padre no hereda poster de otro', () => {
+    const html = `<div><source src="/media/suelto.mp4"></div>`;
+    const videos = extractVideosFromHtml(html, 'https://s.example.com/a/x');
+    assert.equal(videos.length, 1);
+    assert.equal(videos[0].poster, null);
+  });
+
+  // La insignia de duración suele ser HERMANA del <video>, en el mismo
+  // contenedor, no un atributo suyo.
+  await t.test('lee la duración de una insignia hermana en el contenedor inmediato', () => {
+    const html = `
+      <div class="item">
+        <video poster="/img/uno.jpg"><source src="/media/uno.mp4"></video>
+        <span class="duration">00:27</span>
+      </div>
+      <div class="item">
+        <video poster="/img/dos.jpg"><source src="/media/dos.mp4"></video>
+        <span class="duration">00:03</span>
+      </div>`;
+    const videos = extractVideosFromHtml(html, 'https://s.example.com/a/x');
+    const uno = videos.find(v => v.url.endsWith('/uno.mp4'));
+    const dos = videos.find(v => v.url.endsWith('/dos.mp4'));
+    assert.equal(uno.duration, '0:27');
+    assert.equal(dos.duration, '0:03');
   });
 });
 

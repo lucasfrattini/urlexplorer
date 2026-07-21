@@ -18,6 +18,8 @@ const {
   extractDurationSeconds,
   extractSizeBytes,
   extractThumbnail,
+  extractFileThumbnails,
+  extractFileDurations,
   formatDuration,
   formatFileSize,
 } = require('../lib/media');
@@ -393,9 +395,18 @@ async function findFiles(urls, options) {
         const porUrl = new Map(clasificados.map(f => [f.url, f]));
 
         if (found.length > 0) {
-          // Una pagina de detalle suele ser un solo video, asi que su
-          // duracion vale para los ficheros que salen de ella.
-          //
+          // Una ficha con UN solo fichero: su duración de página vale para
+          // él. Con VARIOS —un álbum— cada uno tiene la suya, y estampar la
+          // misma a todos es el mismo fallo que arregló relevance.js con la
+          // duración de ficheros dudosos, aplicado esta vez a álbumes en vez
+          // de a clips ajenos: un dato real, pero del vídeo equivocado. Por
+          // eso el dato de página solo se usa cuando no hay ambigüedad
+          // posible; con varios ficheros se intenta primero el dato POR
+          // FICHERO (ver extractFileDurations/extractFileThumbnails), que
+          // asocia cada `<video poster>`/insignia de duración con su propio
+          // `<source>` en vez de repartir un único valor de página.
+          const esFicheroUnico = found.length === 1;
+
           // Se extraen los segundos UNA vez y se formatean, en vez de llamar
           // a extractDuration() y extractDurationSeconds() por separado:
           // extractDuration es literalmente formatDuration(extractDurationSeconds(html)),
@@ -406,14 +417,16 @@ async function findFiles(urls, options) {
           // Se guardan los segundos ademas de la cadena porque la agrupacion
           // de duplicados compara la duracion EXACTA, y "12:34" ya ha perdido
           // precision.
-          const durationSeconds = extractDurationSeconds(doc);
-          const duration = formatDuration(durationSeconds);
+          const paginaDurationSeconds = esFicheroUnico ? extractDurationSeconds(doc) : null;
+          const duracionesPorFichero = extractFileDurations(doc, url);
           // Del mismo HTML sale también el tamaño que el sitio muestra en
           // pantalla. Se calcula una sola vez por ficha, aunque de ella
           // salgan varios ficheros.
           const declaredSize = withSizes ? extractSizeBytes(doc) : null;
           // Del MISMO documento ya parseado: no cuesta ni petición ni parseo
-          const thumbnail = withThumbnails ? extractThumbnail(doc, url) : null;
+          const paginaThumbnail =
+            withThumbnails && esFicheroUnico ? extractThumbnail(doc, url) : null;
+          const miniaturasPorFichero = withThumbnails ? extractFileThumbnails(doc, url) : new Map();
           const added = [];
 
           for (const file of found) {
@@ -425,19 +438,22 @@ async function findFiles(urls, options) {
               files.add(file);
               added.push(file);
 
-              // A un fichero que no se ha podido verificar NO se le pone la
-              // duración de la ficha. Es justo lo que convertía un clip de
-              // cinco segundos en "20:09": el dato era real, pero de otro
-              // vídeo. Sin duración, el usuario ve que no se sabe.
+              // A un fichero que no se ha podido verificar NO se le pone
+              // ninguna duración. Es justo lo que convertía un clip de cinco
+              // segundos en "20:09": el dato era real, pero de otro vídeo.
+              // Sin duración, el usuario ve que no se sabe.
               const info = porUrl.get(file);
+              const durationSeconds = info?.suspect
+                ? null
+                : (duracionesPorFichero.get(file) ?? paginaDurationSeconds);
               details.set(file, {
                 url: file,
-                duration: info?.suspect ? null : duration,
-                durationSeconds: info?.suspect ? null : durationSeconds,
+                duration: formatDuration(durationSeconds),
+                durationSeconds,
                 suspect: info?.suspect === true,
                 suspectReason: info?.reason || null,
                 sourceUrl: url,
-                thumbnail,
+                thumbnail: miniaturasPorFichero.get(file) ?? paginaThumbnail,
               });
             }
           }

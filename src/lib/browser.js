@@ -349,16 +349,52 @@ async function renderPageWithMedia(url, { isMediaUrl } = {}) {
 
     const domVideos = await page.evaluate(() => {
       const found = [];
-      document.querySelectorAll('video, source').forEach(el => {
-        const src = el.src || el.getAttribute('data-src') || el.getAttribute('data-video-src');
-        if (src) {
+      // `poster`, `duration`, `videoWidth`/`videoHeight` son propiedades del
+      // <video>, no del <source> hijo que suele llevar la URL real del
+      // fichero. Recorrer video y source como una lista plana les daba
+      // `poster: null` a los <source> —no tienen esa propiedad— y saltaba
+      // los <video> que solo declaran el fichero vía <source> (su `.src`
+      // queda vacío sin el atributo). El resultado: una ficha con varios
+      // vídeos acababa con todos sin miniatura propia, y aguas abajo se les
+      // estampaba la de la página entera a todos por igual.
+      const procesados = new Set();
+      document.querySelectorAll('video').forEach(video => {
+        const duration = Number.isFinite(video.duration) ? video.duration : null;
+        const poster = video.poster || null;
+        const width = video.videoWidth || video.getAttribute('width') || null;
+        const height = video.videoHeight || video.getAttribute('height') || null;
+
+        const fuentes = [];
+        if (video.src) fuentes.push(video);
+        video.querySelectorAll('source').forEach(source => fuentes.push(source));
+
+        fuentes.forEach(el => {
+          const src = el.src || el.getAttribute('data-src') || el.getAttribute('data-video-src');
+          if (!src) return;
+          procesados.add(el);
           found.push({
             url: src,
             element: el.tagName.toLowerCase(),
-            duration: Number.isFinite(el.duration) ? el.duration : null,
-            width: el.videoWidth || el.getAttribute('width') || null,
-            height: el.videoHeight || el.getAttribute('height') || null,
-            poster: el.poster || null,
+            duration,
+            width,
+            height,
+            poster,
+          });
+        });
+      });
+      // <source> sin <video> padre: no hay poster ni duración que heredar.
+      document.querySelectorAll('source').forEach(source => {
+        if (procesados.has(source)) return;
+        const src =
+          source.src || source.getAttribute('data-src') || source.getAttribute('data-video-src');
+        if (src) {
+          found.push({
+            url: src,
+            element: 'source',
+            duration: null,
+            width: null,
+            height: null,
+            poster: null,
           });
         }
       });

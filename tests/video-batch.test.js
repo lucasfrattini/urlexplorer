@@ -36,8 +36,19 @@ function crearSitio() {
         <video src="/media/b9.mp4" poster="/media/poster-ab.jpg" data-duration="600"></video>
         <video src="/media/compartido.mp4" poster="/media/poster-c.jpg" data-duration="120"></video>
       </body></html>`,
-    // Página para las miniaturas: og:image de página y un poster propio.
-    '/thumbs': `
+    // Página de UN solo vídeo sin poster propio: la og:image de la página no
+    // es ambigua aquí, así que sirve de respaldo.
+    '/thumbs-solo': `
+      <html><head>
+        <meta property="og:image" content="https://cdn.example.com/og.jpg">
+      </head><body>
+        <video src="/media/sin-poster.mp4"></video>
+      </body></html>`,
+    // Página con VARIOS vídeos: uno trae poster propio, el otro no. La
+    // og:image de la página describe a la ficha, no a un vídeo concreto, así
+    // que NO debe estamparse al que le falta el suyo (sería la misma
+    // miniatura para dos vídeos distintos: el bug que esto corrige).
+    '/thumbs-album': `
       <html><head>
         <meta property="og:image" content="https://cdn.example.com/og.jpg">
       </head><body>
@@ -96,25 +107,46 @@ test('extractVideosBatch — fusión, agrupación cruzada y miniaturas', async t
     assert.equal(grupoUnoB9.miembros.length, 2);
   });
 
-  await t.test('getThumbnails adjunta thumbnailUrl desde og:image y poster', async () => {
-    const conThumbs = await extractVideos(`${base}/thumbs`, {
-      useJavaScript: false,
-      getThumbnails: true,
-    });
-    const sinPoster = conThumbs.videos.find(v => v.url.endsWith('/sin-poster.mp4'));
-    const conPoster = conThumbs.videos.find(v => v.url.endsWith('/con-poster.mp4'));
-    // Sin poster propio: hereda la og:image de la página.
-    assert.equal(sinPoster.thumbnailUrl, 'https://cdn.example.com/og.jpg');
-    // Con poster propio: gana el poster del <video>, absolutizado.
-    assert.equal(conPoster.thumbnailUrl, `${base}/media/poster.jpg`);
+  await t.test(
+    'getThumbnails: un único vídeo sin poster hereda la og:image de la página',
+    async () => {
+      const conThumbs = await extractVideos(`${base}/thumbs-solo`, {
+        useJavaScript: false,
+        getThumbnails: true,
+      });
+      assert.equal(conThumbs.videos[0].thumbnailUrl, 'https://cdn.example.com/og.jpg');
 
-    // Sin el flag no se adjunta ninguna miniatura (regresión del punto 13).
-    const sinThumbs = await extractVideos(`${base}/thumbs`, { useJavaScript: false });
-    assert.ok(
-      sinThumbs.videos.every(v => !v.thumbnailUrl),
-      'sin getThumbnails ningún vídeo debe traer thumbnailUrl'
-    );
-  });
+      // Sin el flag no se adjunta ninguna miniatura (regresión del punto 13).
+      const sinThumbs = await extractVideos(`${base}/thumbs-solo`, { useJavaScript: false });
+      assert.ok(
+        sinThumbs.videos.every(v => !v.thumbnailUrl),
+        'sin getThumbnails ningún vídeo debe traer thumbnailUrl'
+      );
+    }
+  );
+
+  await t.test(
+    'getThumbnails: con varios vídeos, el poster propio manda y la og:image NO se reparte',
+    async () => {
+      const conThumbs = await extractVideos(`${base}/thumbs-album`, {
+        useJavaScript: false,
+        getThumbnails: true,
+      });
+      const sinPoster = conThumbs.videos.find(v => v.url.endsWith('/sin-poster.mp4'));
+      const conPoster = conThumbs.videos.find(v => v.url.endsWith('/con-poster.mp4'));
+      // Con poster propio: gana el poster del <video>, absolutizado.
+      assert.equal(conPoster.thumbnailUrl, `${base}/media/poster.jpg`);
+      // Sin poster propio Y con más de un vídeo en la página: la og:image es
+      // ambigua (¿de cuál de los dos es?) y NO debe estamparse. Antes de este
+      // arreglo, un álbum de N vídeos acababa con los N compartiendo la MISMA
+      // miniatura de página, y de ahí salían falsos duplicados.
+      assert.equal(
+        sinPoster.thumbnailUrl,
+        undefined,
+        'sin poster propio y con varios vídeos en la página, no debe heredar la og:image'
+      );
+    }
+  );
 
   await t.test('single-URL conserva el shape de siempre', async () => {
     const r = await extractVideos(`${base}/simple`, { useJavaScript: false });

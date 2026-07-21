@@ -196,3 +196,152 @@ test('crawl completo — las dos fases contra un servidor real', async t => {
     }
   });
 });
+
+/**
+ * Ficha con VARIOS vídeos reales — un álbum, no un vídeo con clips de vista
+ * previa. Reproduce el fallo real: cada `<video poster>` lleva su propia
+ * imagen y una insignia de duración hermana (`<span class="duration">`), no
+ * una compartida. `findFiles` sacaba la miniatura y la duración UNA vez por
+ * página (og:image / primer `.duration` del documento) y se las estampaba a
+ * los N ficheros por igual: N vídeos distintos con la MISMA miniatura y la
+ * MISMA duración, que `groupDuplicates` interpretaba como duplicados.
+ */
+test('ficha con varios vídeos — cada uno con su propia miniatura y duración', async t => {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+
+    if (url.pathname === '/search') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<html><body><a href="/a/album1">álbum</a></body></html>');
+      return;
+    }
+
+    if (url.pathname === '/a/album1') {
+      // Los ficheros comparten el identificador de la ficha ("album1"), igual
+      // que en un sitio real, para que `relevance.js` los marque como
+      // verificados y no anule la duración por esa vía: lo que este test
+      // fija es el reparto de miniatura/duración, no la verificación de
+      // identidad, que ya tiene su propia cobertura.
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(
+        `<html><head>
+          <meta property="og:image" content="/media/portada-album.jpg">
+        </head><body>
+          <div class="video">
+            <video poster="/media/album1/v1.jpg"><source src="/media/album1/v1.mp4"></video>
+            <span class="duration">00:27</span>
+          </div>
+          <div class="video">
+            <video poster="/media/album1/v2.jpg"><source src="/media/album1/v2.mp4"></video>
+            <span class="duration">00:03</span>
+          </div>
+          <div class="video">
+            <video poster="/media/album1/v3.jpg"><source src="/media/album1/v3.mp4"></video>
+            <span class="duration">00:14</span>
+          </div>
+        </body></html>`
+      );
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('no');
+  });
+
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  t.after(() => new Promise(resolve => server.close(resolve)));
+
+  const resultado = await crawl({
+    searchUrl: `${base}/search?q=x`,
+    linkPattern: '/a/',
+    startPage: 1,
+    endPage: 1,
+    extensions: ['mp4'],
+    concurrency: 2,
+    useJavaScript: false,
+    withThumbnails: true,
+  });
+
+  assert.equal(resultado.totalFiles, 3, 'los tres vídeos del álbum deben aparecer');
+
+  const porNombre = Object.fromEntries(resultado.fileDetails.map(d => [d.url.split('/').pop(), d]));
+
+  await t.test('cada vídeo lleva SU propia miniatura, no la de la página', () => {
+    assert.equal(porNombre['v1.mp4'].thumbnail, `${base}/media/album1/v1.jpg`);
+    assert.equal(porNombre['v2.mp4'].thumbnail, `${base}/media/album1/v2.jpg`);
+    assert.equal(porNombre['v3.mp4'].thumbnail, `${base}/media/album1/v3.jpg`);
+    // Ninguno debe llevar la og:image de la página: sería la miniatura de
+    // otro vídeo.
+    for (const d of resultado.fileDetails) {
+      assert.notEqual(d.thumbnail, `${base}/media/portada-album.jpg`);
+    }
+  });
+
+  await t.test('cada vídeo lleva SU propia duración, no la del primero', () => {
+    assert.equal(porNombre['v1.mp4'].durationSeconds, 27);
+    assert.equal(porNombre['v2.mp4'].durationSeconds, 3);
+    assert.equal(porNombre['v3.mp4'].durationSeconds, 14);
+  });
+
+  await t.test('no se agrupan como duplicados', () => {
+    assert.equal(
+      resultado.duplicateGroups.length,
+      0,
+      `no debería haber grupos: ${JSON.stringify(resultado.duplicateGroups)}`
+    );
+    assert.equal(resultado.totalDuplicados, 0);
+  });
+});
+
+/**
+ * Contraparte: con UN solo vídeo en la ficha no hay ambigüedad, y la
+ * miniatura/duración de página siguen sirviendo de respaldo como siempre.
+ */
+test('ficha con un único vídeo sigue usando la miniatura y duración de página', async t => {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+
+    if (url.pathname === '/search') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<html><body><a href="/a/solo1">ficha</a></body></html>');
+      return;
+    }
+
+    if (url.pathname === '/a/solo1') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(
+        `<html><head>
+          <meta property="og:image" content="/media/portada.jpg">
+          <meta itemprop="duration" content="PT2M5S">
+        </head><body>
+          <a href="/media/unico.mp4">descargar</a>
+        </body></html>`
+      );
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('no');
+  });
+
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  t.after(() => new Promise(resolve => server.close(resolve)));
+
+  const resultado = await crawl({
+    searchUrl: `${base}/search?q=x`,
+    linkPattern: '/a/',
+    startPage: 1,
+    endPage: 1,
+    extensions: ['mp4'],
+    concurrency: 1,
+    useJavaScript: false,
+    withThumbnails: true,
+  });
+
+  assert.equal(resultado.totalFiles, 1);
+  const detalle = resultado.fileDetails[0];
+  assert.equal(detalle.thumbnail, `${base}/media/portada.jpg`);
+  assert.equal(detalle.durationSeconds, 125);
+});

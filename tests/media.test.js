@@ -3,7 +3,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { extractSizeBytes, parseSizeText, formatFileSize } = require('../src/lib/media');
+const {
+  extractSizeBytes,
+  parseSizeText,
+  formatFileSize,
+  extractFileThumbnails,
+  extractFileDurations,
+} = require('../src/lib/media');
 
 const KB = 1024;
 const MB = 1024 ** 2;
@@ -89,4 +95,88 @@ test('formatFileSize sigue tratando el 0 como un tamaño válido', () => {
   assert.equal(formatFileSize(0), '0 Bytes');
   assert.equal(formatFileSize(null), null);
   assert.equal(formatFileSize(245 * MB), '245.0 MB');
+});
+
+/**
+ * Estas dos funciones existen por un fallo concreto: una ficha con VARIOS
+ * vídeos (un álbum) le estampaba a todos la MISMA miniatura y la MISMA
+ * duración —las de la página entera—, y eso los hacía parecer duplicados sin
+ * serlo. Aquí se fija que cada `<video poster>` reparte SU dato solo a su
+ * propio `src`/`<source>`, nunca al de un vídeo vecino.
+ */
+test('extractFileThumbnails', async t => {
+  const base = 'https://s.example.com/a/x';
+
+  await t.test('asocia el poster de cada <video> con su propio fichero', () => {
+    const html = `
+      <video poster="/img/uno.jpg"><source src="/media/uno.mp4"></video>
+      <video poster="/img/dos.jpg"><source src="/media/dos.mp4"></video>`;
+    const mapa = extractFileThumbnails(html, base);
+    assert.equal(
+      mapa.get('https://s.example.com/media/uno.mp4'),
+      'https://s.example.com/img/uno.jpg'
+    );
+    assert.equal(
+      mapa.get('https://s.example.com/media/dos.mp4'),
+      'https://s.example.com/img/dos.jpg'
+    );
+  });
+
+  await t.test('varias calidades del mismo vídeo comparten poster', () => {
+    const html = `
+      <video poster="/img/uno.jpg">
+        <source src="/media/uno_720p.mp4">
+        <source src="/media/uno_1080p.mp4">
+      </video>`;
+    const mapa = extractFileThumbnails(html, base);
+    assert.equal(mapa.size, 2);
+    assert.ok([...mapa.values()].every(v => v === 'https://s.example.com/img/uno.jpg'));
+  });
+
+  await t.test('un fichero sin <video poster> propio no aparece en el mapa', () => {
+    const html = `<a href="/media/suelto.mp4">descargar</a>`;
+    const mapa = extractFileThumbnails(html, base);
+    assert.equal(mapa.size, 0);
+  });
+
+  await t.test('sin HTML devuelve un mapa vacío', () => {
+    assert.equal(extractFileThumbnails('', base).size, 0);
+    assert.equal(extractFileThumbnails(null, base).size, 0);
+  });
+});
+
+test('extractFileDurations', async t => {
+  const base = 'https://s.example.com/a/x';
+
+  await t.test('lee la insignia hermana en el contenedor inmediato de cada vídeo', () => {
+    const html = `
+      <div class="item">
+        <video><source src="/media/uno.mp4"></video>
+        <span class="duration">00:27</span>
+      </div>
+      <div class="item">
+        <video><source src="/media/dos.mp4"></video>
+        <span class="duration">00:03</span>
+      </div>`;
+    const mapa = extractFileDurations(html, base);
+    assert.equal(mapa.get('https://s.example.com/media/uno.mp4'), 27);
+    assert.equal(mapa.get('https://s.example.com/media/dos.mp4'), 3);
+  });
+
+  // Subir más de un nivel arriesga cazar la insignia de un vídeo vecino: sin
+  // ella en el padre inmediato, mejor sin dato que con el de otro.
+  await t.test('no sube más de un nivel a buscar la insignia', () => {
+    const html = `
+      <div class="lista">
+        <span class="duration">00:99</span>
+        <div class="item"><video><source src="/media/sola.mp4"></video></div>
+      </div>`;
+    const mapa = extractFileDurations(html, base);
+    assert.equal(mapa.has('https://s.example.com/media/sola.mp4'), false);
+  });
+
+  await t.test('sin HTML devuelve un mapa vacío', () => {
+    assert.equal(extractFileDurations('', base).size, 0);
+    assert.equal(extractFileDurations(null, base).size, 0);
+  });
 });

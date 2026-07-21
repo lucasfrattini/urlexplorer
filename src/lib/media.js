@@ -301,6 +301,98 @@ function extractThumbnail(html, baseUrl) {
   return null;
 }
 
+/**
+ * Miniatura de CADA vídeo de la página, no de la página entera.
+ *
+ * `extractThumbnail` da UNA imagen para toda la ficha (og:image…), que vale
+ * cuando la ficha describe un solo vídeo. En una ficha con VARIOS vídeos —un
+ * álbum— cada uno lleva su propio `poster` en el `<video>` que lo envuelve, y
+ * estampar la imagen de la ficha a todos repetiría el fallo de la duración
+ * que arregló relevance.js: un dato real, pero del vídeo equivocado. Aquí se
+ * asocia el `poster` de cada `<video>` con su propio `src` y el de cada
+ * `<source>` hijo: son la MISMA fuente en varias calidades, no vídeos
+ * distintos.
+ *
+ * Devuelve un Map de URL de fichero → URL de miniatura. Un fichero sin
+ * `<video poster>` reconocible no aparece en el mapa.
+ */
+function extractFileThumbnails(html, baseUrl) {
+  const mapa = new Map();
+  if (!esDocumento(html) && (typeof html !== 'string' || html.trim() === '')) return mapa;
+
+  const $ = asDocument(html);
+
+  $('video[poster]').each((_, element) => {
+    const $video = $(element);
+    const poster = toAbsoluteUrl(String($video.attr('poster') || '').trim(), baseUrl);
+    if (!poster || !/^https?:\/\//i.test(poster)) return;
+
+    const fuentes = [
+      $video.attr('src'),
+      ...$video
+        .find('source[src]')
+        .map((_, s) => $(s).attr('src'))
+        .get(),
+    ];
+
+    for (const fuente of fuentes) {
+      if (!fuente) continue;
+      const absoluta = toAbsoluteUrl(String(fuente).trim(), baseUrl);
+      if (absoluta) mapa.set(absoluta, poster);
+    }
+  });
+
+  return mapa;
+}
+
+/**
+ * Duración de CADA vídeo de la página, no de la página entera.
+ *
+ * Mismo problema que la miniatura: en un álbum, cada vídeo tiene su propia
+ * duración, casi siempre en una insignia junto al reproductor (una ficha
+ * hallada en producción la marca con `<span class="duration">`, HERMANA del
+ * `<video>`, no hija suya). Se busca solo en el PADRE inmediato del
+ * `<video>` —el contenedor de ESE vídeo concreto— y no más arriba: subir más
+ * niveles arriesga cazar la insignia de un vídeo vecino, que es exactamente
+ * el fallo que esto corrige.
+ *
+ * Devuelve un Map de URL de fichero → segundos. Sin insignia reconocible en
+ * el contenedor inmediato, el vídeo no aparece en el mapa: mejor sin dato que
+ * con el de otro vídeo.
+ */
+function extractFileDurations(html, baseUrl) {
+  const mapa = new Map();
+  if (!esDocumento(html) && (typeof html !== 'string' || html.trim() === '')) return mapa;
+
+  const $ = asDocument(html);
+
+  $('video').each((_, element) => {
+    const $video = $(element);
+    const fuentes = [
+      $video.attr('src'),
+      ...$video
+        .find('source[src]')
+        .map((_, s) => $(s).attr('src'))
+        .get(),
+    ].filter(Boolean);
+    if (fuentes.length === 0) return;
+
+    const contenedor = $video.parent();
+    if (contenedor.length === 0) return;
+
+    const texto = contenedor.find('[class*="duration"], [class*="length"]').first().text();
+    const segundos = parseClockDuration(texto);
+    if (segundos === null) return;
+
+    for (const fuente of fuentes) {
+      const absoluta = toAbsoluteUrl(String(fuente).trim(), baseUrl);
+      if (absoluta) mapa.set(absoluta, segundos);
+    }
+  });
+
+  return mapa;
+}
+
 /** Busca `thumbnailUrl` en el JSON-LD de la ficha. */
 function thumbnailFromJsonLd($) {
   let encontrada = null;
@@ -336,6 +428,8 @@ function thumbnailFromJsonLd($) {
 
 module.exports = {
   extractThumbnail,
+  extractFileThumbnails,
+  extractFileDurations,
   extractDuration,
   extractDurationSeconds,
   extractSizeBytes,
