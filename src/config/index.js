@@ -75,6 +75,10 @@ const config = {
   crawl: {
     // Límites duros: el cliente puede pedir menos, nunca más
     maxPages: intFromEnv('CRAWL_MAX_PAGES', 50),
+    // Direcciones que se pueden explorar en un mismo lote (multi-URL). Cada
+    // una es un crawl completo con su fase 1 y su fase 2, así que el tope
+    // acota el trabajo total que una sola petición puede desencadenar.
+    maxUrls: intFromEnv('CRAWL_MAX_URLS', 10),
     maxLinks: intFromEnv('CRAWL_MAX_LINKS', 5000),
     maxFiles: intFromEnv('CRAWL_MAX_FILES', 5000),
     defaultConcurrency: intFromEnv('CRAWL_DEFAULT_CONCURRENCY', 4),

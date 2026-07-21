@@ -511,6 +511,21 @@ async function findFiles(urls, options) {
 }
 
 /**
+ * Da forma de salida a los grupos de duplicados: solo los que tienen más de
+ * un miembro y con las URLs en vez de los objetos completos. Es la forma que
+ * espera el cliente, y la usan por igual `crawl` y `crawlMany`.
+ */
+function mapearGrupos(grupos) {
+  return grupos
+    .filter(g => g.miembros.length > 1)
+    .map(g => ({
+      representante: g.representante.url,
+      miembros: g.miembros.map(m => m.url),
+      motivos: g.motivos,
+    }));
+}
+
+/**
  * Crawl completo: fase 1 (+ fase 2 si hay extensiones).
  * `emit` recibe los eventos de progreso; es lo que alimenta el SSE.
  */
@@ -523,6 +538,14 @@ async function crawl(params, opciones = {}) {
     linksPrevios = null,
     /** Ficheros ya encontrados antes de frenar, para fundirlos al final. */
     detallesPrevios = [],
+    /**
+     * Agrupar duplicados aquí mismo (por defecto). Se pone a `false` cuando
+     * este crawl es UNA de varias direcciones de un lote multi-URL: entonces
+     * la agrupación NO puede correr por dirección, porque dos copias del mismo
+     * vídeo halladas en direcciones distintas no se verían nunca como
+     * duplicadas. La hace `crawlMany` UNA sola vez sobre la fusión de todas.
+     */
+    group = true,
   } = opciones;
   const {
     searchUrl,
@@ -658,7 +681,12 @@ async function crawl(params, opciones = {}) {
     files = [...new Set([...detallesPrevios.map(d => d.url), ...files])];
   }
 
-  const { grupos, totalDuplicados } = groupDuplicates(fileDetails);
+  // En un lote multi-URL la agrupación NO corre aquí: `crawlMany` la hace una
+  // sola vez sobre la fusión de todas las direcciones. Agrupar por dirección
+  // dejaría escapar los duplicados que están repartidos entre ellas.
+  const { grupos, totalDuplicados } = group
+    ? groupDuplicates(fileDetails)
+    : { grupos: [], totalDuplicados: 0 };
 
   /**
    * Segunda agrupacion, mas agresiva: la duracion sola basta.
@@ -671,27 +699,17 @@ async function crawl(params, opciones = {}) {
    * Con mil resultados, agrupar solo por duracion esconde uno de cada cuatro
    * videos buenos detras de otro que no tiene nada que ver.
    */
-  const porDuracion = groupDuplicates(fileDetails, { soloDuracion: true });
+  const porDuracion = group
+    ? groupDuplicates(fileDetails, { soloDuracion: true })
+    : { grupos: [], totalDuplicados: 0 };
 
   return {
     links,
     files,
     fileDetails,
-    duplicateGroups: grupos
-      .filter(g => g.miembros.length > 1)
-      .map(g => ({
-        representante: g.representante.url,
-        miembros: g.miembros.map(m => m.url),
-        motivos: g.motivos,
-      })),
+    duplicateGroups: mapearGrupos(grupos),
     totalDuplicados,
-    duplicateGroupsPorDuracion: porDuracion.grupos
-      .filter(g => g.miembros.length > 1)
-      .map(g => ({
-        representante: g.representante.url,
-        miembros: g.miembros.map(m => m.url),
-        motivos: g.motivos,
-      })),
+    duplicateGroupsPorDuracion: mapearGrupos(porDuracion.grupos),
     totalDuplicadosPorDuracion: porDuracion.totalDuplicados,
     failures,
     pagesScraped,
@@ -726,6 +744,284 @@ async function crawl(params, opciones = {}) {
     maxDurationMs: config.crawl.maxDurationMs,
     durationMs: Date.now() - startedAt,
   };
+}
+
+/**
+ * Funde los diagnósticos de fase 1 de varias direcciones en uno solo.
+ *
+ * `enlacesVistos` se suma, los prefijos se acumulan y se quedan los tres más
+ * repetidos del conjunto, y la sospecha de bloqueo se combina sin repetir
+ * motivos. Con una sola dirección se devuelve tal cual, para que el lote de
+ * una URL no cambie la forma que ya conoce el cliente.
+ */
+function fusionarDiagnosticos(diagnosticos) {
+  if (!Array.isArray(diagnosticos) || diagnosticos.length === 0) return null;
+  if (diagnosticos.length === 1) return diagnosticos[0];
+
+  let enlacesVistos = 0;
+  const prefijos = new Map();
+  const bloqueos = [];
+  for (const d of diagnosticos) {
+    enlacesVistos += d.enlacesVistos || 0;
+    for (const { prefijo, veces } of d.prefijos || []) {
+      prefijos.set(prefijo, (prefijos.get(prefijo) || 0) + veces);
+    }
+    if (d.bloqueo) bloqueos.push(d.bloqueo);
+  }
+  const prefijosTop = [...prefijos.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([prefijo, veces]) => ({ prefijo, veces }));
+
+  return { enlacesVistos, prefijos: prefijosTop, bloqueo: combinar(bloqueos) };
+}
+
+/**
+ * Explora VARIAS direcciones con la MISMA configuración y agrupa los
+ * duplicados UNA sola vez sobre la fusión de todas.
+ *
+ * Por qué existe: si cada dirección se agrupara por su cuenta, dos copias del
+ * mismo vídeo halladas en direcciones distintas no se verían nunca como
+ * duplicadas. Es la misma razón por la que continuar una exploración funde
+ * antes de agrupar. Cada dirección se recorre con `crawl(..., { group:false })`
+ * —reutilizando fase 1, fase 2, SSRF, topes y throttle tal cual, sin abrir
+ * conexiones nuevas— y aquí solo se fusiona y se agrupa.
+ *
+ * Frenar y continuar operan A NIVEL DE LOTE: la dirección en curso se frena
+ * como siempre (deja de coger enlaces de fase 2, termina lo que tiene en
+ * vuelo) y las direcciones que faltan no se arrancan. Al continuar se sigue
+ * por la dirección interrumpida —sin repetir su fase 1— y después por las
+ * pendientes. El estado para continuar viaja en `estadoReanudar`, que guarda
+ * el registro de trabajos; el cliente solo lleva el id.
+ *
+ * @param {{listaParams: object[], extensions?: string[]}} entrada
+ */
+async function crawlMany(entrada, opciones = {}) {
+  const { listaParams, extensions = [] } = entrada;
+  const { signal, emit = () => {}, pausa = null, reanudar = null } = opciones;
+
+  if (!Array.isArray(listaParams) || listaParams.length === 0) {
+    throw new AppError('Se requiere al menos una searchUrl', 400, 'SEARCH_URL_REQUIRED');
+  }
+
+  const total = listaParams.length;
+  const startedAt = Date.now();
+
+  // Fusión de detalles por URL de fichero. La última descripción gana, igual
+  // que al continuar: dos direcciones pueden traer el mismo fichero.
+  const detallesFusion = new Map();
+  for (const d of reanudar?.detallesPrevios ?? []) detallesFusion.set(d.url, d);
+
+  const linksTotales = new Set();
+  const failures = [];
+  const diagnosticos = [];
+  let pagesScraped = 0;
+  let truncated = false;
+  let skippedByLicense = 0;
+  let discardedFiles = 0;
+  let aborted = false;
+  let timedOut = false;
+
+  let direccionesAnalizadas = reanudar?.direccionesPrevias ?? 0;
+  const indiceInicio = reanudar?.indice ?? 0;
+
+  let pausadoEnLote = false;
+  let estadoReanudar = null;
+
+  for (let i = indiceInicio; i < total; i += 1) {
+    if (signal?.aborted) {
+      aborted = true;
+      break;
+    }
+
+    // Frenado ENTRE direcciones: no se arranca la siguiente. Lo que falta es
+    // esta dirección entera (aún sin empezar) y las que vengan detrás.
+    if (pausa?.pausado) {
+      pausadoEnLote = true;
+      estadoReanudar = {
+        indice: i,
+        detallesPrevios: [...detallesFusion.values()],
+        linksPendientes: [],
+        direccionesPrevias: direccionesAnalizadas,
+      };
+      break;
+    }
+
+    const pUrl = listaParams[i];
+
+    // Solo la dirección interrumpida arranca con sus enlaces pendientes: su
+    // fase 1 ya se recorrió antes de frenar. Las demás empiezan de cero.
+    const continuaInterrumpida =
+      Boolean(reanudar) && i === indiceInicio && (reanudar.linksPendientes?.length ?? 0) > 0;
+
+    emit({ type: 'url_start', urlActual: i + 1, urlTotal: total, searchUrl: pUrl.searchUrl });
+    // Cada evento de progreso lleva en qué dirección va el lote, para que el
+    // cliente pueda decir "dirección i de N".
+    const emitUrl = evento => emit({ ...evento, urlActual: i + 1, urlTotal: total });
+
+    const res = await crawl(
+      { ...pUrl, extensions },
+      {
+        signal,
+        emit: emitUrl,
+        pausa,
+        group: false,
+        linksPrevios: continuaInterrumpida ? reanudar.linksPendientes : null,
+        detallesPrevios: [],
+      }
+    );
+
+    for (const d of res.fileDetails) detallesFusion.set(d.url, d);
+    for (const l of res.links) linksTotales.add(l);
+    failures.push(...res.failures);
+    pagesScraped += res.pagesScraped;
+    truncated = truncated || res.truncated;
+    skippedByLicense += res.skippedByLicense;
+    discardedFiles += res.discardedFiles;
+    if (res.diagnostico) diagnosticos.push(res.diagnostico);
+    if (res.timedOut) timedOut = true;
+
+    if (res.aborted) {
+      aborted = true;
+      break;
+    }
+
+    // Frenado A MEDIAS de esta dirección: su fase 2 dejó enlaces sin mirar.
+    // Se continúa POR ELLA, no por la siguiente.
+    if (res.paused) {
+      pausadoEnLote = true;
+      estadoReanudar = {
+        indice: i,
+        detallesPrevios: [...detallesFusion.values()],
+        linksPendientes: res.pendientes,
+        direccionesPrevias: direccionesAnalizadas,
+      };
+      break;
+    }
+
+    // La dirección se recorrió entera y con éxito.
+    direccionesAnalizadas += 1;
+
+    if (timedOut) break;
+  }
+
+  const fileDetails = [...detallesFusion.values()];
+  const files = fileDetails.map(d => d.url);
+
+  // La agrupación corre UNA vez sobre la fusión: es la razón de ser de este
+  // orquestador. Igual que en `crawl`, no filtra nada, solo agrupa.
+  const { grupos, totalDuplicados } = groupDuplicates(fileDetails);
+  const porDuracion = groupDuplicates(fileDetails, { soloDuracion: true });
+
+  const cancelled = Boolean(signal?.aborted) || aborted;
+
+  return {
+    links: [...linksTotales],
+    files,
+    fileDetails,
+    duplicateGroups: mapearGrupos(grupos),
+    totalDuplicados,
+    duplicateGroupsPorDuracion: mapearGrupos(porDuracion.grupos),
+    totalDuplicadosPorDuracion: porDuracion.totalDuplicados,
+    failures,
+    pagesScraped,
+    totalLinks: linksTotales.size,
+    totalFiles: files.length,
+    extensions,
+    truncated,
+    licenseFilter: listaParams[0].licenseFilter,
+    skippedByLicense,
+    discardedFiles,
+    suspectFiles: fileDetails.filter(d => d.suspect).length,
+    diagnostico: fusionarDiagnosticos(diagnosticos),
+    // Detalle por dirección: el `diagnostico` fundido es para el resumen; este
+    // permite que el cliente explique un vacío dirección por dirección.
+    diagnosticoPorUrl: diagnosticos,
+    // Cuántas direcciones se recorrieron con éxito, de cuántas se pidieron.
+    direccionesAnalizadas,
+    direccionesTotal: total,
+    /**
+     * Frenado a medias del lote. `estadoReanudar` NO viaja al cliente —lleva
+     * miles de URLs pendientes— sino que lo guarda el registro de trabajos.
+     * `pendientesTotal` es solo el número, para avisar sin descarte silencioso.
+     */
+    paused: pausadoEnLote,
+    pendientes: pausadoEnLote ? estadoReanudar.linksPendientes : [],
+    pendientesTotal: pausadoEnLote ? estadoReanudar.linksPendientes.length : 0,
+    estadoReanudar,
+    aborted: cancelled,
+    timedOut,
+    maxDurationMs: config.crawl.maxDurationMs,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+/**
+ * Resuelve la lista de direcciones a explorar a partir de la entrada cruda.
+ *
+ * Acepta, en este orden, las formas con las que puede llegar:
+ *   - `searchUrls` como array (POST con cuerpo JSON).
+ *   - `searchUrls` como string JSON de un array (GET del SSE).
+ *   - `searchUrl` repetido, que Express entrega como array (GET del SSE).
+ *   - `searchUrl` como string único: retrocompatible con los enlaces
+ *     compartidos y los perfiles guardados, que siguen mandando `searchUrl`.
+ *
+ * Devuelve strings sin espacios, sin vacíos y sin repetidos, en el orden en
+ * que llegaron.
+ */
+function resolverSearchUrls(input = {}) {
+  let candidatos = [];
+
+  if (Array.isArray(input.searchUrls)) {
+    candidatos = input.searchUrls;
+  } else if (typeof input.searchUrls === 'string' && input.searchUrls.trim() !== '') {
+    try {
+      const parsed = JSON.parse(input.searchUrls);
+      if (Array.isArray(parsed)) candidatos = parsed;
+    } catch {
+      // Un JSON inválido no es una lista: se cae a `searchUrl` más abajo.
+    }
+  }
+
+  if (candidatos.length === 0) {
+    if (Array.isArray(input.searchUrl)) candidatos = input.searchUrl;
+    else if (typeof input.searchUrl === 'string') candidatos = [input.searchUrl];
+  }
+
+  const vistas = new Set();
+  const urls = [];
+  for (const item of candidatos) {
+    if (typeof item !== 'string') continue;
+    const limpio = item.trim();
+    if (limpio === '' || vistas.has(limpio)) continue;
+    vistas.add(limpio);
+    urls.push(limpio);
+  }
+  return urls;
+}
+
+/**
+ * Normaliza los parámetros de un lote de una o varias direcciones.
+ *
+ * La configuración (patrón, extensiones, paginación, rango…) es COMPARTIDA:
+ * cada dirección pasa por `normalizeCrawlParams` con esa misma configuración,
+ * reutilizando toda la validación de una sola URL (término de búsqueda, tope
+ * de páginas) sin duplicarla. Devuelve un array de parámetros por URL; con una
+ * sola dirección, ese único elemento es idéntico a `normalizeCrawlParams`.
+ */
+function normalizeCrawlParamsList(input = {}) {
+  const urls = resolverSearchUrls(input);
+  if (urls.length === 0) {
+    throw new AppError('Se requiere searchUrl', 400, 'SEARCH_URL_REQUIRED');
+  }
+  if (urls.length > config.crawl.maxUrls) {
+    throw new AppError(
+      `Se pidieron ${urls.length} direcciones y el máximo es ${config.crawl.maxUrls}`,
+      400,
+      'TOO_MANY_URLS'
+    );
+  }
+  return urls.map(url => normalizeCrawlParams({ ...input, searchUrl: url }));
 }
 
 /** Valida y normaliza los parámetros de crawl que llegan por la API. */
@@ -798,9 +1094,12 @@ function normalizeCrawlParams(input) {
 
 module.exports = {
   crawl,
+  crawlMany,
   collectLinks,
   findFiles,
   extractMatchingLinks,
   extractFilesFromHtml,
   normalizeCrawlParams,
+  normalizeCrawlParamsList,
+  resolverSearchUrls,
 };

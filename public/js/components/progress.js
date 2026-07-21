@@ -13,6 +13,25 @@ export function createProgressPanel() {
   const phase2Detail = el('p', { className: 'phase__detail' });
 
   /**
+   * "Dirección i de N": solo aparece en exploraciones multi-URL.
+   *
+   * El servidor manda `urlActual`/`urlTotal` en cada evento de progreso, y un
+   * `url_start` propio al empezar cada dirección. Con una sola dirección
+   * (el caso de siempre) `urlTotal` es 1 y esta línea se queda oculta: no hay
+   * nada que contar. Se guarda en CLAVE + params, no como texto ya escrito,
+   * por lo mismo que el resto del panel: para poder repintarla si cambia el
+   * idioma a mitad de una exploración.
+   */
+  const direccionIndicador = el('p', { className: 'progress__direccion' });
+  direccionIndicador.hidden = true;
+  let direccionInfo = null;
+
+  function pintarDireccion() {
+    if (!direccionInfo) return;
+    direccionIndicador.textContent = t('progreso.direccion', direccionInfo);
+  }
+
+  /**
    * El detalle de cada fase se guarda en CLAVE + params, no como texto ya
    * escrito: es lo unico que permite repintarlo si cambian el idioma con una
    * exploracion a medias. Guardar la frase dejaria el progreso congelado en
@@ -85,6 +104,7 @@ export function createProgressPanel() {
   const root = el('div', {
     className: 'progress',
     children: [
+      direccionIndicador,
       el('div', { className: 'progress__phases', children: [phase1, phase2] }),
       bar,
       el('div', {
@@ -128,6 +148,7 @@ export function createProgressPanel() {
     }
     if (resumenClave === 'progreso.cancelada') summary.textContent = t(resumenClave);
     else if (resumenClave) summary.textContent = tp(resumenClave, feedCount);
+    pintarDireccion();
   });
 
   return {
@@ -152,9 +173,35 @@ export function createProgressPanel() {
       refrescarFrenar();
       resumenClave = null;
       summary.textContent = '';
+      direccionInfo = null;
+      direccionIndicador.hidden = true;
       setPhase(phase1, phase1Detail, 'idle', 'progreso.enEspera');
       setPhase(phase2, phase2Detail, 'idle', 'progreso.enEspera');
       setProgress(0);
+    },
+
+    /**
+     * Dirección en curso, en una exploración de varias direcciones.
+     *
+     * Con una sola dirección (`urlTotal` 1 o ausente) no hay nada que decir
+     * y el indicador se queda oculto: es el caso de siempre y no debe ganar
+     * una línea nueva sin motivo. `searchUrl` no siempre viaja —solo lo manda
+     * `url_start`—, así que si un evento de progreso no lo trae se conserva
+     * el último conocido en vez de mostrar "undefined".
+     */
+    startUrl({ urlActual, urlTotal, searchUrl }) {
+      if (!urlTotal || urlTotal <= 1) {
+        direccionInfo = null;
+        direccionIndicador.hidden = true;
+        return;
+      }
+      direccionInfo = {
+        actual: urlActual,
+        total: urlTotal,
+        url: searchUrl ?? direccionInfo?.url ?? '',
+      };
+      direccionIndicador.hidden = false;
+      pintarDireccion();
     },
 
     startPhase1() {

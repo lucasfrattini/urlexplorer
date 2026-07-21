@@ -81,6 +81,7 @@ export const en = {
   'progreso.resumenFase1.varios': '{enlaces} links across {n} pages{sufijo}',
   'progreso.analizando': 'Scanning {total} pages…',
   'progreso.deTotal': '{actual} of {total} · {url}',
+  'progreso.direccion': 'Address {actual} of {total} · {url}',
   'progreso.hallados.uno': '{n} file found',
   'progreso.hallados.varios': '{n} files found',
   'progreso.frenar': 'Stop',
@@ -110,8 +111,9 @@ export const en = {
   'resultados.total.varios': '{n} results',
   'resultados.mostrando': 'showing {visibles} of {total}',
   'resultados.plegados': '{n} collapsed as duplicates',
-  'resultados.copiar': 'Copy',
+  'resultados.copiar': 'Copy all',
   'resultados.descargar': 'Download .txt',
+  'resultados.exportar': 'Export ▾',
   'resultados.copiados': '{n} links copied',
   'resultados.noCopiado': 'Could not copy to the clipboard',
   'resultados.descargados': '{n} links downloaded',
@@ -195,10 +197,13 @@ export const en = {
   'explorer.pasos.resultados': 'Results',
 
   /* ── Explorer: where to start ──────────────────────────────────── */
-  'explorer.url.label': 'Which page do you want to walk through?',
+  'explorer.url.label': 'Addresses to explore',
   'explorer.url.hint':
-    'Paste the address as it is. If you write {q} where the searched word would go and {page} where the page number goes, the site is saved once and you only change the word.',
+    'Paste each address as it is. If you write {q} where the searched word would go and {page} where the page number goes, the site is saved once and you only change the word. The link pattern, file type and page range apply equally to all of them. If the site is paginated and you are going to use "Set it up for me", paste an address that already includes the page (for example, with page=2 or /page/2).',
   'explorer.url.placeholder': 'https://example.com/gallery?q=cats',
+  'explorer.urls.agregar': '+ Add another address',
+  'explorer.urls.quitar': 'Remove this address',
+  'explorer.urls.extra.aria': 'Additional address to explore',
   'explorer.termino.label': 'Looking for a particular word? (optional)',
   'explorer.termino.hint':
     'It goes wherever the address has {q}. If the address has no {q}, this field does nothing.',
@@ -227,11 +232,14 @@ export const en = {
 
   /* ── Explorer: collapsed setup summary ─────────────────────────── */
   'explorer.resumen.editar': 'Edit',
-  'explorer.resumen.url': 'Address',
+  'explorer.resumen.nuevaBusqueda': '↺ New search',
+  'explorer.resumen.url': 'Addresses',
   'explorer.resumen.tipo': 'Type',
   'explorer.resumen.rango': 'Pages',
   'explorer.resumen.tipo.soloEnlaces': 'links only',
   'explorer.resumen.rango.valor': '{desde}–{hasta}',
+  'explorer.resumen.direcciones.uno': '{n} address',
+  'explorer.resumen.direcciones.varios': '{n} addresses',
 
   /* ── Explorer: actions ─────────────────────────────────────────── */
   'explorer.explorar': 'Explore now',
@@ -297,7 +305,16 @@ export const en = {
   'ejemplos.campo.parametro': 'Parameter name',
   'ejemplos.campo.url': 'Starting address',
 
-  /* ── Explorer: stats ───────────────────────────────────────────── */
+  /* ── Explorer: results KPIs ──────────────────────────────────────── */
+  'kpi.archivos': 'Files found',
+  'kpi.enlaces': 'Links found',
+  'kpi.direcciones': 'Addresses analyzed',
+  'kpi.duplicados': 'Duplicate groups',
+  'kpi.ocultos': 'Manually hidden',
+  'kpi.detalle': '{paginas} pages walked in {segundos}s',
+  'kpi.detalle.fallidas': ' · {n} failed',
+
+  /* ── Explorer: stats (previous bar, see KPIs above) ──────────────── */
   'stats.enlaces': 'Links',
   'stats.paginas': 'Pages walked',
   'stats.ficheros': 'Files',

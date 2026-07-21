@@ -5,7 +5,7 @@ const express = require('express');
 const config = require('../config');
 const logger = require('../lib/logger');
 const { parseExtensionList } = require('../lib/url');
-const { crawl, normalizeCrawlParams } = require('../services/scraper');
+const { crawl, crawlMany, normalizeCrawlParamsList } = require('../services/scraper');
 const { detectConfig } = require('../services/detector');
 const { AppError } = require('../lib/errors');
 const { registro } = require('../services/jobs');
@@ -48,7 +48,10 @@ router.post('/scrape/detect', async (req, res, next) => {
  */
 router.post('/scrape', async (req, res, next) => {
   try {
-    const params = normalizeCrawlParams(req.body || {});
+    // Una o varias direcciones con la MISMA configuración. Con una sola, la
+    // lista trae un único elemento idéntico al normalizeCrawlParams de antes,
+    // así que el caso clásico (searchUrl string) no cambia en nada.
+    const lista = normalizeCrawlParamsList(req.body || {});
     const extensions = parseExtensionList(req.body?.fileExtensions);
 
     // Si el cliente corta la conexión, se aborta el crawl
@@ -57,19 +60,42 @@ router.post('/scrape', async (req, res, next) => {
       if (!res.writableEnded) controller.abort();
     });
 
-    const result = await crawl({ ...params, extensions }, { signal: controller.signal });
+    // Campos compartidos que se devuelven como eco: son iguales para todas las
+    // direcciones porque la configuración es común.
+    const compartida = lista[0];
+    const eco = {
+      pageParam: compartida.pageParam || null,
+      linkPattern: compartida.linkPattern || null,
+      startPage: compartida.startPage,
+      endPage: compartida.endPage,
+      usePagination: Boolean(compartida.pageParam),
+      usePattern: Boolean(compartida.linkPattern),
+      deepSearch: extensions.length > 0,
+    };
 
-    res.json({
+    if (lista.length === 1) {
+      const result = await crawl({ ...compartida, extensions }, { signal: controller.signal });
+      return res.json({
+        success: true,
+        ...result,
+        // Una dirección analizada, salvo que el cliente cancelara a mitad.
+        direccionesAnalizadas: result.aborted ? 0 : 1,
+        searchUrl: compartida.searchUrl,
+        ...eco,
+      });
+    }
+
+    const result = await crawlMany(
+      { listaParams: lista, extensions },
+      { signal: controller.signal }
+    );
+    return res.json({
       success: true,
       ...result,
-      searchUrl: params.searchUrl,
-      pageParam: params.pageParam || null,
-      linkPattern: params.linkPattern || null,
-      startPage: params.startPage,
-      endPage: params.endPage,
-      usePagination: Boolean(params.pageParam),
-      usePattern: Boolean(params.linkPattern),
-      deepSearch: extensions.length > 0,
+      // El estado para continuar no viaja al cliente; el POST no tiene pausa.
+      estadoReanudar: undefined,
+      searchUrls: lista.map(p => p.searchUrl),
+      ...eco,
     });
   } catch (error) {
     next(error);
@@ -164,7 +190,72 @@ router.get('/scrape/stream', async (req, res) => {
       );
     }
 
-    const params = anterior ? anterior.params : normalizeCrawlParams(req.query || {});
+    // Una exploración nueva puede ser de una dirección o de varias con la MISMA
+    // configuración. Al continuar, lo dice el trabajo guardado. El límite común
+    // (maxLinks/maxFiles) se envía en ambos casos.
+    const limits = { maxLinks: config.crawl.maxLinks, maxFiles: config.crawl.maxFiles };
+    const listaNueva = anterior ? null : normalizeCrawlParamsList(req.query || {});
+    const esMulti = anterior ? anterior.multi === true : listaNueva.length > 1;
+
+    if (esMulti) {
+      const listaParams = anterior ? anterior.listaParams : listaNueva;
+      const extensions = anterior
+        ? anterior.extensions
+        : parseExtensionList(req.query.fileExtensions);
+
+      // El id se manda ANTES de empezar: sin él, el cliente no tendría a quién
+      // decirle "frena" mientras el lote corre.
+      const jobId = anterior
+        ? anterior.id
+        : registro.crear({ multi: true, listaParams, extensions, estadoMulti: null });
+
+      if (anterior) registro.actualizar(jobId, { pausado: false });
+
+      send({ type: 'job', jobId });
+
+      const trabajo = registro.obtener(jobId);
+      const result = await crawlMany(
+        { listaParams, extensions },
+        {
+          signal: controller.signal,
+          emit: send,
+          // El propio trabajo hace de bandera: pausar() le pone `pausado`
+          pausa: trabajo,
+          reanudar: anterior ? anterior.estadoMulti : null,
+        }
+      );
+
+      /**
+       * El estado para continuar (miles de URLs pendientes) se guarda EN EL
+       * SERVIDOR, nunca viaja al cliente: es un GET y no cabe en la query.
+       */
+      if (result.paused && result.estadoReanudar) {
+        registro.actualizar(jobId, { estadoMulti: result.estadoReanudar, pausado: false });
+      } else {
+        registro.borrar(jobId);
+      }
+
+      const compartida = listaParams[0];
+      send({
+        type: 'complete',
+        ...result,
+        // Ni las URLs pendientes ni el estado interno viajan
+        pendientes: undefined,
+        estadoReanudar: undefined,
+        pendientesTotal: result.pendientesTotal,
+        jobId: result.paused && result.estadoReanudar ? jobId : null,
+        searchUrls: listaParams.map(p => p.searchUrl),
+        startPage: compartida.startPage,
+        endPage: compartida.endPage,
+        usePagination: Boolean(compartida.pageParam),
+        usePattern: Boolean(compartida.linkPattern),
+        limits,
+      });
+      return;
+    }
+
+    // ── Flujo de una sola dirección: idéntico al de siempre ──────────────
+    const params = anterior ? anterior.params : listaNueva[0];
     const extensions = anterior
       ? anterior.extensions
       : parseExtensionList(req.query.fileExtensions);
@@ -212,6 +303,8 @@ router.get('/scrape/stream', async (req, res) => {
     send({
       type: 'complete',
       ...result,
+      // Una sola dirección: analizada salvo que el cliente cancelara
+      direccionesAnalizadas: result.aborted ? 0 : 1,
       // Las URLs pendientes NO viajan; solo cuántas y con qué id seguir
       pendientes: undefined,
       pendientesTotal: result.pendientes.length,
@@ -220,10 +313,7 @@ router.get('/scrape/stream', async (req, res) => {
       endPage: params.endPage,
       usePagination: Boolean(params.pageParam),
       usePattern: Boolean(params.linkPattern),
-      limits: {
-        maxLinks: config.crawl.maxLinks,
-        maxFiles: config.crawl.maxFiles,
-      },
+      limits,
     });
   } catch (error) {
     logger.warn(`Error en el stream de scraping: ${error.message}`);

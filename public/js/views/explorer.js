@@ -1,4 +1,4 @@
-import { el, setChildren, clear, alertBox, stat, show, toast } from '../dom.js';
+import { el, setChildren, clear, alertBox, show, toast } from '../dom.js';
 import { openScrapeStream, detectConfig, pauseScrape } from '../api.js';
 import { createProgressPanel } from '../components/progress.js';
 import { createResultList } from '../components/resultList.js';
@@ -10,8 +10,9 @@ import {
   modoAvanzadoDe,
   paginationModeDe,
   siguienteRango,
+  construirParamsMultiUrl,
 } from './explorerOptions.js';
-import { t, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
+import { t, tp, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
 /**
  * El último formulario usado se recuerda en `sessionStorage`, no en
@@ -211,13 +212,26 @@ export function createExplorerView(container, { limits }) {
 
   // ── De dónde se parte ──────────────────────────────────────────────
 
-  const campoUrl = makeField(
-    'searchUrl',
-    'explorer.url.label',
-    'explorer.url.hint',
-    { type: 'url', required: true, autocomplete: 'url', spellcheck: 'false' },
-    { placeholderKey: 'explorer.url.placeholder' }
-  );
+  /**
+   * `fields.searchUrl` es la PRIMERA dirección de la lista (multi-URL, ver
+   * más abajo). Es la ÚNICA que conoce el contrato con `readForm()`, los
+   * perfiles guardados y los enlaces compartidos (`CONFIG_KEYS` en
+   * `profiles.js`): ninguno de esos conoce filas adicionales. Se crea aquí,
+   * en crudo, y se monta dentro de su fila más abajo, junto al botón de
+   * "Configurar por mí" (que también se define más abajo).
+   */
+  fields.searchUrl = el('input', {
+    className: 'input',
+    attrs: {
+      id: 'explorer-searchUrl',
+      name: 'searchUrl',
+      type: 'url',
+      required: true,
+      autocomplete: 'url',
+      spellcheck: 'false',
+    },
+  });
+  atributo(fields.searchUrl, 'placeholder', 'explorer.url.placeholder');
 
   const campoTermino = makeField(
     'searchTerm',
@@ -630,24 +644,126 @@ export function createExplorerView(container, { limits }) {
   const detectSlot = el('div');
   show(detectSlot, false);
 
+  // ── Direcciones a explorar (multi-URL) ──────────────────────────────
+  //
+  // La PRIMERA fila es `fields.searchUrl` (creado más arriba): el campo del
+  // contrato con `readForm()`, los perfiles y los enlaces compartidos. Las
+  // filas siguientes son SOLO interfaz —direcciones adicionales que
+  // comparten la misma configuración y se funden en
+  // `construirParamsMultiUrl()` al enviar (ver explorerOptions.js)— y viven
+  // en `filasUrlExtra`, fuera de `fields`: un perfil guardado o un enlace
+  // compartido nunca las conocerá, así que no deben tocar ese contrato.
+  //
+  // "Configurar por mí" (`detectButton`) solo aparece en la primera fila: es
+  // la única que analiza el sitio.
+
+  let contadorFilaUrl = 0;
+  /** @type {Array<{ id: string, input: HTMLInputElement }>} */
+  let filasUrlExtra = [];
+
+  function crearInputUrlExtra(valor = '') {
+    const input = el('input', {
+      className: 'input',
+      attrs: { type: 'url', autocomplete: 'url', spellcheck: 'false', value: valor },
+    });
+    atributo(input, 'aria-label', 'explorer.urls.extra.aria');
+    atributo(input, 'placeholder', 'explorer.url.placeholder');
+    return input;
+  }
+
+  function crearBotonQuitarFila(onClick) {
+    const boton = el('button', {
+      className: 'button button--secondary button--icon',
+      text: '✕',
+      attrs: { type: 'button' },
+      on: { click: onClick },
+    });
+    atributo(boton, 'aria-label', 'explorer.urls.quitar');
+    atributo(boton, 'title', 'explorer.urls.quitar');
+    return boton;
+  }
+
+  const listaFilasExtra = el('div', { className: 'url-list' });
+
+  /** Repinta las filas extra y el estado de "quitar" de la primera fila. */
+  function pintarFilasUrl() {
+    quitarPrimeraBtn.disabled = filasUrlExtra.length === 0;
+    setChildren(
+      listaFilasExtra,
+      filasUrlExtra.map(fila =>
+        el('div', {
+          className: 'url-row',
+          children: [
+            fila.input,
+            crearBotonQuitarFila(() => {
+              filasUrlExtra = filasUrlExtra.filter(f => f.id !== fila.id);
+              pintarFilasUrl();
+            }),
+          ],
+        })
+      )
+    );
+  }
+
+  function agregarFilaExtra(valor = '') {
+    const id = `url-extra-${contadorFilaUrl++}`;
+    filasUrlExtra = [...filasUrlExtra, { id, input: crearInputUrlExtra(valor) }];
+    pintarFilasUrl();
+  }
+
+  /** Vacía las filas extra: retrocompat con perfiles y enlaces de una URL. */
+  function limpiarFilasExtra() {
+    filasUrlExtra = [];
+    pintarFilasUrl();
+  }
+
   /**
-   * La dirección manda, y la detección va pegada a ella.
-   *
-   * "Que lo configure por mí" opera sobre lo que hay escrito en este campo,
-   * así que su sitio es el lado del campo y no una fila de botones al final:
-   * allí abajo no se leía como lo que es, una ayuda para rellenar ESTA
-   * dirección.
+   * Quitar la primera fila no destruye `fields.searchUrl` (sigue siendo EL
+   * campo del contrato): en su lugar, promueve la siguiente fila a primera,
+   * copiando su valor y descartándola de `filasUrlExtra`. Deshabilitado
+   * cuando es la única dirección: no tiene sentido quitar la última que
+   * queda.
    */
-  campoUrl.insertBefore(
-    el('div', { className: 'url-row', children: [fields.searchUrl, detectButton] }),
-    campoUrl.children[1]
-  );
+  const quitarPrimeraBtn = crearBotonQuitarFila(() => {
+    if (filasUrlExtra.length === 0) return;
+    const [primera, ...resto] = filasUrlExtra;
+    fields.searchUrl.value = primera.input.value;
+    filasUrlExtra = resto;
+    pintarFilasUrl();
+  });
+
+  const filaPrincipal = el('div', {
+    className: 'url-row',
+    children: [fields.searchUrl, detectButton, quitarPrimeraBtn],
+  });
+
+  const agregarUrlBtn = el('button', {
+    className: 'link-toggle',
+    attrs: { type: 'button' },
+    on: { click: () => agregarFilaExtra() },
+  });
+  texto(agregarUrlBtn, 'explorer.urls.agregar');
+
+  const bloqueDirecciones = el('div', {
+    className: 'field',
+    children: [
+      texto(
+        el('label', { className: 'field__label', attrs: { for: 'explorer-searchUrl' } }),
+        'explorer.url.label'
+      ),
+      el('div', { className: 'url-list', children: [filaPrincipal, listaFilasExtra] }),
+      agregarUrlBtn,
+      texto(el('p', { className: 'field__hint' }), 'explorer.url.hint'),
+    ],
+  });
+
+  pintarFilasUrl(); // Estado inicial: sin filas extra, "quitar" deshabilitado.
 
   const form = el('form', {
     className: 'explorer-form',
     attrs: { novalidate: true },
     children: [
-      campoUrl,
+      bloqueDirecciones,
       terminoToggle,
       campoTermino,
 
@@ -796,6 +912,21 @@ export function createExplorerView(container, { limits }) {
   });
   texto(resumenEditarBtn, 'explorer.resumen.editar');
 
+  /**
+   * "↺ Nueva búsqueda": vuelve al paso 1 con el formulario RESETEADO.
+   *
+   * Distinto de "Editar", que vuelve al paso 1 CONSERVANDO la configuración.
+   * Antes había que pulsar "Editar" y luego "Limpiar" para lograr lo mismo;
+   * el click handler es el mismo que el de `resetButton` (más abajo,
+   * `limpiarFormularioCompleto()`), así que las dos formas de reiniciar se
+   * mantienen idénticas por definición.
+   */
+  const resumenNuevaBtn = el('button', {
+    className: 'button button--secondary button--small',
+    attrs: { type: 'button' },
+  });
+  texto(resumenNuevaBtn, 'explorer.resumen.nuevaBusqueda');
+
   const itemResumen = (labelKey, valorNodo) =>
     el('span', {
       className: 'config-summary__item',
@@ -813,7 +944,10 @@ export function createExplorerView(container, { limits }) {
           itemResumen('explorer.resumen.rango', resumenRangoValor),
         ],
       }),
-      resumenEditarBtn,
+      el('div', {
+        className: 'config-summary__acciones',
+        children: [resumenEditarBtn, resumenNuevaBtn],
+      }),
     ],
   });
   show(configSummary, false);
@@ -826,7 +960,13 @@ export function createExplorerView(container, { limits }) {
    */
   function pintarResumenConfig() {
     const params = readForm();
-    resumenUrlValor.textContent = params.searchUrl;
+    const urls = readUrls();
+    // Con una sola dirección se enseña ella misma, como siempre; con varias,
+    // el conteo: la línea de resumen no tiene ancho para tres o cuatro URLs.
+    resumenUrlValor.textContent =
+      urls.length > 1
+        ? tp('explorer.resumen.direcciones', urls.length)
+        : urls[0] || params.searchUrl;
 
     if (!params.fileExtensions) {
       resumenTipoValor.textContent = t('explorer.resumen.tipo.soloEnlaces');
@@ -1029,9 +1169,29 @@ export function createExplorerView(container, { limits }) {
     };
   }
 
-  /** Vuelca una configuración guardada o venida por URL en el formulario. */
-  function applyConfig(config) {
+  /**
+   * Todas las direcciones NO vacías: la primera (`fields.searchUrl`) y las
+   * filas extra. Es lo único que sabe combinarlas; el resto del código pide
+   * esta lista y la pasa a `construirParamsMultiUrl()` al enviar.
+   */
+  function readUrls() {
+    return [fields.searchUrl.value, ...filasUrlExtra.map(f => f.input.value)]
+      .map(u => u.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Vuelca una configuración guardada o venida por URL en el formulario.
+   *
+   * `resetUrls` por defecto vacía las filas extra: un perfil o un enlace
+   * compartido solo conocen una dirección (`CONFIG_KEYS` en profiles.js), así
+   * que aplicarlos siempre debe dejar UNA sola fila (retrocompat). La
+   * detección ("Configurar por mí") es la excepción: solo corrige la primera
+   * dirección y no debe tocar las demás que el usuario ya haya agregado.
+   */
+  function applyConfig(config, { resetUrls = true } = {}) {
     if (!config) return;
+    if (resetUrls) limpiarFilasExtra();
     for (const [key, value] of Object.entries(config)) {
       const input = fields[key];
       if (!input) continue;
@@ -1043,7 +1203,14 @@ export function createExplorerView(container, { limits }) {
     sincronizarUI();
   }
 
-  /** Configuración actual, para guardarla o convertirla en enlace. */
+  /**
+   * Configuración actual, para guardarla o convertirla en enlace.
+   *
+   * A propósito NO incluye las direcciones extra: los perfiles guardados y
+   * los enlaces compartidos son el contrato de `fields`, y ya existen sin
+   * conocer ninguna lista de URLs. Añadirles un campo ahora dejaría a los
+   * que ya existen sin la información y complicaría leerlos hacia atrás.
+   */
   function currentConfig() {
     const config = {};
     for (const [name, input] of Object.entries(fields)) {
@@ -1056,9 +1223,17 @@ export function createExplorerView(container, { limits }) {
     try {
       const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
       for (const [key, value] of Object.entries(saved)) {
-        if (!fields[key]) continue;
+        if (key === 'urlsExtra' || !fields[key]) continue;
         if (fields[key].type === 'checkbox') fields[key].checked = Boolean(value);
         else fields[key].value = value;
+      }
+      // Las direcciones extra NO son parte de `fields` (ver `currentConfig`),
+      // pero sí conviene recordarlas dentro de esta misma sesión, igual que
+      // el resto del formulario recordado.
+      if (Array.isArray(saved.urlsExtra)) {
+        for (const valor of saved.urlsExtra) {
+          if (String(valor ?? '').trim()) agregarFilaExtra(valor);
+        }
       }
     } catch {
       // preferencias corruptas: se ignoran
@@ -1071,6 +1246,7 @@ export function createExplorerView(container, { limits }) {
       for (const [name, input] of Object.entries(fields)) {
         state[name] = input.type === 'checkbox' ? input.checked : input.value;
       }
+      state.urlsExtra = filasUrlExtra.map(f => f.input.value);
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // almacenamiento lleno o bloqueado: no es crítico
@@ -1083,6 +1259,14 @@ export function createExplorerView(container, { limits }) {
     refrescarBotones();
     for (const input of Object.values(fields)) input.disabled = busy;
     for (const input of uiInputs) input.disabled = busy;
+    // Las direcciones extra y sus controles no viven en `fields` ni en
+    // `uiInputs`: es un bloque que se reconstruye entero cada vez que se
+    // agrega o quita una fila (`pintarFilasUrl`), así que se deshabilita
+    // recorriendo el DOM en vez de acumular referencias que quedarían
+    // huérfanas en cuanto una fila se repinta.
+    quitarPrimeraBtn.disabled = busy || filasUrlExtra.length === 0;
+    agregarUrlBtn.disabled = busy;
+    for (const nodo of listaFilasExtra.querySelectorAll('input, button')) nodo.disabled = busy;
   }
 
   /**
@@ -1130,28 +1314,75 @@ export function createExplorerView(container, { limits }) {
 
   /** Último `complete`, para poder repintar las cifras en el otro idioma. */
   let ultimasStats = null;
+  /** Cuántos resultados hay ocultados a mano AHORA MISMO (ver más abajo). */
+  let ocultosManualmente = 0;
 
+  /**
+   * Tarjeta KPI destacada.
+   *
+   * `acento` es la que de verdad importa a simple vista (archivos o enlaces
+   * encontrados); `advertencia` es para "Ocultados manualmente", que solo
+   * aparece si hay alguno y conviene que se note.
+   */
+  function kpiCard(valor, etiqueta, { acento = false, advertencia = false } = {}) {
+    const clases = ['kpi'];
+    if (acento) clases.push('kpi--acento');
+    if (advertencia) clases.push('kpi--advertencia');
+    return el('div', {
+      className: clases.join(' '),
+      children: [
+        el('div', { className: 'kpi__valor', text: valor }),
+        el('div', { className: 'kpi__etiqueta', text: etiqueta }),
+      ],
+    });
+  }
+
+  /**
+   * Repinta las cifras del último `complete` conocido.
+   *
+   * Reemplaza a la barra `.stats` de antes (enlaces/páginas/ficheros/
+   * duración/fallidas, cinco cifras neutras) por CUATRO tarjetas KPI: la
+   * destacada (archivos, o enlaces si no hubo fase 2), direcciones
+   * analizadas, grupos de duplicados y —solo si hay alguno— ocultados a
+   * mano. Lo que antes vivía en la barra (páginas recorridas, duración,
+   * fallidas) no desaparece: se resume en una línea aparte, porque perderlo
+   * en silencio sería la misma clase de regresión que el resto de este
+   * proyecto evita.
+   */
   function renderStats(payload) {
     if (payload) ultimasStats = payload;
     if (!ultimasStats) return;
 
     const datos = ultimasStats;
+    const deepSearch = datos.extensions?.length > 0;
+
     const cards = [
-      stat(datos.totalLinks ?? 0, t('stats.enlaces')),
-      stat(datos.pagesScraped ?? 0, t('stats.paginas')),
+      deepSearch
+        ? kpiCard(datos.totalFiles ?? 0, t('kpi.archivos'), { acento: true })
+        : kpiCard(datos.totalLinks ?? 0, t('kpi.enlaces'), { acento: true }),
+      kpiCard(datos.direccionesAnalizadas ?? 1, t('kpi.direcciones')),
+      kpiCard(datos.duplicateGroups?.length ?? 0, t('kpi.duplicados')),
     ];
 
-    if (datos.extensions?.length > 0) {
-      cards.push(stat(datos.totalFiles ?? 0, t('stats.ficheros')));
-    }
-    if (datos.durationMs !== undefined) {
-      cards.push(stat(`${(datos.durationMs / 1000).toFixed(1)}s`, t('stats.duracion')));
-    }
-    if (datos.failures?.length > 0) {
-      cards.push(stat(datos.failures.length, t('stats.fallidas')));
+    if (ocultosManualmente > 0) {
+      cards.push(kpiCard(ocultosManualmente, t('kpi.ocultos'), { advertencia: true }));
     }
 
-    setChildren(statsSlot, el('div', { className: 'stats', children: cards }));
+    const detalle =
+      datos.pagesScraped !== undefined && datos.durationMs !== undefined
+        ? t('kpi.detalle', {
+            paginas: datos.pagesScraped,
+            segundos: (datos.durationMs / 1000).toFixed(1),
+          }) +
+          (datos.failures?.length > 0
+            ? t('kpi.detalle.fallidas', { n: datos.failures.length })
+            : '')
+        : '';
+
+    setChildren(statsSlot, [
+      el('div', { className: 'kpi-grid', children: cards }),
+      detalle ? el('p', { className: 'field__hint', text: detalle }) : null,
+    ]);
     show(statsSlot, true);
     // Cinturón y tirantes: si algo llegara a mostrar las cifras sin haber
     // pasado por el `show(progressPanel, true)` del envío o de "continuar",
@@ -1160,6 +1391,14 @@ export function createExplorerView(container, { limits }) {
   }
 
   alCambiarIdioma(() => renderStats(null));
+
+  // "Ocultados manualmente" vive fuera de la tarjeta de resultados (es una
+  // cifra del explorador, no un filtro), así que necesita que resultList.js
+  // le avise cada vez que cambia en vez de leer su estado interno.
+  results.onHiddenChange(count => {
+    ocultosManualmente = count;
+    renderStats(null);
+  });
 
   // ── Detección de configuración ─────────────────────────────────────
 
@@ -1315,7 +1554,10 @@ export function createExplorerView(container, { limits }) {
       // El scroll no funciona sin navegador, así que proponerlo sin activarlo
       // sería proponer una configuración que no puede funcionar.
       if (sugerencia.paginationMode === 'scroll') aplicar.useJavaScript = true;
-      applyConfig(aplicar);
+      // La detección solo corrige la PRIMERA dirección: no debe vaciar las
+      // filas extra que el usuario ya haya agregado (a diferencia de cargar
+      // un perfil o un enlace compartido, que sí resetean a una sola fila).
+      applyConfig(aplicar, { resetUrls: false });
 
       // Si la propuesta trae patrones, se abre el panel y se enseña el modo a
       // mano: la detección acaba de escribir en campos que en "automático"
@@ -1393,6 +1635,15 @@ export function createExplorerView(container, { limits }) {
   });
 
   function handleEvent(event, collected) {
+    // Exploración de varias direcciones: el servidor añade `urlActual`/
+    // `urlTotal` a CADA evento de progreso de la dirección en curso (y manda
+    // un `url_start` propio al empezar cada una). Con una sola dirección
+    // `urlTotal` es 1 (o no viene) y el panel lo deja oculto: no hay "1 de 1"
+    // que anunciar.
+    if (event.type !== 'complete' && event.type !== 'error' && event.urlActual && event.urlTotal) {
+      progress.startUrl(event);
+    }
+
     switch (event.type) {
       // El servidor manda el id ANTES de empezar: sin él no habría a quién
       // decirle "frena" mientras la exploración corre.
@@ -1590,20 +1841,25 @@ export function createExplorerView(container, { limits }) {
   form.addEventListener('submit', submitEvent => {
     submitEvent.preventDefault();
     const params = readForm();
+    const urls = readUrls();
 
-    if (!params.searchUrl) {
+    if (urls.length === 0) {
       showError('error.faltaUrl', 'error.faltaUrl.explorar');
       fields.searchUrl.focus();
       return;
     }
 
-    if (!/^https?:\/\//i.test(params.searchUrl)) {
+    // Basta con que UNA dirección esté mal escrita: se señala la primera y
+    // se enfoca su fila, sea la principal o una extra.
+    const invalida = urls.find(u => !/^https?:\/\//i.test(u));
+    if (invalida) {
       showError('error.urlInvalida', 'error.urlInvalida.body');
-      fields.searchUrl.focus();
+      const filaInvalida = filasUrlExtra.find(f => f.input.value.trim() === invalida);
+      (filaInvalida ? filaInvalida.input : fields.searchUrl).focus();
       return;
     }
 
-    if (/\{(?:q|query|termino|término)\}/i.test(params.searchUrl) && !params.searchTerm) {
+    if (/\{(?:q|query|termino|término)\}/i.test(urls.join(' ')) && !params.searchTerm) {
       showError('error.faltaTermino', 'error.faltaTermino.body');
       // Se pide una palabra que está en un campo plegado: sin desplegarlo, el
       // aviso señalaría a algo que no se ve.
@@ -1625,7 +1881,10 @@ export function createExplorerView(container, { limits }) {
     // no páginas, así que ni se exige parámetro ni aplica el tope de páginas.
     const esScroll = params.paginationMode === 'scroll';
 
-    const paginaPorPlantilla = /\{page(?::\d+)?\}/i.test(params.searchUrl);
+    // Con varias direcciones basta con que UNA lleve la plantilla: la
+    // configuración es compartida, así que si alguna la trae, el rango se
+    // resuelve por dirección igual que en el caso de una sola.
+    const paginaPorPlantilla = urls.some(u => /\{page(?::\d+)?\}/i.test(u));
     if (
       !esScroll &&
       !params.pageParam &&
@@ -1680,12 +1939,22 @@ export function createExplorerView(container, { limits }) {
     show(configSummary, true);
 
     const collected = { files: [] };
-    stream = openScrapeStream(params, {
+    const streamParams = construirParamsMultiUrl(urls, params);
+    stream = openScrapeStream(streamParams, {
       onEvent: event => handleEvent(event, collected),
     });
   });
 
-  resetButton.addEventListener('click', () => {
+  /**
+   * Vuelve al paso 1 con el formulario RESETEADO por completo.
+   *
+   * La comparten `resetButton` ("Limpiar", siempre visible en el formulario)
+   * y `resumenNuevaBtn` ("↺ Nueva búsqueda", visible mientras el resumen
+   * está plegado): son la misma acción, solo que accesible desde dos sitios
+   * distintos del recorrido. "Editar" es la otra forma de volver al paso 1,
+   * pero CONSERVANDO la configuración: no comparte esta función.
+   */
+  function limpiarFormularioCompleto() {
     stopStream();
     form.reset();
     fields.paginationMode.value = 'auto';
@@ -1694,11 +1963,17 @@ export function createExplorerView(container, { limits }) {
     fields.concurrency.value = String(limits.defaultConcurrency);
     mostrarExtensionesLibres = false;
     terminoVisible = false;
+    // Las direcciones extra son solo interfaz (ver más arriba): "Nueva
+    // búsqueda" y "Limpiar" también las vacían, igual que a cualquier otro
+    // campo del formulario.
+    limpiarFilasExtra();
     jobIdPendiente = null;
     show(continueButton, false);
     sincronizarUI();
     clearAlert();
     results.clear();
+    ultimasStats = null;
+    ocultosManualmente = 0;
     show(statsSlot, false);
     show(progressSection, false);
     show(progressPanel, false);
@@ -1712,7 +1987,10 @@ export function createExplorerView(container, { limits }) {
     } catch {
       // sin almacenamiento: nada que limpiar
     }
-  });
+  }
+
+  resetButton.addEventListener('click', limpiarFormularioCompleto);
+  resumenNuevaBtn.addEventListener('click', limpiarFormularioCompleto);
 
   restoreForm();
 

@@ -81,6 +81,7 @@ export const es = {
   'progreso.resumenFase1.varios': '{enlaces} enlaces en {n} páginas{sufijo}',
   'progreso.analizando': 'Analizando {total} páginas…',
   'progreso.deTotal': '{actual} de {total} · {url}',
+  'progreso.direccion': 'Dirección {actual} de {total} · {url}',
   'progreso.hallados.uno': '{n} fichero encontrado',
   'progreso.hallados.varios': '{n} ficheros encontrados',
   'progreso.frenar': 'Frenar',
@@ -110,8 +111,9 @@ export const es = {
   'resultados.total.varios': '{n} resultados',
   'resultados.mostrando': 'mostrando {visibles} de {total}',
   'resultados.plegados': '{n} plegados por duplicado',
-  'resultados.copiar': 'Copiar',
+  'resultados.copiar': 'Copiar todo',
   'resultados.descargar': 'Descargar .txt',
+  'resultados.exportar': 'Exportar ▾',
   'resultados.copiados': '{n} enlaces copiados',
   'resultados.noCopiado': 'No se pudo copiar al portapapeles',
   'resultados.descargados': '{n} enlaces descargados',
@@ -195,10 +197,13 @@ export const es = {
   'explorer.pasos.resultados': 'Resultados',
 
   /* ── Explorador: de dónde se parte ─────────────────────────────── */
-  'explorer.url.label': '¿Qué página quieres recorrer?',
+  'explorer.url.label': 'Direcciones a explorar',
   'explorer.url.hint':
-    'Pega la dirección tal cual. Si escribes {q} donde iría la palabra buscada y {page} donde va el número de página, el sitio se guarda una vez y solo cambias la palabra.',
+    'Pega cada dirección tal cual. Si escribes {q} donde iría la palabra buscada y {page} donde va el número de página, el sitio se guarda una vez y solo cambias la palabra. El patrón de enlace, el tipo de archivo y el rango de páginas se aplican por igual a todas. Si el sitio usa paginado y vas a usar «Que lo configure por mí», pega ya una URL que incluya la página (por ejemplo, con page=2 o /page/2).',
   'explorer.url.placeholder': 'https://ejemplo.com/galeria?q=gatos',
+  'explorer.urls.agregar': '+ Agregar otra dirección',
+  'explorer.urls.quitar': 'Quitar esta dirección',
+  'explorer.urls.extra.aria': 'Dirección adicional a explorar',
   'explorer.termino.label': '¿Buscas una palabra concreta? (opcional)',
   'explorer.termino.hint':
     'Se coloca donde la dirección tenga {q}. Si la dirección no lleva {q}, este campo no hace nada.',
@@ -227,11 +232,14 @@ export const es = {
 
   /* ── Explorador: resumen de configuración plegada ────────────────── */
   'explorer.resumen.editar': 'Editar',
-  'explorer.resumen.url': 'Dirección',
+  'explorer.resumen.nuevaBusqueda': '↺ Nueva búsqueda',
+  'explorer.resumen.url': 'Direcciones',
   'explorer.resumen.tipo': 'Tipo',
   'explorer.resumen.rango': 'Páginas',
   'explorer.resumen.tipo.soloEnlaces': 'solo enlaces',
   'explorer.resumen.rango.valor': '{desde}–{hasta}',
+  'explorer.resumen.direcciones.uno': '{n} dirección',
+  'explorer.resumen.direcciones.varios': '{n} direcciones',
 
   /* ── Explorador: acciones ──────────────────────────────────────── */
   'explorer.explorar': 'Explorar ahora',
@@ -297,7 +305,16 @@ export const es = {
   'ejemplos.campo.parametro': 'Nombre del parámetro',
   'ejemplos.campo.url': 'Dirección de partida',
 
-  /* ── Explorador: estadísticas ──────────────────────────────────── */
+  /* ── Explorador: KPI de resultados ──────────────────────────────── */
+  'kpi.archivos': 'Archivos encontrados',
+  'kpi.enlaces': 'Enlaces encontrados',
+  'kpi.direcciones': 'Direcciones analizadas',
+  'kpi.duplicados': 'Grupos de duplicados',
+  'kpi.ocultos': 'Ocultados manualmente',
+  'kpi.detalle': '{paginas} páginas recorridas en {segundos}s',
+  'kpi.detalle.fallidas': ' · {n} fallidas',
+
+  /* ── Explorador: estadísticas (bloque anterior, ver KPI arriba) ──── */
   'stats.enlaces': 'Enlaces',
   'stats.paginas': 'Páginas recorridas',
   'stats.ficheros': 'Ficheros',

@@ -701,6 +701,15 @@ a {
   white-space: nowrap;
 }
 
+/* "Editar" y "↺ Nueva búsqueda" van juntos: el primero conserva la
+   configuración, el segundo la resetea. Agruparlos evita que "Nueva
+   búsqueda" se lea como una variante más de "Editar". */
+.config-summary__acciones {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
 /*
  * Carril de pasos: Configurar → Progreso → Resultados.
  *
@@ -833,6 +842,20 @@ a {
 }
 
 /*
+ * Lista de direcciones a explorar (multi-URL).
+ *
+ * `fields.searchUrl` es siempre la primera fila —es el campo del contrato
+ * con `readForm()`, los perfiles y los enlaces compartidos, ver
+ * explorer.js—; las siguientes son solo interfaz. Visualmente son filas
+ * idénticas, una por dirección.
+ */
+.url-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/*
  * La dirección y su detección comparten fila.
  *
  * El botón opera sobre lo que hay escrito en el campo, así que pegado a él
@@ -865,6 +888,7 @@ a {
    botón a propósito: es una salida secundaria, no una acción del formulario. */
 .link-toggle {
   justify-self: start;
+  align-self: flex-start;
   margin-top: calc(-1 * var(--space-2));
   padding: 0;
   border: 0;
@@ -1300,6 +1324,21 @@ a {
   gap: var(--space-4);
 }
 
+/*
+ * "Dirección i de N": solo se ve en exploraciones de varias direcciones
+ * (ver `progress.js`, `startUrl()`). Con una sola dirección se queda oculta
+ * con `hidden`, no hay nada que contar.
+ */
+.progress__direccion {
+  font-size: 12.5px;
+  font-weight: 560;
+  color: var(--c-text-muted);
+}
+
+.progress__direccion[hidden] {
+  display: none;
+}
+
 .progress__phases {
   display: flex;
   gap: var(--space-2);
@@ -1448,6 +1487,56 @@ a {
   color: var(--c-text-muted);
 }
 
+/*
+ * KPI destacados del paso 3 (resultados).
+ *
+ * Mismo espíritu que `.stats`/`.stat` (que sigue en uso en la vista de
+ * Vídeo, no se toca), pero con la cifra más grande y una tarjeta propia con
+ * acento para la que de verdad importa a simple vista: cuántos archivos (o
+ * enlaces, si no hubo fase 2) se encontraron.
+ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.kpi {
+  padding: var(--space-4);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface-2);
+}
+
+.kpi--acento {
+  border-color: color-mix(in srgb, var(--c-accent) 35%, var(--c-border));
+  background: var(--c-accent-soft);
+}
+
+.kpi__valor {
+  font-size: 26px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi--acento .kpi__valor {
+  color: var(--c-accent);
+}
+
+/* "Ocultados manualmente" solo aparece si hay alguno: cuando aparece, en
+   ámbar, para que se note que hay resultados fuera de la vista principal. */
+.kpi--advertencia .kpi__valor {
+  color: var(--c-warning);
+}
+
+.kpi__etiqueta {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+  font-weight: 560;
+}
+
 /* ── Tarjeta de resultados ───────────────────────────────────────────── */
 
 /*
@@ -1483,6 +1572,55 @@ a {
   display: flex;
   gap: var(--space-2);
   margin-left: auto;
+}
+
+/*
+ * Menú desplegable "Exportar ▾".
+ *
+ * `.export-dropdown` es el ancla de posicionamiento; el menú se abre debajo
+ * y a la derecha, y se cierra con un click fuera (ver resultList.js) o
+ * eligiendo un formato.
+ */
+.export-dropdown {
+  position: relative;
+}
+
+.export-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.export-menu[hidden] {
+  display: none;
+}
+
+.export-menu__item {
+  padding: 10px var(--space-4);
+  border: 0;
+  border-top: 1px solid var(--c-border);
+  background: none;
+  color: var(--c-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.export-menu__item:first-child {
+  border-top: 0;
+}
+
+.export-menu__item:hover {
+  background: var(--c-surface-2);
 }
 
 /* ── Bloque de filtros ───────────────────────────────────────────────── */

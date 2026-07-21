@@ -194,6 +194,51 @@ test('siguienteRango funciona con rangos de tamaño 1', () => {
   assert.deepStrictEqual(siguienteRango(5, 5, -1), { desde: 4, hasta: 4 });
 });
 
+test('construirParamsMultiUrl: una sola dirección da la forma de siempre', () => {
+  const { construirParamsMultiUrl } = opciones;
+
+  // El caso más común (y el que cubren los tests de integración existentes)
+  // no debe cambiar de forma en absoluto: solo `searchUrl`, sin `searchUrls`.
+  const params = construirParamsMultiUrl(['https://ejemplo.com/a'], {
+    linkPattern: '/videos/',
+    startPage: 1,
+  });
+
+  assert.deepStrictEqual(params, {
+    linkPattern: '/videos/',
+    startPage: 1,
+    searchUrl: 'https://ejemplo.com/a',
+  });
+  assert.ok(!('searchUrls' in params), 'no debe llevar searchUrls con una sola dirección');
+});
+
+test('construirParamsMultiUrl: con varias, añade searchUrls como JSON y searchUrl es la primera', () => {
+  const { construirParamsMultiUrl } = opciones;
+
+  const params = construirParamsMultiUrl(['https://ejemplo.com/a', 'https://ejemplo.com/b'], {
+    fileExtensions: '.mp4',
+  });
+
+  assert.strictEqual(params.searchUrl, 'https://ejemplo.com/a');
+  assert.strictEqual(params.fileExtensions, '.mp4');
+  assert.deepStrictEqual(JSON.parse(params.searchUrls), [
+    'https://ejemplo.com/a',
+    'https://ejemplo.com/b',
+  ]);
+});
+
+test('construirParamsMultiUrl: recorta, descarta vacías y admite un string suelto', () => {
+  const { construirParamsMultiUrl } = opciones;
+
+  const params = construirParamsMultiUrl([' https://ejemplo.com/a ', '', '  '], {});
+  assert.strictEqual(params.searchUrl, 'https://ejemplo.com/a');
+  assert.ok(!('searchUrls' in params));
+
+  // Una URL suelta (no en array) se trata igual que un array de una sola
+  const suelta = construirParamsMultiUrl('https://ejemplo.com/x', {});
+  assert.strictEqual(suelta.searchUrl, 'https://ejemplo.com/x');
+});
+
 test('los presets declaran extensiones con punto y separadas por comas', () => {
   const { PRESETS_EXTENSION, presetDe } = opciones;
 

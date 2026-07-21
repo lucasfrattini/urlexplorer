@@ -71,6 +71,16 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   const tandas = [];
 
   /**
+   * Suscripción externa al recuento de ocultados a mano.
+   *
+   * El KPI "Ocultados manualmente" vive en explorer.js, fuera de esta
+   * tarjeta, así que necesita enterarse cada vez que cambia sin volver a
+   * pedir el estado interno. `onHiddenChange()` (más abajo, en el objeto
+   * devuelto) registra el aviso.
+   */
+  let hiddenChangeHandler = null;
+
+  /**
    * Grupos desplegados, y lo que el usuario ha sacado de ellos a mano.
    *
    * `expandidos` es solo vista: qué grupos muestran sus miembros debajo.
@@ -112,8 +122,16 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
 
   const contador = el('span', { className: 'results__count' });
 
+  /**
+   * "Copiar todo" es la ACCIÓN PRIMARIA de la tarjeta: por eso lleva el
+   * color de acento (`.button` a secas, sin `--secondary`) y va la última en
+   * `results__actions`, que es donde cae el ojo en una fila que se lee de
+   * izquierda a derecha. El resto de exportación se agrupa en el menú
+   * "Exportar ▾" de aquí abajo: cuatro botones sueltos competían con esta
+   * acción sin ninguno destacar.
+   */
   const copyButton = el('button', {
-    className: 'button button--secondary button--small',
+    className: 'button button--small',
     attrs: { type: 'button' },
     on: {
       click: async () => {
@@ -127,17 +145,18 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   });
   texto(copyButton, 'resultados.copiar');
 
-  const downloadButton = el('button', {
-    className: 'button button--secondary button--small',
-    attrs: { type: 'button' },
+  const downloadMenuItem = el('button', {
+    className: 'export-menu__item',
+    attrs: { type: 'button', role: 'menuitem' },
     on: {
       click: () => {
         downloadText(filename, filtered.join('\n'));
         toast(t('resultados.descargados', { n: filtered.length }));
+        alternarMenuExportar(false);
       },
     },
   });
-  texto(downloadButton, 'resultados.descargar');
+  texto(downloadMenuItem, 'resultados.descargar');
 
   /**
    * Deshacer y restaurar.
@@ -196,15 +215,16 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     });
   }
 
-  const crearBotonExportar = (claveTexto, extension, formato, construir, tipo) => {
+  const crearItemExportar = (claveTexto, extension, formato, construir, tipo) => {
     const boton = el('button', {
-      className: 'button button--secondary button--small',
-      attrs: { type: 'button' },
+      className: 'export-menu__item',
+      attrs: { type: 'button', role: 'menuitem' },
       on: {
         click: () => {
           const filas = filasExportables();
           downloadText(filename.replace(/\.txt$/, extension), construir(filas), tipo);
           toast(t('resultados.exportados', { n: filas.length, formato }));
+          alternarMenuExportar(false);
         },
       },
     });
@@ -212,21 +232,70 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     return boton;
   };
 
-  const csvButton = crearBotonExportar('resultados.csv', '.csv', 'CSV', aCSV, 'text/csv');
-  const jsonButton = crearBotonExportar(
+  const csvMenuItem = crearItemExportar('resultados.csv', '.csv', 'CSV', aCSV, 'text/csv');
+  const jsonMenuItem = crearItemExportar(
     'resultados.json',
     '.json',
     'JSON',
     filas => aJSON(filas, { filtrado: filtered.length !== items.length }),
     'application/json'
   );
-  const listaButton = crearBotonExportar(
+  const listaMenuItem = crearItemExportar(
     'resultados.lista',
     '-lista.txt',
     'lista',
     aListaDeDescarga
   );
-  atributo(listaButton, 'title', 'resultados.lista.title');
+  atributo(listaMenuItem, 'title', 'resultados.lista.title');
+
+  /**
+   * "Exportar ▾": agrupa .txt/.csv/.json/lista en un menú compacto.
+   *
+   * Antes eran cuatro botones sueltos en la cabecera, compitiendo con
+   * "Copiar todo" (la acción que de verdad se usa siempre) por la misma
+   * atención. La exportación en sí no cambia: mismo dato, mismos cuatro
+   * formatos, solo se pliega detrás de un botón hasta que se pide.
+   */
+  const exportMenu = el('div', {
+    className: 'export-menu',
+    attrs: { role: 'menu' },
+    children: [downloadMenuItem, csvMenuItem, jsonMenuItem, listaMenuItem],
+  });
+  exportMenu.hidden = true;
+
+  const exportToggleButton = el('button', {
+    className: 'button button--secondary button--small',
+    attrs: { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' },
+    on: {
+      click: clickEvent => {
+        clickEvent.stopPropagation();
+        alternarMenuExportar();
+      },
+    },
+  });
+  texto(exportToggleButton, 'resultados.exportar');
+
+  /** Abre o cierra el menú. Sin argumento, invierte el estado actual. */
+  function alternarMenuExportar(forzarAbierto) {
+    const abrir = forzarAbierto ?? exportMenu.hidden;
+    exportMenu.hidden = !abrir;
+    exportToggleButton.setAttribute('aria-expanded', String(abrir));
+  }
+
+  const exportDropdown = el('div', {
+    className: 'export-dropdown',
+    children: [exportToggleButton, exportMenu],
+  });
+
+  // Cerrar al hacer click fuera: un menú que solo se cierra pulsando el
+  // mismo botón que lo abrió se queda abierto estorbando el resto de la
+  // tarjeta. Se registra una sola vez porque esta vista se crea una sola vez
+  // por carga de página (ver app.js), así que no se acumulan listeners.
+  document.addEventListener('click', clickEvent => {
+    if (exportMenu.hidden) return;
+    if (exportDropdown.contains(clickEvent.target)) return;
+    alternarMenuExportar(false);
+  });
 
   /* ── Filtros de texto ────────────────────────────────────────────── */
 
@@ -392,15 +461,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       contador,
       el('div', {
         className: 'results__actions',
-        children: [
-          copyButton,
-          downloadButton,
-          csvButton,
-          jsonButton,
-          listaButton,
-          undoButton,
-          restoreButton,
-        ],
+        children: [undoButton, restoreButton, exportDropdown, copyButton],
       }),
     ],
   });
@@ -525,8 +586,8 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   function render() {
     const hayResultados = filtered.length > 0;
     copyButton.disabled = !hayResultados;
-    downloadButton.disabled = !hayResultados;
-    for (const boton of [csvButton, jsonButton, listaButton]) boton.disabled = !hayResultados;
+    exportToggleButton.disabled = !hayResultados;
+    if (!hayResultados) alternarMenuExportar(false);
     columnas.hidden = !hayResultados;
 
     // Con miniaturas cada fila lleva una columna más al principio: la
@@ -999,6 +1060,10 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     // Los plegados tienen su propio interruptor y su propio recuento
     if (plegados > 0) contador.title = t('resultados.plegados', { n: plegados });
     else contador.removeAttribute('title');
+
+    // El KPI "Ocultados manualmente" vive fuera de esta tarjeta (en las
+    // cifras del explorador), así que aquí solo se avisa de cuántos hay.
+    hiddenChangeHandler?.(ocultos.size);
   }
 
   /** Recalcula los extremos de los rangos con los datos que hay ahora. */
@@ -1023,6 +1088,12 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
 
   return {
     root,
+
+    /** Registra quién quiere enterarse del recuento de ocultados a mano. */
+    onHiddenChange(handler) {
+      hiddenChangeHandler = handler;
+      handler(ocultos.size);
+    },
 
     setItems(newItems) {
       items = [...new Set(newItems)];

@@ -115,6 +115,31 @@ export function paginationModeDe(modoAvanzado) {
 }
 
 /**
+ * Construye los parámetros que viajan al servidor a partir de la lista de
+ * direcciones y la configuración COMPARTIDA (patrón, extensiones, rango,
+ * avanzadas...). Aislada a propósito: el contrato exacto de multi-URL con el
+ * backend (¿`searchUrl` repetido? ¿`searchUrls` en JSON?) todavía no está
+ * cerrado, así que este es el ÚNICO punto que habrá que tocar cuando se
+ * confirme.
+ *
+ * Con una sola dirección el resultado es IDÉNTICO al de antes —solo
+ * `searchUrl`—, así que el caso más común (y el que cubren los tests de
+ * integración existentes) no cambia de forma en absoluto. Con más de una se
+ * añade `searchUrls` con las direcciones en JSON; el resto de campos se
+ * manda una sola vez porque se aplican por igual a todas.
+ */
+export function construirParamsMultiUrl(urls, config = {}) {
+  const limpias = (Array.isArray(urls) ? urls : [urls])
+    .map(u => String(u ?? '').trim())
+    .filter(Boolean);
+
+  const params = { ...config, searchUrl: limpias[0] ?? '' };
+  delete params.searchUrls;
+  if (limpias.length > 1) params.searchUrls = JSON.stringify(limpias);
+  return params;
+}
+
+/**
  * Rango "Desde/Hasta" siguiente o anterior, preservando el tamaño de la
  * ventana actual (1-5 → 6-10 → 11-15, o de 10 en 10 si el rango es de 10).
  *
