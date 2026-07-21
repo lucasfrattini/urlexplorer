@@ -306,6 +306,7 @@ export const en = {
 
   /* ── Explorer: suggested setup ─────────────────────────────────── */
   'propuesta.titulo': 'Here is what I suggest',
+  'propuesta.cerrar': 'Close the suggestion',
   'propuesta.hint':
     'It is a suggestion, not the truth: review it and fix whatever does not fit. {conNavegador} links were analysed with a browser and {sinNavegador} without one.',
   'propuesta.campo.patron': 'Which links to follow?',
@@ -422,5 +423,8 @@ export const en = {
   'video.abrir': 'Open',
   'video.descargar': 'Download .txt',
   'video.descargadas': '{n} URLs downloaded',
+  'video.copiarTodos': 'Copy all',
+  'video.copiados': '{n} URLs copied',
+  'video.noCopiado': 'Could not copy to the clipboard',
   'video.fallo': 'Could not analyse the page',
 };

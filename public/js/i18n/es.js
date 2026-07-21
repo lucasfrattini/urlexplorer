@@ -306,6 +306,7 @@ export const es = {
 
   /* ── Explorador: propuesta de configuración ────────────────────── */
   'propuesta.titulo': 'Esto es lo que propongo',
+  'propuesta.cerrar': 'Cerrar la propuesta',
   'propuesta.hint':
     'Es una sugerencia, no una verdad: revísala y corrige lo que no encaje. Se han analizado {conNavegador} enlaces con navegador y {sinNavegador} sin él.',
   'propuesta.campo.patron': '¿Qué enlaces seguir?',
@@ -422,5 +423,8 @@ export const es = {
   'video.abrir': 'Abrir',
   'video.descargar': 'Descargar .txt',
   'video.descargadas': '{n} URLs descargadas',
+  'video.copiarTodos': 'Copiar todos',
+  'video.copiados': '{n} URLs copiadas',
+  'video.noCopiado': 'No se pudo copiar al portapapeles',
   'video.fallo': 'No se pudo analizar la página',
 };

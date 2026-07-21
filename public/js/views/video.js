@@ -9,6 +9,7 @@ import {
   safeLink,
   show,
   copyIconButton,
+  copyToClipboard,
   downloadText,
   toast,
 } from '../dom.js';
@@ -36,7 +37,9 @@ export function createVideoView(container) {
   atributo(urlInput, 'placeholder', 'video.url.placeholder');
 
   const metadataInput = el('input', { attrs: { type: 'checkbox', id: 'video-metadata' } });
-  const jsInput = el('input', { attrs: { type: 'checkbox', id: 'video-js', checked: true } });
+  // Arranca destildado: usar el navegador es más lento y no todos los sitios
+  // lo necesitan, así que no debe activarse solo sin que el usuario lo pida.
+  const jsInput = el('input', { attrs: { type: 'checkbox', id: 'video-js' } });
 
   const submitButton = el('button', { className: 'button', attrs: { type: 'submit' } });
 
@@ -237,11 +240,31 @@ export function createVideoView(container) {
 
     const visible = allVideos.filter(v => activeType === 'all' || v.type === activeType);
 
+    // Mismo patrón que "Copiar" en la lista de resultados del Explorador
+    // (`resultList.js`): copia las URLs visibles, una por línea, y avisa con
+    // un toast de éxito o de fallo según responda el portapapeles.
+    buttons.push(
+      el('button', {
+        className: 'button button--secondary button--small',
+        text: t('video.copiarTodos'),
+        attrs: { type: 'button', style: 'margin-left:auto' },
+        on: {
+          click: async () => {
+            const ok = await copyToClipboard(visible.map(v => v.url).join('\n'));
+            toast(
+              ok ? t('video.copiados', { n: visible.length }) : t('video.noCopiado'),
+              ok ? 'success' : 'error'
+            );
+          },
+        },
+      })
+    );
+
     buttons.push(
       el('button', {
         className: 'button button--secondary button--small',
         text: t('video.descargar'),
-        attrs: { type: 'button', style: 'margin-left:auto' },
+        attrs: { type: 'button' },
         on: {
           click: () => {
             downloadText('urlexplorer-videos.txt', visible.map(v => v.url).join('\n'));

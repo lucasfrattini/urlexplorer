@@ -444,6 +444,18 @@ a {
   padding: var(--space-5) var(--space-5) 0;
 }
 
+/*
+ * Modificador para cabeceras con un botón de cierre propio (el panel de
+ * "configurar por mí"): título y texto a un lado, la X al otro, alineados
+ * arriba porque el hint puede ocupar dos líneas.
+ */
+.card__header--con-cierre {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 .card__title {
   font-size: 17px;
   font-weight: 620;
@@ -606,15 +618,26 @@ a {
   border-top: 1px solid var(--c-border);
 }
 
-/* ── Carril de pasos y panel único del explorador ─────────────────────
-   El explorador ya no es una sucesión de tarjetas sueltas. `.explorer-shell`
-   agrupa el carril de pasos y el contenido en un grid de dos columnas, y
-   `.explorer-panel` es la ÚNICA superficie (`.card.card--form`) que envuelve
-   formulario, aviso, progreso y cifras: antes eran tres `.card` apiladas por
-   `.card + .card { margin-top }`, ahora son secciones (`.explorer-panel__section`)
-   separadas por un borde interno, no por sombra y espacio propios.
-   Los resultados (`resultList.js`) siguen siendo su propia tarjeta a
-   continuación: ese componente no se toca en esta unidad. */
+/* ── Carril de pasos y superficies del explorador ──────────────────────
+   `.explorer-shell` agrupa el carril de pasos y el contenido en un grid de
+   dos columnas. Dentro de `.explorer-shell__content` hay TRES tarjetas
+   apiladas, cada una `.card` (con `.card + .card { margin-top }` de más
+   arriba dando el espacio entre ellas):
+
+     1. `.explorer-panel` (`.card.card--form`, 760px) — solo el formulario:
+        cabecera, cuerpo de configuración y su resumen plegado, y el aviso.
+     2. `.explorer-progress` (`.card`, SIN `card--form`) — progreso y cifras,
+        con el mismo ancho que la tarjeta de resultados. Antes vivían DENTRO
+        de `.explorer-panel` como secciones, así que su ancho quedaba atado
+        al del formulario (760px) en vez de al de los resultados que vienen
+        justo debajo, dando una sensación de layout distinto entre el paso 2
+        (progreso) y el paso 3 (resultados). Se sacaron a su propia tarjeta
+        para que los dos compartan ancho.
+     3. La tarjeta de resultados (`resultList.js`), que no se toca aquí.
+
+   `.explorer-panel__section` separa progreso de cifras por un borde interno
+   cuando las dos están visibles a la vez (ver el combinador `+` de abajo:
+   solo se aplica a la SEGUNDA sección, nunca a la primera). */
 
 .explorer-shell {
   display: grid;
@@ -627,7 +650,7 @@ a {
   min-width: 0;
 }
 
-.explorer-panel__section {
+.explorer-panel__section + .explorer-panel__section {
   border-top: 1px solid var(--c-border);
 }
 

@@ -729,13 +729,19 @@ export function createExplorerView(container, { limits }) {
     });
   }
 
-  // ── Panel único: formulario + progreso + cifras ─────────────────────
+  // ── Formulario (`.explorer-panel`) y progreso/cifras, aparte ─────────
   //
-  // Antes eran tres `.card` sueltas apiladas por `card + card { margin-top }`.
-  // Ahora son secciones de UNA sola superficie (`.explorer-panel`), separadas
-  // por un borde interno en vez de por espacio y sombra propia. Progreso y
-  // cifras siguen ocultándose igual que antes (`show()`), solo que ocultan la
-  // sección en vez de la tarjeta entera.
+  // El formulario es `.card.card--form` (760px, pensado para no obligar a
+  // barrer la pantalla de lado a lado en una sola columna). Progreso y
+  // cifras NO comparten esa restricción: son datos de la exploración, no de
+  // un formulario, y antes de este cambio vivían dentro de `.explorer-panel`
+  // como secciones (separadas por un borde interno, ver
+  // `.explorer-panel__section`), así que su ancho quedaba atado al del
+  // formulario y no al de los resultados que vienen justo debajo. Ahora
+  // viven en `progressPanel`, su propia `.card` sin `card--form`, con el
+  // mismo ancho que `results.root`. Progreso y cifras siguen ocultándose
+  // igual que antes (`show()`), solo que ahora ocultan la sección dentro de
+  // esa tarjeta en vez de dentro del formulario.
   const progress = createProgressPanel();
   const progressSection = el('div', {
     className: 'card__body explorer-panel__section',
@@ -748,6 +754,19 @@ export function createExplorerView(container, { limits }) {
 
   const statsSlot = el('div', { className: 'card__body explorer-panel__section' });
   show(statsSlot, false);
+
+  /**
+   * Contenedor propio de progreso y cifras, con el mismo ancho que
+   * `results.root` (los dos son `.card` sin `card--form`). Arranca oculto:
+   * mientras las dos secciones de dentro están ocultas, la tarjeta no debe
+   * dejar un hueco vacío con borde y sombra entre el formulario y los
+   * resultados.
+   */
+  const progressPanel = el('div', {
+    className: 'card explorer-progress',
+    children: [progressSection, statsSlot],
+  });
+  show(progressPanel, false);
 
   /**
    * Bloque de configuración: barra de perfiles + formulario completo.
@@ -850,8 +869,6 @@ export function createExplorerView(container, { limits }) {
       configBody,
       configSummary,
       alertSlot,
-      progressSection,
-      statsSlot,
     ],
   });
 
@@ -865,7 +882,10 @@ export function createExplorerView(container, { limits }) {
     className: 'explorer-shell',
     children: [
       stepsRail,
-      el('div', { className: 'explorer-shell__content', children: [explorerPanel, results.root] }),
+      el('div', {
+        className: 'explorer-shell__content',
+        children: [explorerPanel, progressPanel, results.root],
+      }),
     ],
   });
 
@@ -1133,6 +1153,10 @@ export function createExplorerView(container, { limits }) {
 
     setChildren(statsSlot, el('div', { className: 'stats', children: cards }));
     show(statsSlot, true);
+    // Cinturón y tirantes: si algo llegara a mostrar las cifras sin haber
+    // pasado por el `show(progressPanel, true)` del envío o de "continuar",
+    // la tarjeta que las envuelve no debe seguir oculta.
+    show(progressPanel, true);
   }
 
   alCambiarIdioma(() => renderStats(null));
@@ -1217,15 +1241,29 @@ export function createExplorerView(container, { limits }) {
         className: 'card propuesta',
         children: [
           el('div', {
-            className: 'card__header',
+            className: 'card__header card__header--con-cierre',
             children: [
-              el('h3', { className: 'card__title', text: t('propuesta.titulo') }),
-              el('p', {
-                className: 'card__hint',
-                text: t('propuesta.hint', {
-                  conNavegador: analizado.enlacesConNavegador,
-                  sinNavegador: analizado.enlacesSinNavegador,
-                }),
+              el('div', {
+                children: [
+                  el('h3', { className: 'card__title', text: t('propuesta.titulo') }),
+                  el('p', {
+                    className: 'card__hint',
+                    text: t('propuesta.hint', {
+                      conNavegador: analizado.enlacesConNavegador,
+                      sinNavegador: analizado.enlacesSinNavegador,
+                    }),
+                  }),
+                ],
+              }),
+              // Cierre propio del panel: antes solo se ocultaba al volver a
+              // pulsar "Configurar por mí" o al limpiar el formulario. El
+              // botón de "Limpiar" (`resetButton`) no se toca: esta X es la
+              // única forma nueva de cerrar el panel sin vaciar el formulario.
+              el('button', {
+                className: 'button button--secondary button--small button--icon',
+                text: '×',
+                attrs: { type: 'button', 'aria-label': t('propuesta.cerrar') },
+                on: { click: () => show(detectSlot, false) },
               }),
             ],
           }),
@@ -1340,6 +1378,7 @@ export function createExplorerView(container, { limits }) {
 
     clearAlert();
     progress.reset();
+    show(progressPanel, true);
     show(progressSection, true);
     actualizarCarril('progreso');
     setBusy(true);
@@ -1627,6 +1666,7 @@ export function createExplorerView(container, { limits }) {
     results.clear();
     show(statsSlot, false);
     progress.reset();
+    show(progressPanel, true);
     show(progressSection, true);
     actualizarCarril('progreso');
     setBusy(true);
@@ -1661,6 +1701,7 @@ export function createExplorerView(container, { limits }) {
     results.clear();
     show(statsSlot, false);
     show(progressSection, false);
+    show(progressPanel, false);
     actualizarCarril('configurar');
     // Vuelve a mostrarse el formulario completo y se pliega el resumen: tras
     // "Limpiar" ya no hay nada que resumir.
