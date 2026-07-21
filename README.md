@@ -4,15 +4,18 @@
 
 # URL Explorer
 
-**A link and media explorer for paginated websites.**
+**Point it at a paginated website. Walk away with a clean, deduplicated list of
+everything that matched.**
 
-Walk through the pages of a section, extract the links you care about, and find
-the files inside each one — from a web interface, with live progress.
+Stop clicking "next page" by hand and stop opening forty tabs to check which
+files are actually there. Tell URL Explorer where to start, how the site
+paginates and what you are looking for, and it does the clicking for you —
+live progress, real cancellation, nothing lost, running on your own server.
 
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
 ![Docker](https://img.shields.io/badge/docker-compose-informational)
-![License](https://img.shields.io/badge/license-MIT-informational)
-![Tests](https://img.shields.io/badge/tests-269-success)
+![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-informational)
+![Tests](https://img.shields.io/badge/tests-413-success)
 
 </div>
 
@@ -76,6 +79,10 @@ found inside scripts.
 - **Duplicate grouping** within a single search: the same content served from
   two places collapses into one row. Nothing is ever discarded, and a toggle
   undoes the grouping.
+- **Pause and resume**: stop an exploration in flight and pick it up later
+  without repeating the crawl phase or losing what was already found.
+- Optional **thumbnails**, proxied and cached by the server — the browser never
+  talks to the site being explored, only to your own instance.
 - Include and **exclude** text filters, sorting by duration or size, copy and
   export.
 
@@ -90,7 +97,7 @@ found inside scripts.
 
 - **Docker** with automatic restart and a healthcheck.
 - **SSRF** protection, rate limiting, memory and duration caps.
-- 269 tests, ESLint and Prettier.
+- 413 tests, ESLint and Prettier.
 
 ---
 
@@ -109,7 +116,7 @@ install Puppeteer provides it.
 ### With Docker (recommended)
 
 ```bash
-git clone https://github.com/<your-user>/urlexplorer.git
+git clone https://github.com/lucasfrattini/urlexplorer.git
 cd urlexplorer
 
 cp .env.example .env      # then edit it
@@ -134,7 +141,7 @@ docker compose up -d --build  # after changing the code
 ### Without Docker
 
 ```bash
-git clone https://github.com/<your-user>/urlexplorer.git
+git clone https://github.com/lucasfrattini/urlexplorer.git
 cd urlexplorer
 
 npm install
@@ -169,6 +176,7 @@ The most relevant ones:
 | `CRAWL_MAX_DURATION_MS`            | `600000`  | Maximum duration of one exploration           |
 | `BROWSER_ENABLED`                  | `true`    | Allow browser mode                            |
 | `BROWSER_POOL_SIZE`                | `2`       | Concurrent browser tabs                       |
+| `THUMBNAILS_ENABLED`               | `true`    | Serve thumbnails through `/api/thumbnail`     |
 | `SCROLL_MAX_ROUNDS`                | `50`      | Maximum loads in infinite-scroll mode         |
 | `SCROLL_MAX_DURATION_MS`           | `120000`  | Time cap for the scrolling phase              |
 | `SCROLL_MAX_ELEMENTS`              | `3000`    | Accumulated links at which scrolling stops    |
@@ -280,16 +288,18 @@ much is being filtered out.
 
 ## API
 
-| Method | Route                 | Purpose                               |
-| ------ | --------------------- | ------------------------------------- |
-| GET    | `/api/health`         | Status and active limits              |
-| POST   | `/api/scrape`         | Full exploration, single response     |
-| GET    | `/api/scrape/stream`  | The same, with SSE progress           |
-| POST   | `/api/scrape/detect`  | Propose a configuration for a URL     |
-| POST   | `/api/video/extract`  | Analyze a single URL                  |
-| POST   | `/api/admin/unlock`   | Validate the admin token              |
-| GET    | `/api/admin/profiles` | Saved configurations — token required |
-| PUT    | `/api/admin/profiles` | Replace the list — token required     |
+| Method | Route                 | Purpose                                                                |
+| ------ | --------------------- | ---------------------------------------------------------------------- |
+| GET    | `/api/health`         | Status and active limits                                               |
+| POST   | `/api/scrape`         | Full exploration, single response                                      |
+| GET    | `/api/scrape/stream`  | The same, with SSE progress (`?resume=<jobId>` continues a paused run) |
+| POST   | `/api/scrape/pause`   | Pause a running exploration                                            |
+| POST   | `/api/scrape/detect`  | Propose a configuration for a URL                                      |
+| POST   | `/api/video/extract`  | Analyze a single URL                                                   |
+| GET    | `/api/thumbnail`      | Proxied, cached thumbnail for a result                                 |
+| POST   | `/api/admin/unlock`   | Validate the admin token                                               |
+| GET    | `/api/admin/profiles` | Saved configurations — token required                                  |
+| PUT    | `/api/admin/profiles` | Replace the list — token required                                      |
 
 Any `GET` that does not start with `/api/` serves the frontend shell. Views are
 routed by hash: `#/explorer`, `#/video`.
@@ -312,4 +322,7 @@ publishes. Note that the absence of a license means "all rights reserved", not
 
 ## License
 
-MIT.
+MIT with the [Commons Clause](https://commonsclause.com/): free to download,
+self-host, modify and use, including internally at a company — the one thing
+you cannot do is sell it or resell it as a paid service. Full text in
+[`LICENSE`](LICENSE).
