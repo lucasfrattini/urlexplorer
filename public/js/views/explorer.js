@@ -1316,6 +1316,16 @@ export function createExplorerView(container, { limits }) {
   let ultimasStats = null;
   /** Cuántos resultados hay ocultados a mano AHORA MISMO (ver más abajo). */
   let ocultosManualmente = 0;
+  /**
+   * Grupos de duplicados ACTIVOS ahora mismo (ver `results.onGroupsChange`).
+   *
+   * NO es `ultimasStats.duplicateGroups.length`: ese número es el que trajo
+   * el servidor y se queda fijo. Este se recalcula en `resultList.js` cada
+   * vez que el usuario cambia al modo agresivo o saca un miembro con "No es
+   * duplicado", así que la tarjeta KPI siempre refleja lo que se ve en la
+   * lista, no lo que llegó en el `complete`.
+   */
+  let gruposActivos = 0;
 
   /**
    * Tarjeta KPI destacada.
@@ -1361,7 +1371,7 @@ export function createExplorerView(container, { limits }) {
         ? kpiCard(datos.totalFiles ?? 0, t('kpi.archivos'), { acento: true })
         : kpiCard(datos.totalLinks ?? 0, t('kpi.enlaces'), { acento: true }),
       kpiCard(datos.direccionesAnalizadas ?? 1, t('kpi.direcciones')),
-      kpiCard(datos.duplicateGroups?.length ?? 0, t('kpi.duplicados')),
+      kpiCard(gruposActivos, t('kpi.duplicados')),
     ];
 
     if (ocultosManualmente > 0) {
@@ -1397,6 +1407,15 @@ export function createExplorerView(container, { limits }) {
   // le avise cada vez que cambia en vez de leer su estado interno.
   results.onHiddenChange(count => {
     ocultosManualmente = count;
+    renderStats(null);
+  });
+
+  // Igual que "Ocultados manualmente": la tarjeta de duplicados vive aquí
+  // pero el recuento de verdad lo sabe resultList.js (modo agresivo, "No es
+  // duplicado"). Sin esta suscripción, el número se congelaba en el que trajo
+  // el último `complete` del servidor.
+  results.onGroupsChange(count => {
+    gruposActivos = count;
     renderStats(null);
   });
 

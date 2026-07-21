@@ -81,6 +81,19 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   let hiddenChangeHandler = null;
 
   /**
+   * Suscripción externa al recuento de grupos ACTIVOS de duplicados.
+   *
+   * La tarjeta KPI "Grupos de duplicados" vive en explorer.js, fuera de esta
+   * tarjeta. Antes se congelaba con el `duplicateGroups.length` del último
+   * `complete` del servidor, así que no bajaba al sacar el último miembro de
+   * un grupo con "No es duplicado" ni cambiaba al alternar el modo agresivo
+   * (que agrupa distinto). `onGroupsChange()` (más abajo) avisa del recuento
+   * de VERDAD, recalculado en `actualizarContador()` cada vez que cambian los
+   * grupos, el modo o las correcciones manuales.
+   */
+  let groupsChangeHandler = null;
+
+  /**
    * Grupos desplegados, y lo que el usuario ha sacado de ellos a mano.
    *
    * `expandidos` es solo vista: qué grupos muestran sus miembros debajo.
@@ -98,6 +111,20 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     const grupo = grupos.get(representante);
     if (!grupo) return [];
     return grupo.miembros.filter(m => m !== representante && !desagrupados.has(m));
+  }
+
+  /**
+   * Grupos que siguen siendo duplicados de verdad: con al menos un miembro
+   * plegado además del representante. Un grupo al que se le sacó el último
+   * miembro con "No es duplicado" ya no cuenta, aunque el servidor lo siga
+   * mandando en `duplicateGroups`.
+   */
+  function gruposActivosCount() {
+    let n = 0;
+    for (const representante of grupos.keys()) {
+      if (miembrosPlegados(representante).length > 0) n += 1;
+    }
+    return n;
   }
 
   /**
@@ -1064,6 +1091,12 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     // El KPI "Ocultados manualmente" vive fuera de esta tarjeta (en las
     // cifras del explorador), así que aquí solo se avisa de cuántos hay.
     hiddenChangeHandler?.(ocultos.size);
+
+    // Igual que arriba, pero para "Grupos de duplicados": se recalcula aquí
+    // porque este es el único punto por el que pasan TODOS los caminos que
+    // pueden cambiar el recuento (setDuplicateGroups, alternar el modo
+    // agresivo, sacar un miembro con "No es duplicado", limpiar).
+    groupsChangeHandler?.(gruposActivosCount());
   }
 
   /** Recalcula los extremos de los rangos con los datos que hay ahora. */
@@ -1093,6 +1126,12 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
     onHiddenChange(handler) {
       hiddenChangeHandler = handler;
       handler(ocultos.size);
+    },
+
+    /** Registra quién quiere enterarse del recuento de grupos ACTIVOS. */
+    onGroupsChange(handler) {
+      groupsChangeHandler = handler;
+      handler(gruposActivosCount());
     },
 
     setItems(newItems) {
