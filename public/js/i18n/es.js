@@ -408,21 +408,28 @@ export const es = {
     'Se revisaron {n} páginas sin encontrar archivos de ese tipo. Prueba a activar «Abrir con navegador» en los ajustes avanzados: ahora también se aplica al entrar en cada enlace.',
 
   /* ── Vista de vídeos ───────────────────────────────────────────── */
-  'video.titulo': 'Sacar los vídeos de una página',
+  'video.titulo': 'Sacar los vídeos de una o varias páginas',
   'video.subtitulo':
-    'Pega una dirección y te dice qué vídeos hay en ella y por dónde los ha encontrado.',
-  'video.url.label': '¿De qué página quieres sacar los vídeos?',
+    'Pega cada dirección y te dice qué vídeos hay en ella y por dónde los ha encontrado.',
+  'video.url.label': 'Direcciones a analizar',
   'video.url.hint':
-    'Se mira una sola página, y se mira por cuatro vías: lo que se ve tras cargarla, lo que pide por la red, los reproductores incrustados y las direcciones escondidas en su código.',
+    'Cada dirección se analiza por separado y por cuatro vías: lo que se ve tras cargarla, lo que pide por la red, los reproductores incrustados y las direcciones escondidas en su código. Los duplicados entre direcciones se agrupan al final.',
   'video.url.placeholder': 'https://ejemplo.com/video/12345',
-  'video.faltaUrl.body': 'Pega la dirección de la página que quieres analizar.',
+  'video.urls.agregar': '+ Agregar otra dirección',
+  'video.urls.quitar': 'Quitar esta dirección',
+  'video.urls.extra.aria': 'Dirección adicional a analizar',
+  'video.faltaUrl.body': 'Pega al menos una dirección para analizar.',
   'video.navegador.label': 'Abrir con navegador',
   'video.navegador.hint':
     'Abre la página como lo haría un navegador de verdad y mira qué pide. Encuentra vídeos que no están escritos en la página.',
   'video.peso.label': 'Averiguar cuánto pesa cada archivo',
   'video.peso.hint': 'Pregunta el peso de cada vídeo sin descargarlo. Va más lento.',
+  'video.miniatura.label': 'Traer miniatura',
+  'video.miniatura.hint': 'Una imagen de vista previa por vídeo, si el sitio la ofrece.',
   'video.analizar': 'Analizar',
   'video.analizando': 'Analizando…',
+  'video.cancelar': 'Cancelar',
+  'video.cancelado': 'Análisis cancelado',
   'video.stats.videos': 'Vídeos',
   'video.stats.formatos': 'Formatos',
   'video.stats.vias': 'Vías con resultados',
@@ -444,4 +451,11 @@ export const es = {
   'video.copiados': '{n} URLs copiadas',
   'video.noCopiado': 'No se pudo copiar al portapapeles',
   'video.fallo': 'No se pudo analizar la página',
+  'video.aviso.parcial': '{analizadas} de {total} direcciones analizadas',
+  'video.aviso.parcial.body':
+    'El resto no se pudo analizar: puede que la dirección esté mal escrita o que el sitio no respondiera. Revisa la lista antes de continuar.',
+  'video.columnas.tipo': 'Tipo',
+  'video.columnas.detectado': 'Detectado por',
+  'video.vista.cajas': 'Vista en cajas',
+  'video.vista.lista': 'Vista en lista',
 };

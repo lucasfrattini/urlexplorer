@@ -5,6 +5,9 @@ const cheerio = require('cheerio');
 const config = require('../config');
 const { mapLimit } = require('../lib/concurrency');
 const { formatDuration, formatFileSize } = require('../lib/format');
+const { extractThumbnail, parseClockDuration, parseSizeText } = require('../lib/media');
+const { groupDuplicates } = require('../lib/dedupe');
+const { AppError } = require('../lib/errors');
 const logger = require('../lib/logger');
 const { renderPageWithMedia } = require('../lib/browser');
 const { fetchHtml, fetchContentLength } = require('../lib/http');
@@ -254,7 +257,10 @@ function dedupeVideos(videos) {
 }
 
 /** Orquesta los cuatro métodos y devuelve la lista final. */
-async function extractVideos(rawUrl, { getMetadata = false, useJavaScript = true, signal } = {}) {
+async function extractVideos(
+  rawUrl,
+  { getMetadata = false, getThumbnails = false, useJavaScript = true, signal } = {}
+) {
   await assertUrlIsSafe(rawUrl);
 
   const url = rawUrl.trim();
@@ -348,6 +354,29 @@ async function extractVideos(rawUrl, { getMetadata = false, useJavaScript = true
     video.duration ? video : { ...video, duration: findDurationNear(html, video.url) }
   );
 
+  if (getThumbnails) {
+    /**
+     * Miniatura declarada por la ficha para los vídeos que aún no la traen.
+     *
+     * Los reproductores conocidos (YouTube y compañía) ya llegan con su
+     * thumbnailUrl, así que no se les toca. Para el resto se prefiere el
+     * `poster` del propio <video> —es la imagen de ESE vídeo— y, si no lo
+     * hay, la de la página (og:image / twitter:image / JSON-LD), que sale
+     * gratis del HTML ya descargado.
+     *
+     * Es una URL DECLARADA por el sitio: se devuelve para servirla luego vía
+     * /api/thumbnail, NUNCA se descarga aquí (privacidad y CSP; ver
+     * services/thumbnails.js). Solo http(s), igual que extractThumbnail.
+     */
+    const paginaThumb = extractThumbnail(html, url);
+    for (const video of unique) {
+      if (video.thumbnailUrl) continue;
+      const propia = typeof video.poster === 'string' && /^https?:\/\//i.test(video.poster);
+      const elegida = propia ? video.poster : paginaThumb;
+      if (elegida) video.thumbnailUrl = elegida;
+    }
+  }
+
   if (getMetadata) {
     /**
      * Pesos en paralelo acotado, no de uno en uno.
@@ -383,8 +412,135 @@ async function extractVideos(rawUrl, { getMetadata = false, useJavaScript = true
   return { url, videos: unique, methods, total: unique.length };
 }
 
+/**
+ * Adapta un vídeo a los campos que `groupDuplicates` compara.
+ *
+ * La agrupación es la MISMA que usa el Explorador (lib/dedupe.js), y espera
+ * `url`, `thumbnail`, `durationSeconds` y `sizeBytes`. Un vídeo, en cambio,
+ * lleva `thumbnailUrl`, `duration` como cadena de reloj ("10:30") y `size`
+ * como texto. Aquí solo se traduce para alimentar el comparador: el shape que
+ * el frontend ve de cada vídeo NO se toca.
+ *
+ * Un dato ausente queda a null, que es exactamente lo que la deduplicación ya
+ * ignora: sin dato no se puede afirmar una coincidencia.
+ */
+function adaptarParaDedupe(video) {
+  const durationSeconds =
+    typeof video.duration === 'string' ? parseClockDuration(video.duration) : null;
+  const sizeBytes = Number.isFinite(video.sizeBytes)
+    ? video.sizeBytes
+    : typeof video.size === 'string'
+      ? parseSizeText(video.size)
+      : null;
+
+  return {
+    url: video.url,
+    thumbnail: video.thumbnailUrl || null,
+    durationSeconds,
+    sizeBytes,
+  };
+}
+
+/**
+ * Da forma de salida a los grupos: solo los de 2+ miembros y con las URLs en
+ * vez de los objetos completos. Es el MISMO shape que `duplicateGroups` del
+ * Explorador (ver `mapearGrupos` en services/scraper.js), para que vídeo y
+ * explorador hablen igual con el frontend.
+ */
+function mapearGruposVideo(grupos) {
+  return grupos
+    .filter(g => g.miembros.length > 1)
+    .map(g => ({
+      representante: g.representante.url,
+      miembros: g.miembros.map(m => m.url),
+      motivos: g.motivos,
+    }));
+}
+
+/**
+ * Analiza VARIAS direcciones juntas y agrupa los duplicados UNA sola vez sobre
+ * la fusión de todas.
+ *
+ * Es la misma razón por la que `crawlMany` agrupa al final y no por dirección:
+ * dos copias del mismo vídeo halladas en direcciones distintas no se verían
+ * nunca como duplicadas si cada dirección se agrupara por su cuenta. Para el
+ * usuario es UN análisis, no varios.
+ *
+ * Cancelación (punto 14): el batch corre bajo el `signal` que arma la ruta con
+ * `res.on('close')`. Si el cliente cierra el fetch, el signal se propaga a cada
+ * `extractVideos` y el bucle deja de arrancar direcciones nuevas: cortar
+ * limpio, sin endpoint de cancelación aparte.
+ */
+async function extractVideosBatch(rawUrls, opciones = {}) {
+  const { getMetadata = false, getThumbnails = false, useJavaScript = true, signal } = opciones;
+
+  // Direcciones limpias, sin vacíos ni repetidas, conservando el orden. Una
+  // dirección repetida analizada dos veces solo duplicaría trabajo.
+  const urls = [];
+  const vistas = new Set();
+  for (const item of Array.isArray(rawUrls) ? rawUrls : []) {
+    if (typeof item !== 'string') continue;
+    const limpio = item.trim();
+    if (limpio === '' || vistas.has(limpio)) continue;
+    vistas.add(limpio);
+    urls.push(limpio);
+  }
+
+  if (urls.length === 0) {
+    throw new AppError('Se requiere al menos una URL', 400, 'URL_REQUIRED');
+  }
+  // Mismo tope que el lote del Explorador: cada dirección es un análisis
+  // completo, así que el máximo acota el trabajo de una sola petición.
+  if (urls.length > config.crawl.maxUrls) {
+    throw new AppError(
+      `Se pidieron ${urls.length} direcciones y el máximo es ${config.crawl.maxUrls}`,
+      400,
+      'TOO_MANY_URLS'
+    );
+  }
+
+  const methods = { puppeteer: false, cheerio: false, knownPlayers: false, scriptAnalysis: false };
+  const todos = [];
+  let direccionesAnalizadas = 0;
+
+  for (const url of urls) {
+    if (signal?.aborted) break;
+
+    try {
+      const res = await extractVideos(url, { getMetadata, getThumbnails, useJavaScript, signal });
+      // Unión de los métodos: basta que UNA dirección lo usara.
+      for (const clave of Object.keys(methods)) {
+        methods[clave] = methods[clave] || res.methods[clave];
+      }
+      todos.push(...res.videos);
+      direccionesAnalizadas += 1;
+    } catch (error) {
+      // Una dirección que falla no tumba el lote: se registra y se sigue. El
+      // hueco entre `direccionesAnalizadas` y `direccionesTotal` es la señal
+      // visible de que algo no se pudo analizar (nada de descartes mudos).
+      logger.warn(`No se pudo analizar ${url} en el lote`, error.message);
+    }
+  }
+
+  // Fusión: se funden por URL las apariciones del MISMO vídeo en direcciones
+  // distintas, igual que dentro de una sola. La agrupación de duplicados corre
+  // UNA vez sobre esa fusión.
+  const videos = dedupeVideos(todos).slice(0, config.video.maxResults);
+  const { grupos } = groupDuplicates(videos.map(adaptarParaDedupe));
+
+  return {
+    videos,
+    groups: mapearGruposVideo(grupos),
+    methods,
+    direccionesAnalizadas,
+    direccionesTotal: urls.length,
+  };
+}
+
 module.exports = {
   extractVideos,
+  extractVideosBatch,
+  adaptarParaDedupe,
   getVideoType,
   isVideoUrl,
   extractQualityFromUrl,

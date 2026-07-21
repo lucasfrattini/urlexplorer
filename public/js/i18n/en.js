@@ -408,21 +408,28 @@ export const en = {
     '{n} pages were checked without finding files of that type. Try turning on “Open with a browser” in the advanced settings: it now also applies when opening each link.',
 
   /* ── Video view ────────────────────────────────────────────────── */
-  'video.titulo': 'Pull the videos out of a page',
+  'video.titulo': 'Pull the videos out of one or more pages',
   'video.subtitulo':
-    'Paste an address and it tells you what videos are on it and how it found them.',
-  'video.url.label': 'Which page do you want to pull videos from?',
+    'Paste each address and it tells you what videos are on it and how it found them.',
+  'video.url.label': 'Addresses to analyse',
   'video.url.hint':
-    'A single page is inspected, and in four ways: what shows up after loading it, what it requests over the network, embedded players, and addresses hidden in its code.',
+    'Each address is analysed separately, and in four ways: what shows up after loading it, what it requests over the network, embedded players, and addresses hidden in its code. Duplicates across addresses are grouped at the end.',
   'video.url.placeholder': 'https://example.com/video/12345',
-  'video.faltaUrl.body': 'Paste the address of the page you want to analyse.',
+  'video.urls.agregar': '+ Add another address',
+  'video.urls.quitar': 'Remove this address',
+  'video.urls.extra.aria': 'Additional address to analyse',
+  'video.faltaUrl.body': 'Paste at least one address to analyse.',
   'video.navegador.label': 'Open with a browser',
   'video.navegador.hint':
     'Opens the page the way a real browser would and watches what it requests. Finds videos that are not written in the page.',
   'video.peso.label': 'Find out how big each file is',
   'video.peso.hint': 'Asks for the size of every video without downloading it. Slower.',
+  'video.miniatura.label': 'Fetch thumbnail',
+  'video.miniatura.hint': 'A preview image per video, if the site offers one.',
   'video.analizar': 'Analyse',
   'video.analizando': 'Analysing…',
+  'video.cancelar': 'Cancel',
+  'video.cancelado': 'Analysis cancelled',
   'video.stats.videos': 'Videos',
   'video.stats.formatos': 'Formats',
   'video.stats.vias': 'Ways with results',
@@ -444,4 +451,11 @@ export const en = {
   'video.copiados': '{n} URLs copied',
   'video.noCopiado': 'Could not copy to the clipboard',
   'video.fallo': 'Could not analyse the page',
+  'video.aviso.parcial': '{analizadas} of {total} addresses analysed',
+  'video.aviso.parcial.body':
+    'The rest could not be analysed: the address may be mistyped or the site may not have responded. Check the list before continuing.',
+  'video.columnas.tipo': 'Type',
+  'video.columnas.detectado': 'Found via',
+  'video.vista.cajas': 'Grid view',
+  'video.vista.lista': 'List view',
 };

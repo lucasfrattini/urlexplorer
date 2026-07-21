@@ -25,6 +25,11 @@ async function request(path, options = {}) {
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
   } catch (error) {
+    // Un abort deliberado (AbortController, ver `extractVideos`) no es un
+    // fallo de red: se relanza tal cual para que quien llamó lo distinga con
+    // `error.name === 'AbortError'`. Envolverlo en un ApiError genérico lo
+    // haría indistinguible de una caída real de la conexión.
+    if (error.name === 'AbortError') throw error;
     throw new ApiError(t('api.sinConexion', { mensaje: error.message }), 'NETWORK', 0);
   }
 
@@ -59,8 +64,15 @@ export function detectConfig(searchUrl) {
   return request('/scrape/detect', { method: 'POST', body: JSON.stringify({ searchUrl }) });
 }
 
-export function extractVideos(params) {
-  return request('/video/extract', { method: 'POST', body: JSON.stringify(params) });
+/**
+ * `signal` es el de un `AbortController` propio de la vista: "Cancelar" hace
+ * `controller.abort()`, que corta el `fetch` en curso. El backend, a su vez,
+ * aborta el análisis al detectar el cierre de la conexión (`res.on('close')`
+ * en `routes/video.js`), así que cancelar de verdad detiene el trabajo, no
+ * solo la espera del cliente.
+ */
+export function extractVideos(params, { signal } = {}) {
+  return request('/video/extract', { method: 'POST', body: JSON.stringify(params), signal });
 }
 
 /* ── Administración ──────────────────────────────────────────────────

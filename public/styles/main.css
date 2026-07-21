@@ -2649,3 +2649,76 @@ a {
 .miembro__elegido {
   flex-shrink: 0;
 }
+
+/* ── Vista de vídeos: multi-URL, selector de vista y vista en lista ────
+   El multi-URL (`.url-list`/`.url-row`) y los duplicados (`.miembros`/
+   `.miembro`, más arriba) reutilizan las clases genéricas ya definidas para
+   el Explorador: son el mismo patrón, así que es la misma hoja de estilos. */
+
+/*
+ * Selector ▦/☰: dos botones simples, no un `.segmented` con radios debajo.
+ * Es una preferencia de esta sesión de trabajo (qué forma se prefiere ver
+ * ahora), no un dato que viaje a ningún sitio.
+ */
+.view-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface-2);
+}
+
+.view-toggle__btn {
+  width: 30px;
+  height: 28px;
+  border: 0;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--c-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.view-toggle__btn--activa {
+  background: var(--c-surface);
+  color: var(--c-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+/*
+ * Vista en lista de la pestaña Vídeo: mismas filas que el Explorador
+ * (`.result-head`/`.result-item`), pero con columnas propias — tipo, enlace,
+ * duración, peso y vía de detección — porque no son los mismos datos que un
+ * resultado del Explorador. El selector compuesto (dos clases) le gana en
+ * especificidad a la regla base de `.result-head, .result-item`, así que no
+ * depende del orden de las reglas en la hoja.
+ */
+.result-head.video-list-head,
+.result-item.video-list-row {
+  grid-template-columns: 4.5rem minmax(0, 1fr) 4.5rem 4.5rem 9rem;
+}
+
+.result-head.video-list-head.video-list-head--con-miniatura,
+.result-item.video-list-row.video-list-row--con-miniatura {
+  grid-template-columns: 64px 4.5rem minmax(0, 1fr) 4.5rem 4.5rem 9rem;
+}
+
+@media (max-width: 640px) {
+  .video-list-head {
+    display: none;
+  }
+
+  .result-item.video-list-row,
+  .result-item.video-list-row.video-list-row--con-miniatura {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-1);
+  }
+}
+
+/* El panel de miembros de un grupo, en vista de cajas, ocupa la fila
+   entera: sin esto quedaría metido en una sola columna del grid, angosto e
+   ilegible junto a las demás tarjetas. */
+.video-grid__grupo-panel {
+  grid-column: 1 / -1;
+}
