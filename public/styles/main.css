@@ -433,16 +433,11 @@ a {
 }
 
 /*
- * El formulario se centra y se estrecha.
- *
- * A ancho completo las líneas de un formulario de una sola columna quedan
- * larguísimas y obligan a barrer la pantalla de lado a lado. Los resultados
- * sí aprovechan todo el ancho: ahí lo que sobra son columnas, no texto.
+ * El formulario ocupa el mismo ancho que el resto de tarjetas
+ * (`explorer-progress`, `results`): las tres son `.card` dentro de `.main` y
+ * ninguna lleva ya restricción propia, para que no salte a la vista un salto
+ * de ancho entre el formulario y lo que viene justo debajo.
  */
-.card--form {
-  max-width: 760px;
-  margin-inline: auto;
-}
 
 .card__header {
   padding: var(--space-5) var(--space-5) 0;
@@ -628,16 +623,16 @@ a {
    apiladas, cada una `.card` (con `.card + .card { margin-top }` de más
    arriba dando el espacio entre ellas):
 
-     1. `.explorer-panel` (`.card.card--form`, 760px) — solo el formulario:
+     1. `.explorer-panel` (`.card.card--form`) — solo el formulario:
         cabecera, cuerpo de configuración y su resumen plegado, y el aviso.
-     2. `.explorer-progress` (`.card`, SIN `card--form`) — progreso y cifras,
-        con el mismo ancho que la tarjeta de resultados. Antes vivían DENTRO
-        de `.explorer-panel` como secciones, así que su ancho quedaba atado
-        al del formulario (760px) en vez de al de los resultados que vienen
-        justo debajo, dando una sensación de layout distinto entre el paso 2
-        (progreso) y el paso 3 (resultados). Se sacaron a su propia tarjeta
-        para que los dos compartan ancho.
+     2. `.explorer-progress` (`.card`) — progreso y cifras. Antes vivían
+        DENTRO de `.explorer-panel` como secciones. Se sacaron a su propia
+        tarjeta para que las tres compartan ancho.
      3. La tarjeta de resultados (`resultList.js`), que no se toca aquí.
+
+   Las tres son `.card` a secas: ninguna lleva ya restricción de ancho
+   propia, así que las tres ocupan el ancho completo de `.main` (1180px) y no
+   hay salto visual entre el formulario, el progreso y los resultados.
 
    `.explorer-panel__section` separa progreso de cifras por un borde interno
    cuando las dos están visibles a la vez (ver el combinador `+` de abajo:

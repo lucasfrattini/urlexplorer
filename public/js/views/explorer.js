@@ -889,17 +889,14 @@ export function createExplorerView(container, { limits }) {
 
   // ── Formulario (`.explorer-panel`) y progreso/cifras, aparte ─────────
   //
-  // El formulario es `.card.card--form` (760px, pensado para no obligar a
-  // barrer la pantalla de lado a lado en una sola columna). Progreso y
-  // cifras NO comparten esa restricción: son datos de la exploración, no de
-  // un formulario, y antes de este cambio vivían dentro de `.explorer-panel`
-  // como secciones (separadas por un borde interno, ver
-  // `.explorer-panel__section`), así que su ancho quedaba atado al del
-  // formulario y no al de los resultados que vienen justo debajo. Ahora
-  // viven en `progressPanel`, su propia `.card` sin `card--form`, con el
-  // mismo ancho que `results.root`. Progreso y cifras siguen ocultándose
-  // igual que antes (`show()`), solo que ahora ocultan la sección dentro de
-  // esa tarjeta en vez de dentro del formulario.
+  // El formulario es `.card.card--form`. Progreso y cifras antes vivían
+  // dentro de `.explorer-panel` como secciones (separadas por un borde
+  // interno, ver `.explorer-panel__section`); ahora viven en
+  // `progressPanel`, su propia `.card`. Las tres tarjetas (formulario,
+  // progreso y resultados) comparten el mismo ancho: ninguna lleva
+  // restricción propia. Progreso y cifras siguen ocultándose igual que antes
+  // (`show()`), solo que ahora ocultan la sección dentro de esa tarjeta en
+  // vez de dentro del formulario.
   const progress = createProgressPanel();
   const progressSection = el('div', {
     className: 'card__body explorer-panel__section',
@@ -914,11 +911,11 @@ export function createExplorerView(container, { limits }) {
   show(statsSlot, false);
 
   /**
-   * Contenedor propio de progreso y cifras, con el mismo ancho que
-   * `results.root` (los dos son `.card` sin `card--form`). Arranca oculto:
-   * mientras las dos secciones de dentro están ocultas, la tarjeta no debe
-   * dejar un hueco vacío con borde y sombra entre el formulario y los
-   * resultados.
+   * Contenedor propio de progreso y cifras, con el mismo ancho que el
+   * formulario y que `results.root` (las tres son `.card`, ninguna con
+   * restricción de ancho propia). Arranca oculto: mientras las dos secciones
+   * de dentro están ocultas, la tarjeta no debe dejar un hueco vacío con
+   * borde y sombra entre el formulario y los resultados.
    */
   const progressPanel = el('div', {
     className: 'card explorer-progress',
