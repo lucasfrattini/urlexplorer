@@ -322,7 +322,8 @@ publishes. Note that the absence of a license means "all rights reserved", not
 
 ## License
 
-MIT with the [Commons Clause](https://commonsclause.com/): free to download,
-self-host, modify and use, including internally at a company — the one thing
-you cannot do is sell it or resell it as a paid service. Full text in
-[`LICENSE`](LICENSE).
+[GNU AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html): free to use,
+self-host and modify, including commercially. The one obligation: if you
+distribute a modified version — including running it as a network service
+for others — you must make that version's source available under the same
+license. Full text in [`LICENSE`](LICENSE).
