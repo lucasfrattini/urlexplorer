@@ -238,6 +238,7 @@ export const en = {
   'explorer.resumen.rango': 'Pages',
   'explorer.resumen.tipo.soloEnlaces': 'links only',
   'explorer.resumen.rango.valor': '{desde}–{hasta}',
+  'explorer.resumen.rango.sinPaginado': 'no paging',
   'explorer.resumen.direcciones.uno': '{n} address',
   'explorer.resumen.direcciones.varios': '{n} addresses',
 
@@ -282,6 +283,7 @@ export const en = {
   'explorer.rango.titulo': 'Page range to explore',
   'explorer.rango.anterior': 'Previous page range',
   'explorer.rango.siguiente': 'Next page range',
+  'explorer.paginado.activo': 'Enable/disable paging',
   'explorer.rapidez.label': 'How fast? (pages at a time)',
   'explorer.rapidez.hint':
     'Between 1 and {max}. The higher it is, the sooner it finishes and the more it loads the site. Default is {defecto}.',

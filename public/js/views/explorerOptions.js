@@ -140,6 +140,19 @@ export function construirParamsMultiUrl(urls, config = {}) {
 }
 
 /**
+ * Rango de páginas que de verdad se envía, según el interruptor de paginado.
+ *
+ * Con el paginado activado, el rango es el que escribió el usuario, sea el
+ * que sea. Con el paginado desactivado, SIEMPRE `{ startPage: 1, endPage: 1 }`
+ * sin importar qué quedara escrito en los campos: destildar el interruptor
+ * no vacía los inputs (ver CLAUDE.md), así que quien decide qué se manda de
+ * verdad es esta función, no el valor que haya quedado en pantalla.
+ */
+export function paginasEfectivas(pagingEnabled, startPage, endPage) {
+  return pagingEnabled ? { startPage, endPage } : { startPage: 1, endPage: 1 };
+}
+
+/**
  * Rango "Desde/Hasta" siguiente o anterior, preservando el tamaño de la
  * ventana actual (1-5 → 6-10 → 11-15, o de 10 en 10 si el rango es de 10).
  *

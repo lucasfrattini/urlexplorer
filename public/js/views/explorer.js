@@ -11,6 +11,7 @@ import {
   paginationModeDe,
   siguienteRango,
   construirParamsMultiUrl,
+  paginasEfectivas,
 } from './explorerOptions.js';
 import { t, tp, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 
@@ -410,11 +411,34 @@ export function createExplorerView(container, { limits }) {
   atributo(rangoSiguienteBtn, 'aria-label', 'explorer.rango.siguiente');
   uiInputs.push(rangoSiguienteBtn);
 
+  /**
+   * Interruptor del paginado, DENTRO de la propia píldora de rango.
+   *
+   * No es una opción de un modo concreto: apaga el rango Desde/Hasta
+   * (`fields.startPage`/`fields.endPage`) tal como está, sin vaciarlo (ver
+   * `aplicarEstadoRango`), porque muchas búsquedas son de una sola dirección
+   * y no necesitan recorrer más páginas. El rótulo visible sigue siendo
+   * "Páginas", así que el checkbox necesita su propio `aria-label`: el texto
+   * en pantalla no describe la acción de activar/desactivar.
+   */
+  const pagingEnabledInput = el('input', {
+    attrs: { type: 'checkbox', id: 'explorer-pagingEnabled', name: 'pagingEnabled', checked: true },
+  });
+  fields.pagingEnabled = pagingEnabledInput;
+  atributo(pagingEnabledInput, 'aria-label', 'explorer.paginado.activo');
+  pagingEnabledInput.addEventListener('change', () => aplicarEstadoRango());
+
+  const rangoPillToggle = el('label', {
+    className: 'range-pill__label range-pill__toggle',
+    attrs: { for: 'explorer-pagingEnabled' },
+    children: [pagingEnabledInput, texto(el('span', {}), 'explorer.resumen.rango')],
+  });
+
   const rangoPill = el('div', {
     className: 'range-pill',
     attrs: { role: 'group' },
     children: [
-      texto(el('span', { className: 'range-pill__label' }), 'explorer.resumen.rango'),
+      rangoPillToggle,
       inputDesde,
       el('span', { className: 'range-pill__sep', text: '–', attrs: { 'aria-hidden': 'true' } }),
       inputHasta,
@@ -422,6 +446,24 @@ export function createExplorerView(container, { limits }) {
     ],
   });
   atributo(rangoPill, 'aria-label', 'explorer.rango.titulo');
+
+  /**
+   * Disabled combinado de "ocupado" y "checkbox destildado" para los
+   * controles del rango de páginas.
+   *
+   * Se llama SIEMPRE después del bucle genérico de `setBusy()`, que ya deja
+   * `fields.startPage`/`fields.endPage` en `disabled = busy`: sin esta
+   * llamada posterior, terminar una exploración con el checkbox destildado
+   * reactivaría esos controles aunque el paginado siga apagado. Mismo patrón
+   * que ya usa `quitarPrimeraBtn` en `setBusy()`.
+   */
+  function aplicarEstadoRango() {
+    const deshabilitado = explorando || !fields.pagingEnabled.checked;
+    fields.startPage.disabled = deshabilitado;
+    fields.endPage.disabled = deshabilitado;
+    rangoAnteriorBtn.disabled = deshabilitado;
+    rangoSiguienteBtn.disabled = deshabilitado;
+  }
 
   const etiquetaTipoArchivo = texto(el('p', { className: 'field__label' }), 'explorer.tipoArchivo');
 
@@ -977,10 +1019,9 @@ export function createExplorerView(container, { limits }) {
       resumenTipoValor.textContent = presetInfo ? t(presetInfo.etiquetaKey) : params.fileExtensions;
     }
 
-    resumenRangoValor.textContent = t('explorer.resumen.rango.valor', {
-      desde: params.startPage,
-      hasta: params.endPage,
-    });
+    resumenRangoValor.textContent = fields.pagingEnabled.checked
+      ? t('explorer.resumen.rango.valor', { desde: params.startPage, hasta: params.endPage })
+      : t('explorer.resumen.rango.sinPaginado');
   }
   alCambiarIdioma(() => pintarResumenConfig());
 
@@ -1085,6 +1126,11 @@ export function createExplorerView(container, { limits }) {
     // Un término que llega de fuera tiene que verse: si el campo se quedara
     // plegado, la palabra viajaría al servidor sin aparecer en pantalla.
     aplicarVistaTermino();
+    // Deja el rango consistente con el checkbox tras un perfil, un enlace
+    // compartido o el formulario restaurado: ninguno de ellos conoce
+    // `pagingEnabled` (no está en CONFIG_KEYS), pero el checkbox sí puede
+    // venir de la sesión restaurada y hay que reflejarlo en los controles.
+    aplicarEstadoRango();
   }
 
   /** Muestra u oculta los patrones según el radio, sin tocar sus valores. */
@@ -1159,8 +1205,15 @@ export function createExplorerView(container, { limits }) {
       pageParam: fields.pageParam.value.trim(),
       linkPattern: fields.linkPattern.value.trim(),
       fileExtensions: fields.fileExtensions.value.trim(),
-      startPage: Number(fields.startPage.value) || 1,
-      endPage: Number(fields.endPage.value) || 1,
+      // Con el paginado destildado, `paginasEfectivas` fuerza 1-1 sin importar
+      // lo que quede escrito en los inputs: destildar no los vacía (ver
+      // CLAUDE.md), así que quien de verdad decide qué se envía es esta
+      // función, no el valor en pantalla.
+      ...paginasEfectivas(
+        fields.pagingEnabled.checked,
+        Number(fields.startPage.value) || 1,
+        Number(fields.endPage.value) || 1
+      ),
       concurrency: Number(fields.concurrency.value) || limits.defaultConcurrency,
       useJavaScript: fields.useJavaScript.checked,
       licenseFilter: fields.openLicenseOnly.checked ? 'open-only' : 'off',
@@ -1259,6 +1312,11 @@ export function createExplorerView(container, { limits }) {
     refrescarBotones();
     for (const input of Object.values(fields)) input.disabled = busy;
     for (const input of uiInputs) input.disabled = busy;
+    // El bucle genérico de arriba ya deja startPage/endPage en
+    // `disabled = busy`; esta llamada corre DESPUÉS para sobreescribirlo con
+    // el `||` de "ocupado" y "checkbox destildado". Sin ella, terminar una
+    // exploración con el paginado apagado reactivaría esos controles.
+    aplicarEstadoRango();
     // Las direcciones extra y sus controles no viven en `fields` ni en
     // `uiInputs`: es un bloque que se reconstruye entero cada vez que se
     // agrega o quita una fila (`pintarFilasUrl`), así que se deshabilita

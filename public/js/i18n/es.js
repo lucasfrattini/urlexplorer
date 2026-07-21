@@ -238,6 +238,7 @@ export const es = {
   'explorer.resumen.rango': 'Páginas',
   'explorer.resumen.tipo.soloEnlaces': 'solo enlaces',
   'explorer.resumen.rango.valor': '{desde}–{hasta}',
+  'explorer.resumen.rango.sinPaginado': 'sin paginado',
   'explorer.resumen.direcciones.uno': '{n} dirección',
   'explorer.resumen.direcciones.varios': '{n} direcciones',
 
@@ -282,6 +283,7 @@ export const es = {
   'explorer.rango.titulo': 'Rango de páginas a explorar',
   'explorer.rango.anterior': 'Rango de páginas anterior',
   'explorer.rango.siguiente': 'Rango de páginas siguiente',
+  'explorer.paginado.activo': 'Activar/desactivar el paginado',
   'explorer.rapidez.label': '¿Con qué rapidez? (páginas a la vez)',
   'explorer.rapidez.hint':
     'Entre 1 y {max}. Cuanto más alto, antes acaba y más carga el sitio. Por defecto {defecto}.',

@@ -120,6 +120,10 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Reserva siempre el hueco del scrollbar: sin esto, Configurar/Progreso/
+   * Resultados cambian de ancho según si el contenido es lo bastante largo
+   * para necesitarlo. */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -1131,6 +1135,18 @@ a {
   color: var(--c-text-subtle);
   font-weight: 540;
   white-space: nowrap;
+}
+
+/*
+ * Interruptor del paginado: el checkbox va "al costado" del rótulo
+ * "Páginas", dentro del mismo `.range-pill__label`, sin rehacer el resto de
+ * la píldora.
+ */
+.range-pill__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
 }
 
 .range-pill__input {

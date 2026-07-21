@@ -143,6 +143,23 @@ test('paginationModeDe solo devuelve los dos modos que entiende el servidor', ()
   assert.strictEqual(paginationModeDe('scroll'), 'scroll');
 });
 
+test('paginasEfectivas devuelve el rango tal cual con el paginado activado', () => {
+  const { paginasEfectivas } = opciones;
+
+  assert.deepStrictEqual(paginasEfectivas(true, 1, 1), { startPage: 1, endPage: 1 });
+  // Incluso si no es 1-1: el paginado activado no toca nada de lo escrito.
+  assert.deepStrictEqual(paginasEfectivas(true, 3, 8), { startPage: 3, endPage: 8 });
+});
+
+test('paginasEfectivas fuerza 1-1 con el paginado desactivado, sea cual sea el rango escrito', () => {
+  const { paginasEfectivas } = opciones;
+
+  assert.deepStrictEqual(paginasEfectivas(false, 1, 5), { startPage: 1, endPage: 1 });
+  assert.deepStrictEqual(paginasEfectivas(false, 7, 12), { startPage: 1, endPage: 1 });
+  // Ni con un rango ya "normal": el interruptor manda, no el contenido de los campos.
+  assert.deepStrictEqual(paginasEfectivas(false, 1, 1), { startPage: 1, endPage: 1 });
+});
+
 test('siguienteRango avanza replicando el tamaño de la ventana', () => {
   const { siguienteRango } = opciones;
 
