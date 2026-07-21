@@ -14,7 +14,7 @@ live progress, real cancellation, nothing lost, running on your own server.
 
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
 ![Docker](https://img.shields.io/badge/docker-compose-informational)
-![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-informational)
+![License](https://img.shields.io/badge/license-AGPL--3.0-informational)
 ![Tests](https://img.shields.io/badge/tests-413-success)
 
 </div>
