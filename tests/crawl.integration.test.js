@@ -11,6 +11,10 @@ process.env.SECURITY_BLOCK_PRIVATE_ADDRESSES = 'false';
 process.env.BROWSER_ENABLED = 'false';
 process.env.CRAWL_PAGE_DELAY_MS = '0';
 process.env.THROTTLE_MIN_INTERVAL_MS = '0';
+// Los reintentos siguen siendo los de siempre; lo que se quita es la espera
+// entre ellos, para que el escenario de 429 no tarde varios segundos.
+process.env.HTTP_RETRY_BASE_DELAY_MS = '0';
+process.env.HTTP_RETRY_429_BASE_DELAY_MS = '0';
 
 const { crawl } = require('../src/services/scraper');
 
@@ -291,6 +295,145 @@ test('ficha con varios vídeos — cada uno con su propia miniatura y duración'
       `no debería haber grupos: ${JSON.stringify(resultado.duplicateGroups)}`
     );
     assert.equal(resultado.totalDuplicados, 0);
+  });
+});
+
+/**
+ * El sitio empieza a devolver 429 A MITAD de la fase 2.
+ *
+ * Es el caso que estaba mudo: la fase 1 sí observaba el bloqueo, pero la fase
+ * 2 solo apuntaba `{url, error}` en `failures`, sin log y sin analizar la
+ * respuesta. `diagnostico.bloqueo.sospechoso` se quedaba en `false` aunque el
+ * sitio estuviera cerrando la puerta, así que el aviso que la interfaz ya sabe
+ * pintar no salía nunca.
+ */
+test('un 429 en la fase 2 se ve en el diagnóstico, sin perder lo ya encontrado', async t => {
+  // Las dos primeras fichas responden bien; de la tercera en adelante, 429.
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+
+    if (url.pathname === '/search') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(
+        `<html><body>
+          ${[1, 2, 3, 4].map(n => `<a href="/a/${n}">ficha ${n}</a>`).join('')}
+        </body></html>`
+      );
+      return;
+    }
+
+    if (url.pathname.startsWith('/a/')) {
+      const n = Number(url.pathname.split('/').pop());
+      if (n >= 3) {
+        res.writeHead(429, { 'Content-Type': 'text/html' });
+        res.end('<html><body>Too many requests</body></html>');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><video src="/media/video-${n}.mp4"></video></body></html>`);
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('no');
+  });
+
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  t.after(() => new Promise(resolve => server.close(resolve)));
+
+  const params = {
+    searchUrl: `${base}/search?q=x`,
+    linkPattern: '/a/',
+    startPage: 1,
+    endPage: 1,
+    extensions: ['mp4'],
+    concurrency: 2,
+    useJavaScript: false,
+  };
+
+  const resultado = await crawl(params);
+
+  await t.test('la sospecha de bloqueo llega al diagnóstico, con su motivo', () => {
+    assert.equal(
+      resultado.diagnostico.bloqueo.sospechoso,
+      true,
+      'una racha de 429 en la fase 2 no puede quedar en silencio'
+    );
+    assert.ok(
+      resultado.diagnostico.bloqueo.motivos.some(m => m.includes('429')),
+      `el motivo debe mencionar el 429: ${JSON.stringify(resultado.diagnostico.bloqueo.motivos)}`
+    );
+  });
+
+  await t.test('`failures` sigue teniendo las fichas que fallaron', () => {
+    assert.equal(resultado.failures.length, 2);
+    for (const fallo of resultado.failures) {
+      assert.ok(typeof fallo.url === 'string' && fallo.url.startsWith(base));
+      assert.ok(typeof fallo.error === 'string' && fallo.error !== '');
+    }
+    // La forma de `failures` no cambia: sigue siendo {url, error} y nada más
+    assert.deepEqual(Object.keys(resultado.failures[0]).sort(), ['error', 'url']);
+  });
+
+  await t.test('lo encontrado ANTES del bloqueo no se pierde', () => {
+    assert.equal(resultado.totalFiles, 2, 'una racha de 429 no borra lo ya hallado');
+    assert.equal(resultado.fileDetails.length, 2);
+  });
+
+  await t.test('el campo interno `bloqueo` no se cuela suelto en la respuesta', () => {
+    assert.equal('bloqueo' in resultado, false);
+  });
+});
+
+/**
+ * Al CONTINUAR un trabajo frenado la fase 1 no se repite, así que no hay
+ * diagnóstico de fase 1 donde fundir la sospecha. Si aun así el sitio bloquea,
+ * el aviso tiene que llegar igual: es justo la tanda en la que el sitio ya se
+ * ha cansado de nosotros.
+ */
+test('al continuar sin fase 1, el bloqueo de la fase 2 crea el diagnóstico', async t => {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    if (url.pathname === '/a/1') {
+      res.writeHead(429, { 'Content-Type': 'text/html' });
+      res.end('<html><body>Too many requests</body></html>');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<html><body><video src="/media/ok.mp4"></video></body></html>');
+  });
+
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  t.after(() => new Promise(resolve => server.close(resolve)));
+
+  const params = {
+    searchUrl: `${base}/search`,
+    linkPattern: '/a/',
+    startPage: 1,
+    endPage: 1,
+    extensions: ['mp4'],
+    concurrency: 1,
+    useJavaScript: false,
+  };
+
+  await t.test('con bloqueo, se construye el diagnóstico que faltaba', async () => {
+    const resultado = await crawl(params, { linksPrevios: [`${base}/a/1`] });
+
+    assert.notEqual(resultado.diagnostico, null, 'debe haber diagnóstico aunque no hubiera fase 1');
+    assert.equal(resultado.diagnostico.bloqueo.sospechoso, true);
+    assert.ok(resultado.diagnostico.bloqueo.motivos.some(m => m.includes('429')));
+    // La forma es la que el cliente ya conoce
+    assert.deepEqual(resultado.diagnostico.enlacesVistos, 0);
+    assert.deepEqual(resultado.diagnostico.prefijos, []);
+  });
+
+  await t.test('sin bloqueo NO se inventa un diagnóstico vacío', async () => {
+    const resultado = await crawl(params, { linksPrevios: [`${base}/a/2`] });
+
+    assert.equal(resultado.totalFiles, 1);
+    assert.equal(resultado.diagnostico, null, 'un diagnóstico con todo a cero no aporta nada');
   });
 });
 

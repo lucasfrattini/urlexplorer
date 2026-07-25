@@ -71,29 +71,87 @@ function guardRedirect(options) {
   validateUrlShape(target);
 }
 
+/** ¿Este error es el sitio frenándonos a propósito? */
+function esRateLimit(error) {
+  return error?.response?.status === 429;
+}
+
+/**
+ * `Retry-After` en milisegundos, o null si no viene o no se entiende.
+ *
+ * La cabecera admite DOS formas y hay que aceptar las dos: segundos ("30") o
+ * una fecha HTTP ("Wed, 21 Oct 2026 07:28:00 GMT"). Quedarse solo con la
+ * primera dejaría a los sitios que mandan fecha con el backoff genérico, sin
+ * dar ningún error.
+ */
+function retryAfterMs(raw) {
+  if (raw === undefined || raw === null) return null;
+  const texto = String(raw).trim();
+  if (texto === '') return null;
+
+  const segundos = Number(texto);
+  if (Number.isFinite(segundos)) return Math.max(0, segundos * 1000);
+
+  const fecha = Date.parse(texto);
+  if (Number.isNaN(fecha)) return null;
+  return Math.max(0, fecha - Date.now());
+}
+
+/**
+ * Cuánto esperar antes del siguiente intento.
+ *
+ * Un 429 no es un fallo pasajero: el sitio nos frena por volumen y la
+ * recuperación medida es de minutos, así que el backoff lineal genérico
+ * (1s/2s/3s) reintenta DENTRO del bloqueo y solo suma al contador que lo
+ * provocó. Si el sitio manda `Retry-After`, se le hace caso: es él diciendo
+ * cuándo volver. El tope se aplica siempre, también a lo que pida el sitio,
+ * porque un `Retry-After` de una hora colgaría el crawl entero.
+ *
+ * Lo que NO es un 429 sigue con el backoff de siempre.
+ */
+function retryDelayMs(error, attempt) {
+  if (!esRateLimit(error)) return config.http.retryBaseDelayMs * attempt;
+
+  const pedido = retryAfterMs(error.response.headers?.['retry-after']);
+  const espera = pedido ?? config.http.retry429BaseDelayMs;
+  return Math.min(espera, config.http.retry429MaxDelayMs);
+}
+
 /** GET de HTML con throttle, validación SSRF y tope de tamaño. */
 async function fetchHtml(url, { timeout, signal } = {}) {
   await assertUrlIsSafe(url);
 
   return throttle.run(url, async () => {
-    const response = await axios.get(url, {
-      headers: buildHeaders(),
-      timeout: timeout ?? config.http.pageTimeoutMs,
-      maxRedirects: config.http.maxRedirects,
-      maxContentLength: config.http.maxResponseBytes,
-      maxBodyLength: config.http.maxResponseBytes,
-      responseType: 'text',
-      signal,
-      httpAgent,
-      httpsAgent,
-      beforeRedirect: guardRedirect,
-      validateStatus: status => status >= 200 && status < 400,
-    });
+    try {
+      const response = await axios.get(url, {
+        headers: buildHeaders(),
+        timeout: timeout ?? config.http.pageTimeoutMs,
+        maxRedirects: config.http.maxRedirects,
+        maxContentLength: config.http.maxResponseBytes,
+        maxBodyLength: config.http.maxResponseBytes,
+        responseType: 'text',
+        signal,
+        httpAgent,
+        httpsAgent,
+        beforeRedirect: guardRedirect,
+        validateStatus: status => status >= 200 && status < 400,
+      });
 
-    if (typeof response.data !== 'string') {
-      return String(response.data ?? '');
+      // Este es el ÚNICO punto que ve el resultado real de la petición: lo
+      // que pase de aquí lo envuelven los reintentos y ya no distingue un 429
+      // del sitio de un fallo cualquiera.
+      throttle.reportOutcome(url, { blocked: false });
+
+      if (typeof response.data !== 'string') {
+        return String(response.data ?? '');
+      }
+      return response.data;
+    } catch (error) {
+      // Solo el 429 alimenta el freno por host: es el sitio diciendo
+      // "demasiadas peticiones". Un timeout o un 500 no significan eso.
+      throttle.reportOutcome(url, { blocked: esRateLimit(error) });
+      throw error;
     }
-    return response.data;
   });
 }
 
@@ -107,7 +165,7 @@ async function tryFetchHtml(url, options = {}) {
   }
 }
 
-/** GET con reintentos y backoff lineal. Lanza el último error. */
+/** GET con reintentos y backoff lineal (propio para el 429). Lanza el último error. */
 async function fetchHtmlWithRetry(url, { retries, signal, timeout } = {}) {
   const attempts = retries ?? config.http.retries;
   let lastError;
@@ -121,7 +179,7 @@ async function fetchHtmlWithRetry(url, { retries, signal, timeout } = {}) {
       // Un fallo de validación no mejora reintentando
       if (error instanceof AppError && error.expected) throw error;
       if (attempt < attempts) {
-        await sleep(config.http.retryBaseDelayMs * attempt);
+        await sleep(retryDelayMs(error, attempt));
       }
     }
   }

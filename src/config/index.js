@@ -70,6 +70,18 @@ const config = {
     maxResponseBytes: intFromEnv('HTTP_MAX_RESPONSE_BYTES', 10 * 1024 * 1024),
     retries: intFromEnv('HTTP_RETRIES', 3),
     retryBaseDelayMs: intFromEnv('HTTP_RETRY_BASE_DELAY_MS', 1000),
+    /**
+     * Espera propia para el 429, porque no es un fallo pasajero.
+     *
+     * El backoff lineal genérico (1s/2s/3s) reintenta DENTRO del bloqueo: el
+     * sitio nos está frenando por volumen y la recuperación real medida es de
+     * unos dos minutos, así que cada reintento rápido solo suma al contador
+     * que provocó el bloqueo.
+     */
+    retry429BaseDelayMs: intFromEnv('HTTP_RETRY_429_BASE_DELAY_MS', 5000),
+    // Tope de la espera de un 429, incluido lo que pida `Retry-After`: una
+    // cabecera de una hora dejaría el crawl colgado sin decir nada.
+    retry429MaxDelayMs: intFromEnv('HTTP_RETRY_429_MAX_DELAY_MS', 30000),
   },
 
   crawl: {
@@ -94,6 +106,23 @@ const config = {
     minIntervalMs: intFromEnv('THROTTLE_MIN_INTERVAL_MS', 250),
     // Peticiones simultáneas máximas contra un mismo dominio
     maxConcurrentPerHost: intFromEnv('THROTTLE_MAX_CONCURRENT_PER_HOST', 4),
+    /**
+     * Freno reactivo por host (circuit breaker).
+     *
+     * El intervalo mínimo es fijo y no sabe nada de cómo está respondiendo el
+     * sitio: si empieza a devolver 429 se le sigue pidiendo al mismo ritmo.
+     * Estas cuatro constantes son lo que convierte esa señal en menos ritmo
+     * contra ESE host, sin tocar a los demás.
+     */
+    // 429 consecutivos que se toleran antes de penalizar al host
+    circuitBreakerThreshold: intFromEnv('THROTTLE_CIRCUIT_BREAKER_THRESHOLD', 5),
+    // Cuánto se multiplica el intervalo mínimo mientras dura la penalización
+    circuitBreakerFactor: intFromEnv('THROTTLE_CIRCUIT_BREAKER_FACTOR', 8),
+    // Tope del intervalo penalizado: separar más no ayuda y alarga el crawl
+    circuitBreakerMaxMs: intFromEnv('THROTTLE_CIRCUIT_BREAKER_MAX_MS', 5000),
+    // Cuánto dura la penalización. Dos minutos es la recuperación real medida
+    // sobre un sitio que bloquea por volumen, no un número redondo.
+    circuitBreakerCooldownMs: intFromEnv('THROTTLE_CIRCUIT_BREAKER_COOLDOWN_MS', 120000),
   },
 
   browser: {

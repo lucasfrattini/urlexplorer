@@ -18,7 +18,10 @@ class HostThrottle {
   constructor({ minIntervalMs, maxConcurrentPerHost } = {}) {
     this.minIntervalMs = minIntervalMs ?? config.throttle.minIntervalMs;
     this.maxConcurrentPerHost = maxConcurrentPerHost ?? config.throttle.maxConcurrentPerHost;
-    /** @type {Map<string, {active: number, lastStart: number, queue: Array<() => void>}>} */
+    /**
+     * @type {Map<string, {active: number, nextStart: number, queue: Array<() => void>,
+     *   consecutiveBlocked: number, penaltyUntil: number}>}
+     */
     this.hosts = new Map();
   }
 
@@ -27,10 +30,62 @@ class HostThrottle {
     if (!state) {
       // `nextStart` es el instante en que puede arrancar la SIGUIENTE
       // petición. Se reserva por adelantado; ver acquire().
-      state = { active: 0, nextStart: 0, queue: [] };
+      // `consecutiveBlocked` y `penaltyUntil` son el freno reactivo: ver
+      // reportOutcome().
+      state = { active: 0, nextStart: 0, queue: [], consecutiveBlocked: 0, penaltyUntil: 0 };
       this.hosts.set(hostname, state);
     }
     return state;
+  }
+
+  /**
+   * Intervalo mínimo VIGENTE para este host.
+   *
+   * Fuera de la ventana de penalización es exactamente el de siempre; dentro,
+   * se separa a las peticiones para dejar de golpear a un sitio que ya está
+   * respondiendo 429.
+   */
+  intervalFor(state) {
+    if (Date.now() >= state.penaltyUntil) return this.minIntervalMs;
+    return Math.min(
+      this.minIntervalMs * config.throttle.circuitBreakerFactor,
+      config.throttle.circuitBreakerMaxMs
+    );
+  }
+
+  /**
+   * Resultado de una petición, para frenar al host que nos está bloqueando.
+   *
+   * Solo el 429 cuenta como `blocked`: es el sitio diciendo explícitamente
+   * "demasiadas peticiones". Un timeout o un 500 no significan eso y meterlos
+   * aquí penalizaría por ruido.
+   *
+   * Un resultado bueno corta la racha pero NO levanta una penalización ya
+   * activa: el bloqueo por volumen dura minutos, y la primera respuesta buena
+   * que se cuele no significa que haya terminado. Levantarla ahí volvería al
+   * ritmo que provocó el bloqueo.
+   */
+  reportOutcome(url, { blocked = false } = {}) {
+    const hostname = getHostname(url) || 'unknown';
+
+    // Un host sano del que no queda estado no necesita que se le cree uno:
+    // sería dejarlo en el mapa fuera del ciclo acquire/release.
+    if (!blocked && !this.hosts.has(hostname)) return;
+
+    const state = this.stateFor(hostname);
+
+    if (!blocked) {
+      state.consecutiveBlocked = 0;
+      return;
+    }
+
+    state.consecutiveBlocked += 1;
+    if (state.consecutiveBlocked >= config.throttle.circuitBreakerThreshold) {
+      state.penaltyUntil = Date.now() + config.throttle.circuitBreakerCooldownMs;
+      // Se reinicia la racha para no reescalar en cadena: mientras dure la
+      // penalización los 429 que sigan llegando vuelven a contar desde cero.
+      state.consecutiveBlocked = 0;
+    }
   }
 
   async acquire(hostname) {
@@ -60,7 +115,7 @@ class HostThrottle {
      */
     const ahora = Date.now();
     const turno = Math.max(ahora, state.nextStart);
-    state.nextStart = turno + this.minIntervalMs;
+    state.nextStart = turno + this.intervalFor(state);
 
     const espera = turno - ahora;
     if (espera > 0) await sleep(espera);
@@ -91,8 +146,22 @@ class HostThrottle {
 
     state.active = Math.max(0, state.active - 1);
 
-    // Liberar memoria de hosts inactivos
-    if (state.active === 0 && state.queue.length === 0) {
+    /**
+     * Liberar memoria de hosts inactivos, PERO no si el host está penalizado
+     * o lleva una racha de 429 a medias.
+     *
+     * Borrarlo sin más haría que la penalización no existiera en la práctica:
+     * `reportOutcome` se llama dentro de la tarea y el release inmediato
+     * posterior tiraría el estado, así que la petición siguiente crearía uno
+     * limpio y volvería al ritmo normal. Sin ningún error: el freno
+     * simplemente no frenaría nada.
+     *
+     * El estado que se conserva está acotado a los hosts que están
+     * respondiendo mal ahora mismo, y se recoge en cuanto expira.
+     */
+    const penalizado = Date.now() < state.penaltyUntil;
+    const enRacha = state.consecutiveBlocked > 0;
+    if (state.active === 0 && state.queue.length === 0 && !penalizado && !enRacha) {
       this.hosts.delete(hostname);
     }
   }

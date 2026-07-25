@@ -290,6 +290,24 @@ async function findFiles(urls, options) {
   // buscar los ficheros, asi que no cuesta ninguna peticion extra.
   const details = new Map();
   const failures = [];
+
+  /**
+   * Sospecha de bloqueo observada en ESTA fase.
+   *
+   * La fase 1 ya la acumulaba y la fase 2 no miraba nada: un sitio que empieza
+   * a responder 429 a mitad del recorrido dejaba sus fallos enterrados en
+   * `failures`, sin motivo, indistinguibles de "esa ficha no tenía nada".
+   * Es SOSPECHA, no diagnóstico (ver lib/blocking.js), y no cambia lo que se
+   * descarga ni lo que se devuelve: solo se apunta.
+   *
+   * Lo comparten todos los workers, que corren concurrentes sobre el mismo
+   * cursor; `combinar` funde sin repetir motivos.
+   */
+  let bloqueo = { sospechoso: false, motivos: [] };
+  const anotarBloqueo = observacion => {
+    if (observacion?.sospechoso) bloqueo = combinar([bloqueo, observacion]);
+  };
+
   const skippedByLicense = [];
   let processed = 0;
   let truncated = false;
@@ -338,6 +356,10 @@ async function findFiles(urls, options) {
         const html = useJavaScript
           ? await renderPageOrFallback(url, { signal })
           : await fetchHtmlWithRetry(url, { signal, timeout: config.http.fileScanTimeoutMs });
+
+        // Un challenge servido con 200 llega por el camino bueno y se ve igual
+        // de bien que una ficha: hay que mirar el contenido, no solo el estado.
+        anotarBloqueo(analizarRespuesta({ html }));
 
         /**
          * UN solo parseo por ficha, repartido entre los cuatro extractores.
@@ -503,6 +525,13 @@ async function findFiles(urls, options) {
           }
         }
       } catch (error) {
+        // El cliente HTTP rechaza los 4xx, así que un bloqueo por código de
+        // estado llega SIEMPRE por aquí y nunca por el camino normal. Sin el
+        // log y sin el análisis, una racha de 429 quedaba solo como una lista
+        // de `failures` sin motivo, que es lo que hacía imposible distinguir
+        // "me están cerrando la puerta" de "esas fichas no tenían nada".
+        logger.warn(`No se pudo procesar la ficha ${url}`, error.message);
+        anotarBloqueo(analizarError(error));
         failures.push({ url, error: error.message });
       } finally {
         processed += 1;
@@ -520,6 +549,9 @@ async function findFiles(urls, options) {
     truncated,
     discardedFiles: descartados,
     skippedByLicense,
+    // Interno, para que `crawl` lo funda en el `diagnostico` que ya viaja al
+    // cliente: NO es un campo nuevo de la respuesta pública.
+    bloqueo,
     // Lo que faltaba por mirar cuando se frenó
     pendientes: pausa?.pausado ? urls.slice(cursor) : [],
     paused: Boolean(pausa?.pausado),
@@ -670,6 +702,21 @@ async function crawl(params, opciones = {}) {
     filesTruncated = result.truncated;
     skippedByLicense = result.skippedByLicense ?? [];
     discardedFiles = result.discardedFiles ?? 0;
+
+    /**
+     * La sospecha de bloqueo de la fase 2 va al MISMO campo que la de la fase
+     * 1: el cliente ya lee `diagnostico.bloqueo` y lo enseña. Un campo aparte
+     * sería un aviso que nadie muestra.
+     */
+    if (diagnostico) {
+      diagnostico.bloqueo = combinar([diagnostico.bloqueo, result.bloqueo]);
+    } else if (result.bloqueo?.sospechoso) {
+      // Al CONTINUAR un trabajo frenado no se repite la fase 1, así que no hay
+      // diagnóstico previo que rellenar. Se crea con la forma que el cliente
+      // ya espera, y solo si hay algo que decir: un objeto con todo a cero no
+      // aportaría nada.
+      diagnostico = { enlacesVistos: 0, prefijos: [], bloqueo: result.bloqueo };
+    }
   }
 
   // Distinguir "lo canceló el usuario" de "se agotó el tiempo máximo": con
