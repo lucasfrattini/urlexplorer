@@ -363,7 +363,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
 
   const search = el('input', {
     className: 'input',
-    attrs: { type: 'search' },
+    attrs: { type: 'search', autocomplete: 'off' },
     on: { input: () => applyFilter() },
   });
   atributo(search, 'placeholder', 'filtros.buscar');
@@ -373,7 +373,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   // sample, preview…) que acertar con un término que incluya justo lo bueno.
   const exclude = el('input', {
     className: 'input',
-    attrs: { type: 'search' },
+    attrs: { type: 'search', autocomplete: 'off' },
     on: { input: () => applyFilter() },
   });
   atributo(exclude, 'placeholder', 'filtros.excluir');

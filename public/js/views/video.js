@@ -97,7 +97,7 @@ export function createVideoView(container) {
       type: 'url',
       required: true,
       spellcheck: 'false',
-      autocomplete: 'url',
+      autocomplete: 'off',
     },
   });
   atributo(urlInput, 'placeholder', 'video.url.placeholder');
@@ -109,7 +109,7 @@ export function createVideoView(container) {
   function crearInputUrlExtra(valor = '') {
     const input = el('input', {
       className: 'input',
-      attrs: { type: 'url', autocomplete: 'url', spellcheck: 'false', value: valor },
+      attrs: { type: 'url', autocomplete: 'off', spellcheck: 'false', value: valor },
     });
     atributo(input, 'aria-label', 'video.urls.extra.aria');
     atributo(input, 'placeholder', 'video.url.placeholder');
@@ -628,7 +628,7 @@ export function createVideoView(container) {
 
   const searchInput = el('input', {
     className: 'input',
-    attrs: { type: 'search' },
+    attrs: { type: 'search', autocomplete: 'off' },
     on: { input: () => renderResults() },
   });
   atributo(searchInput, 'placeholder', 'filtros.buscar');

@@ -124,7 +124,15 @@ export function promptDialog({ titleKey, labelKey, defaultValue = '', inputType 
       const label = el('label', { className: 'dialog__label', attrs: { for: inputId } });
       const input = el('input', {
         className: 'dialog__input input',
-        attrs: { id: inputId, type: inputType },
+        attrs: {
+          id: inputId,
+          type: inputType,
+          // 'off' evita el listado de valores tecleados en sesiones
+          // anteriores (privacidad); 'new-password' es lo único que impide
+          // ese mismo listado en el campo de contraseña, donde 'off' no
+          // basta en varios navegadores.
+          autocomplete: inputType === 'password' ? 'new-password' : 'off',
+        },
       });
       input.value = defaultValue;
 

@@ -228,7 +228,7 @@ export function createExplorerView(container, { limits }) {
       name: 'searchUrl',
       type: 'url',
       required: true,
-      autocomplete: 'url',
+      autocomplete: 'off',
       spellcheck: 'false',
     },
   });
@@ -238,7 +238,7 @@ export function createExplorerView(container, { limits }) {
     'searchTerm',
     'explorer.termino.label',
     'explorer.termino.hint',
-    { type: 'text', spellcheck: 'false' },
+    { type: 'text', spellcheck: 'false', autocomplete: 'off' },
     { placeholderKey: 'explorer.termino.placeholder' }
   );
 
@@ -297,6 +297,7 @@ export function createExplorerView(container, { limits }) {
       type: 'text',
       placeholder: '.mp4, .webm',
       spellcheck: 'false',
+      autocomplete: 'off',
       /**
        * Valor POR DEFECTO, no solo marcador de posición.
        *
@@ -568,14 +569,14 @@ export function createExplorerView(container, { limits }) {
     'linkPattern',
     'explorer.patron.label',
     'explorer.patron.hint',
-    { type: 'text', placeholder: '/videos/', spellcheck: 'false' }
+    { type: 'text', placeholder: '/videos/', spellcheck: 'false', autocomplete: 'off' }
   );
 
   const campoParametro = makeField(
     'pageParam',
     'explorer.parametro.label',
     'explorer.parametro.hint',
-    { type: 'text', placeholder: 'page', spellcheck: 'false' }
+    { type: 'text', placeholder: 'page', spellcheck: 'false', autocomplete: 'off' }
   );
 
   const bloqueManual = el('div', {
@@ -706,7 +707,7 @@ export function createExplorerView(container, { limits }) {
   function crearInputUrlExtra(valor = '') {
     const input = el('input', {
       className: 'input',
-      attrs: { type: 'url', autocomplete: 'url', spellcheck: 'false', value: valor },
+      attrs: { type: 'url', autocomplete: 'off', spellcheck: 'false', value: valor },
     });
     atributo(input, 'aria-label', 'explorer.urls.extra.aria');
     atributo(input, 'placeholder', 'explorer.url.placeholder');
