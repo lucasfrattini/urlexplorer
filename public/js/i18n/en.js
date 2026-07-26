@@ -453,11 +453,6 @@ export const en = {
   'video.desconocido': 'unknown',
   'video.todos': 'All ({n})',
   'video.abrir': 'Open',
-  'video.descargar': 'Download .txt',
-  'video.descargadas': '{n} URLs downloaded',
-  'video.copiarTodos': 'Copy all',
-  'video.copiados': '{n} URLs copied',
-  'video.noCopiado': 'Could not copy to the clipboard',
   'video.fallo': 'Could not analyse the page',
   'video.aviso.parcial': '{analizadas} of {total} addresses analysed',
   'video.aviso.parcial.body':

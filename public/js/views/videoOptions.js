@@ -67,13 +67,91 @@ export function miembrosPlegados(grupos, representante, desagrupados) {
 }
 
 /**
+ * Segundos de un vídeo, o null si no se conocen.
+ *
+ * Mismo criterio EXACTO que en `components/resultList.js`: se prefiere
+ * `durationSeconds` si es un número finito, y si no se intenta parsear
+ * `duration` como cadena de reloj ("H:MM:SS" / "MM:SS"). Un vídeo del backend
+ * solo trae este segundo formato (ver `src/services/video.js`), así que en la
+ * práctica siempre cae en el respaldo — pero el criterio es el mismo para
+ * poder compartir después el mismo dato con `durationSeconds` si el backend
+ * llegara a mandarlo.
+ */
+export function segundosDe(info) {
+  if (Number.isFinite(info?.durationSeconds)) return info.durationSeconds;
+  if (!info?.duration) return null;
+  const partes = info.duration.split(':').map(Number);
+  if (partes.some(n => !Number.isFinite(n))) return null;
+  return partes.reduce((total, n) => total * 60 + n, 0);
+}
+
+/** Bytes de un vídeo, o null. Mismo criterio que en `resultList.js`. */
+export function bytesDe(info) {
+  return Number.isFinite(info?.sizeBytes) ? info.sizeBytes : null;
+}
+
+/**
+ * Ordena una lista de vídeos por el campo y sentido indicados.
+ *
+ * Pura: devuelve un array nuevo, nunca muta `videos`. Con `campo === 'orden'`
+ * no reordena: se respeta el orden en el que llegaron del servidor.
+ *
+ * Con cualquier otro campo, los vídeos SIN el dato van siempre al final, sea
+ * cual sea la dirección — la misma regla que rige los filtros de rango:
+ * colarlos arriba llenaría la primera pantalla de guiones.
+ */
+export function ordenarVideos(videos, { campo = 'orden', direccion = 'asc' } = {}) {
+  const lista = videos || [];
+  if (campo === 'orden') return [...lista];
+
+  const signo = direccion === 'asc' ? 1 : -1;
+  const valorDe = video => {
+    if (campo === 'duracion') return segundosDe(video);
+    if (campo === 'peso') return bytesDe(video);
+    return video.url.toLowerCase();
+  };
+
+  return [...lista].sort((a, b) => {
+    const va = valorDe(a);
+    const vb = valorDe(b);
+
+    // Sin dato, siempre al final
+    const faltaA = va === null || va === undefined;
+    const faltaB = vb === null || vb === undefined;
+    if (faltaA && faltaB) return 0;
+    if (faltaA) return 1;
+    if (faltaB) return -1;
+
+    if (typeof va === 'string') return signo * va.localeCompare(vb);
+    return signo * (va - vb);
+  });
+}
+
+/**
  * Filtra la lista de vídeos visibles: ocultados a mano, plegados bajo un
- * representante, tipo de archivo y término de búsqueda. Pura y sin estado
- * propio para poder probarla sin construir ningún DOM.
+ * representante, tipo de archivo, término de búsqueda y rangos de
+ * duración/peso. Pura y sin estado propio para poder probarla sin construir
+ * ningún DOM.
+ *
+ * REGLA CENTRAL, la misma que en `resultList.js`: un vídeo sin el dato
+ * (duración o peso desconocidos) NUNCA lo recorta el rango — solo lo puede
+ * sacar el interruptor "Ocultar sin duración/peso" correspondiente. Filtrar
+ * por un dato que no se tiene solo puede descartar vídeos buenos.
  */
 export function filtrarVideos(
   videos,
-  { ocultos, duplicadoDe, desagrupados, plegarDuplicados = true, activeType = 'all', needle = '' }
+  {
+    ocultos,
+    duplicadoDe,
+    desagrupados,
+    plegarDuplicados = true,
+    activeType = 'all',
+    needle = '',
+    rangoDuracion = null,
+    rangoPeso = null,
+    ocultarSinDuracion = false,
+    ocultarSinPeso = false,
+  }
 ) {
   const term = String(needle ?? '')
     .trim()
@@ -93,6 +171,20 @@ export function filtrarVideos(
 
     if (activeType !== 'all' && video.type !== activeType) return false;
     if (term && !video.url.toLowerCase().includes(term)) return false;
+
+    const segundos = segundosDe(video);
+    if (segundos === null) {
+      if (ocultarSinDuracion) return false;
+    } else if (rangoDuracion && (segundos < rangoDuracion.min || segundos > rangoDuracion.max)) {
+      return false;
+    }
+
+    const bytes = bytesDe(video);
+    if (bytes === null) {
+      if (ocultarSinPeso) return false;
+    } else if (rangoPeso && (bytes < rangoPeso.min || bytes > rangoPeso.max)) {
+      return false;
+    }
 
     return true;
   });

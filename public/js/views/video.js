@@ -14,11 +14,16 @@ import {
 } from '../dom.js';
 import { extractVideos } from '../api.js';
 import { t, tp, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
+import { createRangeFilter, formatDuration, formatBytes } from '../components/rangeSlider.js';
+import { aCSV, aJSON, aListaDeDescarga, construirFilas } from '../exportFormats.js';
 import {
   construirParamsVideo,
   indexarGrupos,
   miembrosPlegados,
   filtrarVideos,
+  ordenarVideos,
+  segundosDe,
+  bytesDe,
 } from './videoOptions.js';
 
 /**
@@ -67,6 +72,19 @@ export function createVideoView(container) {
   let viewMode = 'grid';
   let analizando = false;
   let controllerActual = null;
+
+  /**
+   * Orden actual de la lista: qué columna y en qué sentido. Se aplica en las
+   * DOS vistas (cajas y lista), aunque el control clicable de cabecera solo
+   * exista en la vista de lista — mismo patrón que `resultList.js`.
+   */
+  let orden = { campo: 'orden', direccion: 'asc' };
+
+  // Filtros de rango: un vídeo SIN el dato nunca lo recorta el rango, solo
+  // lo saca el interruptor correspondiente (misma regla central que en el
+  // Explorador, ver components/resultList.js).
+  let ocultarSinDuracion = false;
+  let ocultarSinPeso = false;
 
   // ── Direcciones a analizar (multi-URL) ────────────────────────────────
 
@@ -395,6 +413,28 @@ export function createVideoView(container) {
   });
   agruparToggle.root.hidden = true;
 
+  // Mismas claves i18n que el Explorador: es el mismo concepto ("un vídeo sin
+  // este dato no lo recorta el rango, solo lo saca este interruptor").
+  const toggleSinDuracion = crearToggle(
+    'video-hide-no-duration',
+    'filtros.ocultarSinDuracion',
+    'filtros.ocultarSinDuracion.title'
+  );
+  toggleSinDuracion.input.addEventListener('change', () => {
+    ocultarSinDuracion = toggleSinDuracion.input.checked;
+    renderResults();
+  });
+
+  const toggleSinPeso = crearToggle(
+    'video-hide-no-size',
+    'filtros.ocultarSinPeso',
+    'filtros.ocultarSinPeso.title'
+  );
+  toggleSinPeso.input.addEventListener('change', () => {
+    ocultarSinPeso = toggleSinPeso.input.checked;
+    renderResults();
+  });
+
   const viewGridBtn = el('button', {
     className: 'view-toggle__btn',
     text: '▦',
@@ -429,18 +469,107 @@ export function createVideoView(container) {
     children: [viewGridBtn, viewListBtn],
   });
 
-  const downloadButton = el('button', {
-    className: 'button button--secondary button--small',
-    attrs: { type: 'button' },
+  /**
+   * "Exportar ▾": agrupa .txt/.csv/.json/lista en un menú compacto, mismo
+   * patrón EXACTO que `resultList.js` (el Explorador). Siempre exporta lo
+   * VISIBLE actual (`ultimosVisibles`), nunca `order`/`meta` completos, para
+   * respetar los filtros activos.
+   */
+  function filasExportables() {
+    return construirFilas(
+      ultimosVisibles.map(v => v.url),
+      {
+        info: url => meta.get(url),
+        grupoDe: url => (plegarDuplicados ? grupos.get(url) : null),
+      }
+    );
+  }
+
+  const downloadMenuItem = el('button', {
+    className: 'export-menu__item',
+    attrs: { type: 'button', role: 'menuitem' },
     on: {
       click: () => {
         downloadText('urlexplorer-videos.txt', ultimosVisibles.map(v => v.url).join('\n'));
-        toast(t('video.descargadas', { n: ultimosVisibles.length }));
+        toast(t('resultados.descargados', { n: ultimosVisibles.length }));
+        alternarMenuExportar(false);
       },
     },
   });
-  texto(downloadButton, 'video.descargar');
-  downloadButton.disabled = true;
+  texto(downloadMenuItem, 'resultados.descargar');
+
+  const crearItemExportar = (claveTexto, extension, formato, construir, tipo) => {
+    const boton = el('button', {
+      className: 'export-menu__item',
+      attrs: { type: 'button', role: 'menuitem' },
+      on: {
+        click: () => {
+          const filas = filasExportables();
+          downloadText(`urlexplorer-videos${extension}`, construir(filas), tipo);
+          toast(t('resultados.exportados', { n: filas.length, formato }));
+          alternarMenuExportar(false);
+        },
+      },
+    });
+    texto(boton, claveTexto);
+    return boton;
+  };
+
+  const csvMenuItem = crearItemExportar('resultados.csv', '.csv', 'CSV', aCSV, 'text/csv');
+  const jsonMenuItem = crearItemExportar(
+    'resultados.json',
+    '.json',
+    'JSON',
+    filas => aJSON(filas, { filtrado: ultimosVisibles.length !== order.length }),
+    'application/json'
+  );
+  const listaMenuItem = crearItemExportar(
+    'resultados.lista',
+    '-lista.txt',
+    'lista',
+    aListaDeDescarga
+  );
+  atributo(listaMenuItem, 'title', 'resultados.lista.title');
+
+  const exportMenu = el('div', {
+    className: 'export-menu',
+    attrs: { role: 'menu' },
+    children: [downloadMenuItem, csvMenuItem, jsonMenuItem, listaMenuItem],
+  });
+  exportMenu.hidden = true;
+
+  const exportToggleButton = el('button', {
+    className: 'button button--secondary button--small',
+    attrs: { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' },
+    on: {
+      click: clickEvent => {
+        clickEvent.stopPropagation();
+        alternarMenuExportar();
+      },
+    },
+  });
+  texto(exportToggleButton, 'resultados.exportar');
+  exportToggleButton.disabled = true;
+
+  /** Abre o cierra el menú. Sin argumento, invierte el estado actual. */
+  function alternarMenuExportar(forzarAbierto) {
+    const abrir = forzarAbierto ?? exportMenu.hidden;
+    exportMenu.hidden = !abrir;
+    exportToggleButton.setAttribute('aria-expanded', String(abrir));
+  }
+
+  const exportDropdown = el('div', {
+    className: 'export-dropdown',
+    children: [exportToggleButton, exportMenu],
+  });
+
+  // Cerrar al hacer click fuera: un menú que solo se cierra pulsando el mismo
+  // botón que lo abrió se queda abierto estorbando el resto de la tarjeta.
+  document.addEventListener('click', clickEvent => {
+    if (exportMenu.hidden) return;
+    if (exportDropdown.contains(clickEvent.target)) return;
+    alternarMenuExportar(false);
+  });
 
   const copyAllButton = el('button', {
     className: 'button button--small',
@@ -449,13 +578,13 @@ export function createVideoView(container) {
       click: async () => {
         const ok = await copyToClipboard(ultimosVisibles.map(v => v.url).join('\n'));
         toast(
-          ok ? t('video.copiados', { n: ultimosVisibles.length }) : t('video.noCopiado'),
+          ok ? t('resultados.copiados', { n: ultimosVisibles.length }) : t('resultados.noCopiado'),
           ok ? 'success' : 'error'
         );
       },
     },
   });
-  texto(copyAllButton, 'video.copiarTodos');
+  texto(copyAllButton, 'resultados.copiar');
   copyAllButton.disabled = true;
 
   const cabeceraResultados = el('div', {
@@ -470,7 +599,7 @@ export function createVideoView(container) {
           restoreButton,
           agruparToggle.root,
           viewToggleGroup,
-          downloadButton,
+          exportDropdown,
           copyAllButton,
         ],
       }),
@@ -489,11 +618,42 @@ export function createVideoView(container) {
 
   const typeFilterBar = el('div', { className: 'filters__row' });
 
+  // Filtros de rango: MISMOS componente y criterio que el Explorador
+  // (components/rangeSlider.js). Los extremos se recalculan con TODOS los
+  // vídeos recibidos, nunca solo los visibles, en `recalcularRangos()`.
+  const filtroDuracion = createRangeFilter({
+    labelKey: 'columnas.duracion',
+    format: formatDuration,
+    onChange: () => renderResults(),
+  });
+
+  const filtroPeso = createRangeFilter({
+    labelKey: 'columnas.peso',
+    format: formatBytes,
+    onChange: () => renderResults(),
+  });
+
+  /**
+   * Nota que explica la regla menos evidente del panel: un vídeo sin el dato
+   * NO desaparece al mover el slider, solo lo saca el interruptor. Misma
+   * clave que el Explorador: es la misma frase para el mismo concepto.
+   */
+  const nota = texto(el('p', { className: 'filters__note' }), 'filtros.nota');
+
   const filtros = el('div', {
     className: 'filters',
     children: [
       el('div', { className: 'filters__row filters__row--text', children: [searchInput] }),
       typeFilterBar,
+      el('div', {
+        className: 'filters__row filters__row--ranges',
+        children: [filtroDuracion.root, filtroPeso.root],
+      }),
+      el('div', {
+        className: 'filters__row filters__row--flags',
+        children: [toggleSinDuracion.root, toggleSinPeso.root],
+      }),
+      nota,
     ],
   });
 
@@ -825,14 +985,63 @@ export function createVideoView(container) {
     });
   }
 
+  /**
+   * Sentido con el que se empieza al pulsar una columna nueva: de duración y
+   * peso interesa primero lo más grande, del enlace lo primero alfabético.
+   * Misma regla que `direccionInicial()` en resultList.js.
+   */
+  function direccionInicialVideo(campo) {
+    return campo === 'duracion' || campo === 'peso' ? 'desc' : 'asc';
+  }
+
+  /**
+   * Celda de cabecera ordenable: pulsarla ordena por esa columna, volver a
+   * pulsarla invierte el sentido. Se reconstruye en cada `renderListHead()`
+   * (llamado desde `renderResults()`), así que SIEMPRE refleja el `orden`
+   * actual sin necesitar un repintado aparte — y de paso evita enlazar el
+   * texto con `texto()` dentro de una función que se llama en cada repintado
+   * (eso dejaría una suscripción nueva de i18n cada vez, sin liberar nunca la
+   * anterior).
+   */
+  function celdaOrdenable(campo, claveTexto) {
+    const activa = orden.campo === campo;
+    const etiqueta = el('span', { className: 'result-head__etiqueta', text: t(claveTexto) });
+    const flecha = el('span', {
+      className: 'result-head__flecha',
+      text: activa ? (orden.direccion === 'asc' ? '▲' : '▼') : '',
+      attrs: { 'aria-hidden': 'true' },
+    });
+    const boton = el('button', {
+      className: `result-head__sort${activa ? ' result-head__sort--activa' : ''}`,
+      attrs: { type: 'button' },
+      children: [etiqueta, flecha],
+      on: {
+        click: () => {
+          orden =
+            orden.campo === campo
+              ? { campo, direccion: orden.direccion === 'asc' ? 'desc' : 'asc' }
+              : { campo, direccion: direccionInicialVideo(campo) };
+          renderResults();
+        },
+      },
+    });
+    return el('div', {
+      className: 'result-head__celda',
+      attrs: {
+        'aria-sort': activa ? (orden.direccion === 'asc' ? 'ascending' : 'descending') : 'none',
+      },
+      children: [boton],
+    });
+  }
+
   function renderListHead(conMiniaturas) {
     listHead.classList.toggle('video-list-head--con-miniatura', conMiniaturas);
     setChildren(listHead, [
       conMiniaturas ? el('span', {}) : null,
       el('span', { className: 'result-head__etiqueta', text: t('video.columnas.tipo') }),
-      el('span', { className: 'result-head__etiqueta', text: t('columnas.enlace') }),
-      el('span', { className: 'result-head__etiqueta', text: t('columnas.duracion') }),
-      el('span', { className: 'result-head__etiqueta', text: t('columnas.peso') }),
+      celdaOrdenable('url', 'columnas.enlace'),
+      celdaOrdenable('duracion', 'columnas.duracion'),
+      celdaOrdenable('peso', 'columnas.peso'),
       el('span', { className: 'result-head__etiqueta', text: t('video.columnas.detectado') }),
     ]);
   }
@@ -901,7 +1110,7 @@ export function createVideoView(container) {
     restoreButton.hidden = true;
     agruparToggle.root.hidden = true;
     copyAllButton.disabled = true;
-    downloadButton.disabled = true;
+    exportToggleButton.disabled = true;
     show(grid, false);
     show(listWrap, false);
     show(emptySlot, true);
@@ -909,6 +1118,18 @@ export function createVideoView(container) {
       emptySlot,
       emptyState({ icon: '🎬', title: t('video.vacio.titulo'), text: t('video.vacio.texto') })
     );
+  }
+
+  /**
+   * Recalcula los extremos de los dos rangos con TODOS los vídeos recibidos
+   * (nunca solo los visibles), para que estrechar cualquier otro filtro no
+   * encoja también el propio rango. Mismo criterio que `recalcularRangos()`
+   * en `components/resultList.js`.
+   */
+  function recalcularRangos() {
+    const videos = order.map(u => meta.get(u)).filter(Boolean);
+    filtroDuracion.setValues(videos.map(segundosDe).filter(v => v !== null));
+    filtroPeso.setValues(videos.map(bytesDe).filter(v => v !== null));
   }
 
   /**
@@ -925,6 +1146,8 @@ export function createVideoView(container) {
     }
 
     const base = order.map(u => meta.get(u)).filter(Boolean);
+    const rangoDuracion = filtroDuracion.getRange();
+    const rangoPeso = filtroPeso.getRange();
     const sinTipoNiTexto = filtrarVideos(base, {
       ocultos,
       duplicadoDe,
@@ -932,15 +1155,26 @@ export function createVideoView(container) {
       plegarDuplicados,
       activeType: 'all',
       needle: '',
+      rangoDuracion,
+      rangoPeso,
+      ocultarSinDuracion,
+      ocultarSinPeso,
     });
-    const visibles = filtrarVideos(base, {
+    const visiblesSinOrdenar = filtrarVideos(base, {
       ocultos,
       duplicadoDe,
       desagrupados,
       plegarDuplicados,
       activeType,
       needle: searchInput.value,
+      rangoDuracion,
+      rangoPeso,
+      ocultarSinDuracion,
+      ocultarSinPeso,
     });
+    // El orden se respeta en LAS DOS vistas (cajas y lista), aunque el
+    // control clicable de cabecera solo exista en la de lista.
+    const visibles = ordenarVideos(visiblesSinOrdenar, orden);
     ultimosVisibles = visibles;
 
     renderTypeFilterBar(sinTipoNiTexto);
@@ -962,7 +1196,7 @@ export function createVideoView(container) {
     agruparToggle.etiqueta.textContent = tp('filtros.agrupar', totalPlegados);
 
     copyAllButton.disabled = visibles.length === 0;
-    downloadButton.disabled = visibles.length === 0;
+    exportToggleButton.disabled = visibles.length === 0;
 
     viewGridBtn.classList.toggle('view-toggle__btn--activa', viewMode === 'grid');
     viewGridBtn.setAttribute('aria-pressed', String(viewMode === 'grid'));
@@ -1075,6 +1309,7 @@ export function createVideoView(container) {
       direccionesTotal = result.direccionesTotal ?? urls.length;
       huboResultado = true;
 
+      recalcularRangos();
       renderStats();
       show(statsCard, true);
 
