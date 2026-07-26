@@ -176,7 +176,10 @@ export function createVideoView(container) {
   // aparte. Desactivado por defecto, igual que el resto de lo opcional.
   const thumbInput = el('input', { attrs: { type: 'checkbox', id: 'video-thumb' } });
 
-  const submitButton = el('button', { className: 'button', attrs: { type: 'submit' } });
+  const submitButton = el('button', {
+    className: 'button button--large',
+    attrs: { type: 'submit' },
+  });
   const cancelButton = el('button', {
     className: 'button button--secondary',
     attrs: { type: 'button' },
