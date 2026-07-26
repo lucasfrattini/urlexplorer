@@ -250,6 +250,12 @@ export function createVideoView(container) {
     ],
   });
 
+  // ── Alerta (clave + params, nunca nodo ya construido) ──────────────────
+
+  const alertSlot = el('div');
+  show(alertSlot, false);
+  let ultimaAlerta = null;
+
   const formCard = el('div', {
     className: 'card',
     children: [
@@ -264,14 +270,9 @@ export function createVideoView(container) {
         ],
       }),
       el('div', { className: 'card__body', children: [form] }),
+      alertSlot,
     ],
   });
-
-  // ── Alerta (clave + params, nunca nodo ya construido) ──────────────────
-
-  const alertSlot = el('div');
-  show(alertSlot, false);
-  let ultimaAlerta = null;
 
   function pintarAlerta() {
     if (!ultimaAlerta) return;
@@ -307,9 +308,12 @@ export function createVideoView(container) {
   const statsCard = el('div', { className: 'card', children: [statsSlot] });
   show(statsCard, false);
 
-  function kpiCard(valor, etiqueta, { acento = false } = {}) {
+  function kpiCard(valor, etiqueta, { acento = false, advertencia = false } = {}) {
+    const clases = ['kpi'];
+    if (acento) clases.push('kpi--acento');
+    if (advertencia) clases.push('kpi--advertencia');
     return el('div', {
-      className: acento ? 'kpi kpi--acento' : 'kpi',
+      className: clases.join(' '),
       children: [
         el('div', { className: 'kpi__valor', text: valor }),
         el('div', { className: 'kpi__etiqueta', text: etiqueta }),
@@ -542,7 +546,7 @@ export function createVideoView(container) {
     children: [cabeceraResultados, filtros, grid, listWrap, emptySlot],
   });
 
-  setChildren(container, [formCard, alertSlot, statsCard, resultsCard]);
+  setChildren(container, [formCard, statsCard, resultsCard]);
 
   /** Quita un resultado. Sin confirmación: es reversible (deshacer/restaurar). */
   function ocultar(url) {
