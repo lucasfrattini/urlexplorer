@@ -12,7 +12,7 @@ import {
   downloadText,
   toast,
 } from '../dom.js';
-import { extractVideos } from '../api.js';
+import { openVideoStream } from '../api.js';
 import { t, tp, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 import { createRangeFilter, formatDuration, formatBytes } from '../components/rangeSlider.js';
 import { aCSV, aJSON, aListaDeDescarga, construirFilas } from '../exportFormats.js';
@@ -24,6 +24,8 @@ import {
   ordenarVideos,
   segundosDe,
   bytesDe,
+  estadoInicialProgreso,
+  aplicarEventoProgreso,
 } from './videoOptions.js';
 
 /**
@@ -71,7 +73,7 @@ export function createVideoView(container) {
   let activeType = 'all';
   let viewMode = 'grid';
   let analizando = false;
-  let controllerActual = null;
+  let streamActual = null;
 
   /**
    * Orden actual de la lista: qué columna y en qué sentido. Se aplica en las
@@ -701,9 +703,86 @@ export function createVideoView(container) {
   const emptySlot = el('div');
   show(emptySlot, false);
 
+  // ── Progreso en vivo del análisis (stream SSE) ──────────────────────────
+  //
+  // Sustituye a `renderSkeleton()` en cuanto llega el PRIMER evento del
+  // stream. Antes de eso —el instante entre el envío y que la conexión
+  // abra— se ve el esqueleto de siempre: no hay nada más honesto que
+  // mostrar todavía. Si el stream no mandara ningún evento intermedio y
+  // solo llegara `complete`, la vista no se queda colgada aquí: `complete`
+  // dispara igual el pintado final desde el manejador del stream, sin
+  // depender de haber visto ningún evento de progreso.
+  let progresoEstado = estadoInicialProgreso();
+
+  const progresoDireccionTexto = el('p', { className: 'field__hint video-progress__direccion' });
+  const progresoLista = el('ul', { className: 'video-progress__vias' });
+  const progresoPanel = el('div', {
+    className: 'video-progress',
+    children: [progresoDireccionTexto, progresoLista],
+  });
+  show(progresoPanel, false);
+
+  /** Texto de una vía resuelta: "encontró N" o "sin resultado" con N=0. */
+  function textoViaResuelta(encontrados) {
+    return encontrados === 0
+      ? t('video.progreso.via.sinResultado')
+      : tp('video.progreso.via.encontrados', encontrados);
+  }
+
+  function textoVia({ estado, encontrados }) {
+    if (estado === 'pendiente') return t('video.progreso.estado.pendiente');
+    if (estado === 'curso') return t('video.progreso.estado.curso');
+    return `${t('video.progreso.estado.resuelto')} — ${textoViaResuelta(encontrados)}`;
+  }
+
+  /**
+   * Repinta el panel a partir de `progresoEstado`. Se registra con
+   * `alCambiarIdioma` porque, aunque los datos son los mismos, las etiquetas
+   * ("Pendiente", el nombre de cada vía…) dependen del idioma: cambiar de
+   * idioma a mitad de un análisis no debe dejar el panel a medio traducir.
+   */
+  function pintarProgreso() {
+    const { direccion, vias } = progresoEstado;
+    progresoDireccionTexto.textContent = !direccion
+      ? ''
+      : direccion.total > 1
+        ? t('video.progreso.direccion', direccion)
+        : t('video.progreso.direccionUnica', direccion);
+
+    setChildren(
+      progresoLista,
+      vias.map(via =>
+        el('li', {
+          className: `video-progress__via video-progress__via--${via.estado}`,
+          children: [
+            el('span', {
+              className: 'video-progress__via-nombre',
+              text: t(`video.progreso.via.${via.via}`),
+            }),
+            el('span', { className: 'video-progress__via-texto', text: textoVia(via) }),
+          ],
+        })
+      )
+    );
+  }
+  alCambiarIdioma(pintarProgreso);
+
+  /** Muestra el panel de progreso y oculta lo que hubiera de resultados/esqueleto. */
+  function mostrarProgreso() {
+    show(progresoPanel, true);
+    show(grid, false);
+    show(listWrap, false);
+    show(emptySlot, false);
+  }
+
+  /** Oculta el panel de progreso. `renderResults()` decide qué se ve después. */
+  function ocultarProgreso() {
+    show(progresoPanel, false);
+  }
+
   const resultsCard = el('div', {
     className: 'card results',
-    children: [cabeceraResultados, filtros, grid, listWrap, emptySlot],
+    children: [cabeceraResultados, filtros, progresoPanel, grid, listWrap, emptySlot],
   });
 
   setChildren(container, [formCard, statsCard, resultsCard]);
@@ -1245,13 +1324,33 @@ export function createVideoView(container) {
     refrescarBoton();
   }
 
+  /**
+   * Cerrar el EventSource NO dispara ningún evento (`openVideoStream.close()`
+   * marca `finished` antes de cerrar, así que ni `onerror` ni `onmessage`
+   * vuelven a llamar a `handlers.onEvent`). Por eso una cancelación
+   * deliberada se resuelve ENTERA aquí, igual que el `stopStream({ aborted:
+   * true })` de `explorer.js` para el mismo caso: no hay forma de que este
+   * cierre acabe pasando por el `case 'error'` de más abajo y mostrando un
+   * "análisis fallido" por un botón que el propio usuario apretó.
+   */
   cancelButton.addEventListener('click', () => {
-    controllerActual?.abort();
+    if (!streamActual) return;
+    streamActual.close();
+    terminarAnalisis();
+    ocultarProgreso();
+    toast(t('video.cancelado'));
+    renderResults();
   });
+
+  /** Punto único donde el análisis en curso deja de estarlo, éxito o no. */
+  function terminarAnalisis() {
+    streamActual = null;
+    setBusy(false);
+  }
 
   // ── Envío ───────────────────────────────────────────────────────────────
 
-  form.addEventListener('submit', async submitEvent => {
+  form.addEventListener('submit', submitEvent => {
     submitEvent.preventDefault();
     const urls = readUrls();
 
@@ -1274,74 +1373,95 @@ export function createVideoView(container) {
     clearAlert();
     setBusy(true);
     renderSkeleton();
+    // Estado limpio del panel para ESTE análisis: si quedara el de uno
+    // anterior, el primer evento repintaría sobre datos de otra dirección.
+    progresoEstado = estadoInicialProgreso();
 
-    const controller = new AbortController();
-    controllerActual = controller;
+    const params = construirParamsVideo(urls, {
+      getMetadata: metadataInput.checked,
+      getThumbnails: thumbInput.checked,
+      useJavaScript: jsInput.checked,
+    });
 
-    try {
-      const params = construirParamsVideo(urls, {
-        getMetadata: metadataInput.checked,
-        getThumbnails: thumbInput.checked,
-        useJavaScript: jsInput.checked,
-      });
-      const result = await extractVideos(params, { signal: controller.signal });
+    streamActual = openVideoStream(params, {
+      onEvent: event => {
+        switch (event.type) {
+          // `url_complete` se ignora a propósito (ver `aplicarEventoProgreso`):
+          // el hueco entre direcciones lo cierra el próximo `url_start`.
+          case 'url_start':
+          case 'method_result':
+            progresoEstado = aplicarEventoProgreso(progresoEstado, event);
+            pintarProgreso();
+            mostrarProgreso();
+            break;
 
-      meta = new Map();
-      order = [];
-      for (const video of result.videos || []) {
-        if (!video?.url) continue;
-        if (!meta.has(video.url)) order.push(video.url);
-        meta.set(video.url, video);
-      }
+          case 'complete': {
+            // El propio evento trae el mismo shape que ya devolvía
+            // `POST /video/extract`: el procesamiento de abajo es el mismo
+            // que antes colgaba del `await`, solo que ahora lo dispara este
+            // evento en vez de la resolución de la promesa.
+            const result = event;
+            ocultarProgreso();
 
-      const indexado = indexarGrupos(result.groups);
-      grupos = indexado.grupos;
-      duplicadoDe = indexado.duplicadoDe;
-      desagrupados.clear();
-      expandidos.clear();
-      ocultos = new Set();
-      tandas.length = 0;
-      activeType = 'all';
-      plegarDuplicados = true;
-      agruparToggle.input.checked = true;
-      methodsUsados = result.methods || {};
-      direccionesAnalizadas = result.direccionesAnalizadas ?? urls.length;
-      direccionesTotal = result.direccionesTotal ?? urls.length;
-      huboResultado = true;
+            meta = new Map();
+            order = [];
+            for (const video of result.videos || []) {
+              if (!video?.url) continue;
+              if (!meta.has(video.url)) order.push(video.url);
+              meta.set(video.url, video);
+            }
 
-      recalcularRangos();
-      renderStats();
-      show(statsCard, true);
+            const indexado = indexarGrupos(result.groups);
+            grupos = indexado.grupos;
+            duplicadoDe = indexado.duplicadoDe;
+            desagrupados.clear();
+            expandidos.clear();
+            ocultos = new Set();
+            tandas.length = 0;
+            activeType = 'all';
+            plegarDuplicados = true;
+            agruparToggle.input.checked = true;
+            methodsUsados = result.methods || {};
+            direccionesAnalizadas = result.direccionesAnalizadas ?? urls.length;
+            direccionesTotal = result.direccionesTotal ?? urls.length;
+            huboResultado = true;
 
-      // "El navegador no se pudo usar" manda sobre el aviso de fallo
-      // parcial: sin navegador es la explicación más probable de que falten
-      // vídeos, y mostrar los dos a la vez sería redundante.
-      if (!methodsUsados.puppeteer && jsInput.checked) {
-        mostrarAviso('warning', 'video.sinNavegador', 'video.sinNavegador.body');
-      } else if (direccionesAnalizadas < direccionesTotal) {
-        // Fallo PARCIAL, nunca silencioso: el hueco entre analizadas y total
-        // es la señal de que alguna dirección no se pudo analizar.
-        mostrarAviso('warning', 'video.aviso.parcial', 'video.aviso.parcial.body', {
-          analizadas: direccionesAnalizadas,
-          total: direccionesTotal,
-        });
-      }
+            recalcularRangos();
+            renderStats();
+            show(statsCard, true);
 
-      renderResults();
-    } catch (error) {
-      // Un abort deliberado (botón "Cancelar") NO es un error: se avisa con
-      // un toast y la interfaz vuelve al último estado usable (el de antes
-      // de lanzar este análisis), sin alerta de fallo.
-      if (error.name === 'AbortError') {
-        toast(t('video.cancelado'));
-      } else {
-        showError('video.fallo', null, undefined, error.message);
-      }
-      renderResults();
-    } finally {
-      controllerActual = null;
-      setBusy(false);
-    }
+            // "El navegador no se pudo usar" manda sobre el aviso de fallo
+            // parcial: sin navegador es la explicación más probable de que
+            // falten vídeos, y mostrar los dos a la vez sería redundante.
+            if (!methodsUsados.puppeteer && jsInput.checked) {
+              mostrarAviso('warning', 'video.sinNavegador', 'video.sinNavegador.body');
+            } else if (direccionesAnalizadas < direccionesTotal) {
+              // Fallo PARCIAL, nunca silencioso: el hueco entre analizadas y
+              // total es la señal de que alguna dirección no se pudo
+              // analizar.
+              mostrarAviso('warning', 'video.aviso.parcial', 'video.aviso.parcial.body', {
+                analizadas: direccionesAnalizadas,
+                total: direccionesTotal,
+              });
+            }
+
+            renderResults();
+            terminarAnalisis();
+            break;
+          }
+
+          case 'error':
+            ocultarProgreso();
+            showError('video.fallo', null, undefined, event.message);
+            renderResults();
+            terminarAnalisis();
+            break;
+
+          default:
+            break;
+        }
+      },
+    });
   });
 
   renderInitialEmpty();
@@ -1358,7 +1478,7 @@ export function createVideoView(container) {
       urlInput.focus();
     },
     teardown() {
-      controllerActual?.abort();
+      streamActual?.close();
     },
   };
 }

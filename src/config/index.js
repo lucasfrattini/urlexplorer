@@ -296,6 +296,16 @@ const config = {
     maxResults: intFromEnv('VIDEO_MAX_RESULTS', 500),
   },
 
+  sse: {
+    /**
+     * Comentario periódico de los streams de progreso.
+     *
+     * No es cosmético: un proxy sin datos que reenviar cierra la conexión, y
+     * un análisis con navegador puede pasar minutos sin emitir nada.
+     */
+    heartbeatMs: intFromEnv('SSE_HEARTBEAT_MS', 15000),
+  },
+
   logging: {
     level: process.env.LOG_LEVEL || 'info',
   },

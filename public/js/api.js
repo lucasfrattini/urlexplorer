@@ -158,4 +158,65 @@ export function openScrapeStream(params, handlers = {}) {
   };
 }
 
+/**
+ * Abre el stream SSE del análisis de vídeo (mismo mecanismo que
+ * `openScrapeStream`, calcado a propósito: es el único ya establecido en el
+ * proyecto para progreso en tiempo real).
+ *
+ * Diferencias con `openScrapeStream`, por cómo lo espera `GET
+ * /api/video/stream` (ver `parsearUrls` en `src/routes/video.js`):
+ *   - `urls` viaja como un STRING JSON de un array, no como valor suelto: una
+ *     lista de direcciones no cabe limpia en un solo parámetro de query.
+ *   - `getMetadata`/`getThumbnails`/`useJavaScript` viajan SIEMPRE como
+ *     'true'/'false' explícitos. El servidor compara contra la cadena
+ *     'true' exacta, así que omitirlos equivale a mandar 'false' — a
+ *     diferencia de `POST /video/extract`, donde `useJavaScript` por
+ *     defecto es `true`. Aquí no hay valor por defecto que valga: hay que
+ *     decir siempre lo que el formulario tiene marcado.
+ */
+export function openVideoStream(params, handlers = {}) {
+  const query = new URLSearchParams();
+  query.set('urls', JSON.stringify(params.urls || []));
+  query.set('getMetadata', String(Boolean(params.getMetadata)));
+  query.set('getThumbnails', String(Boolean(params.getThumbnails)));
+  query.set('useJavaScript', String(Boolean(params.useJavaScript)));
+
+  const source = new EventSource(`${BASE}/video/stream?${query.toString()}`);
+  let finished = false;
+
+  source.onmessage = event => {
+    let payload;
+    try {
+      payload = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+
+    if (payload.type === 'complete' || payload.type === 'error') {
+      finished = true;
+      source.close();
+    }
+
+    handlers.onEvent?.(payload);
+  };
+
+  source.onerror = () => {
+    // Un cierre limpio tras 'complete' también dispara onerror
+    if (finished) return;
+    source.close();
+    handlers.onEvent?.({
+      type: 'error',
+      message: t('api.sseCaida'),
+      code: 'STREAM_DISCONNECTED',
+    });
+  };
+
+  return {
+    close() {
+      finished = true;
+      source.close();
+    },
+  };
+}
+
 export { ApiError };

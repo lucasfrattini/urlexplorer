@@ -60,6 +60,18 @@ function crearSitio() {
       <html><body>
         <video src="/media/solo.mp4" data-duration="300"></video>
       </body></html>`,
+    /**
+     * Página pensada para el progreso por vías: Cheerio ve DOS vídeos (los dos
+     * <video> con src relativo, que la regex no puede ver porque no son
+     * absolutos) y la regex sobre el HTML aporta UNO más (el del script, que
+     * no está en ningún <video>). Ninguna plataforma conocida.
+     */
+    '/progreso': `
+      <html><body>
+        <video src="/media/a1.mp4" data-duration="100"></video>
+        <video src="/media/a2.mp4" data-duration="200"></video>
+        <script>var fuente = {"file":"https://cdn.example.com/extra.mp4"};</script>
+      </body></html>`,
   };
 
   return http.createServer((req, res) => {
@@ -163,6 +175,124 @@ test('extractVideosBatch — fusión, agrupación cruzada y miniaturas', async t
       () => extractVideosBatch(muchas, { useJavaScript: false }),
       /máximo|TOO_MANY_URLS/
     );
+  });
+});
+
+/**
+ * Progreso del análisis (LF-100).
+ *
+ * Lo que fija: `encontrados` es el DELTA de cada vía, no el acumulado. Si
+ * alguien manda `videos.length`, el total final sigue siendo correcto y ningún
+ * test que solo cuente vídeos lo vería: la única señal es el valor exacto de
+ * CADA evento.
+ */
+test('progreso por vía y por dirección (emit)', async t => {
+  const server = crearSitio();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  t.after(() => new Promise(resolve => server.close(resolve)));
+
+  await t.test('cada method_result trae el delta de SU vía, nunca el acumulado', async () => {
+    const eventos = [];
+    const r = await extractVideos(`${base}/progreso`, {
+      useJavaScript: false,
+      emit: e => eventos.push(e),
+    });
+
+    const vias = eventos.filter(e => e.type === 'method_result');
+    // Las cuatro vías se anuncian siempre y en orden, incluso con 0: un hueco
+    // en la secuencia parecería un análisis detenido.
+    assert.deepEqual(
+      vias.map(e => e.method),
+      ['puppeteer', 'cheerio', 'knownPlayers', 'scriptAnalysis']
+    );
+
+    const porVia = Object.fromEntries(vias.map(e => [e.method, e.encontrados]));
+    assert.equal(porVia.cheerio, 2, 'Cheerio aportó dos vídeos');
+    assert.equal(porVia.knownPlayers, 0);
+    // El acumulado aquí sería 3: si sale 3, se está mandando videos.length.
+    assert.equal(porVia.scriptAnalysis, 1, 'la regex aportó UNO más, no el total acumulado');
+    // Sin navegador esta vía no aporta nada, y lo dice en vez de callarse.
+    assert.equal(porVia.puppeteer, 0);
+
+    // El resultado no cambia por observarlo.
+    const sinEmit = await extractVideos(`${base}/progreso`, { useJavaScript: false });
+    assert.deepEqual(
+      r.videos.map(v => v.url),
+      sinEmit.videos.map(v => v.url)
+    );
+    assert.equal(r.videos.length, 3);
+  });
+
+  await t.test('el lote emite url_start/url_complete con el índice 1-based', async () => {
+    const eventos = [];
+    const r = await extractVideosBatch([`${base}/simple`, `${base}/progreso`], {
+      useJavaScript: false,
+      emit: e => eventos.push(e),
+    });
+
+    const inicios = eventos.filter(e => e.type === 'url_start');
+    assert.deepEqual(
+      inicios.map(e => e.urlActual),
+      [1, 2],
+      'la primera dirección es la 1, no la 0'
+    );
+    assert.ok(inicios.every(e => e.urlTotal === 2));
+    assert.equal(inicios[0].url, `${base}/simple`);
+
+    // Cada vía sabe a qué dirección pertenece: sin eso, en un lote no habría
+    // forma de atribuir un `method_result`.
+    const viasDeProgreso = eventos.filter(
+      e => e.type === 'method_result' && e.url === `${base}/progreso`
+    );
+    assert.equal(viasDeProgreso.find(e => e.method === 'cheerio').encontrados, 2);
+    assert.ok(viasDeProgreso.every(e => e.urlActual === 2 && e.urlTotal === 2));
+
+    const fines = eventos.filter(e => e.type === 'url_complete');
+    assert.deepEqual(
+      fines.map(e => e.encontrados),
+      [1, 3]
+    );
+    assert.equal(r.direccionesAnalizadas, 2);
+  });
+
+  await t.test('una dirección que falla no corta el progreso de las siguientes', async () => {
+    const eventos = [];
+    // La del medio devuelve 404: fetchHtml lanza y extractVideos propaga.
+    const r = await extractVideosBatch(
+      [`${base}/simple`, `${base}/no-existe`, `${base}/progreso`],
+      {
+        useJavaScript: false,
+        emit: e => eventos.push(e),
+      }
+    );
+
+    assert.deepEqual(
+      eventos.filter(e => e.type === 'url_start').map(e => e.urlActual),
+      [1, 2, 3],
+      'la tercera dirección debe arrancar aunque la segunda falle'
+    );
+
+    const fines = eventos.filter(e => e.type === 'url_complete');
+    assert.deepEqual(
+      fines.map(e => e.urlActual),
+      [1, 2, 3],
+      'la dirección que falla también se cierra: un url_start sin cierre parece colgado'
+    );
+    const fallida = fines.find(e => e.urlActual === 2);
+    assert.equal(fallida.fallo, true);
+    assert.equal(fallida.encontrados, 0);
+    assert.equal(fines.find(e => e.urlActual === 3).encontrados, 3);
+
+    // El hueco sigue siendo la señal visible de que algo no se pudo analizar.
+    assert.equal(r.direccionesAnalizadas, 2);
+    assert.equal(r.direccionesTotal, 3);
+  });
+
+  await t.test('emit es opcional: sin él, el lote se comporta igual', async () => {
+    const r = await extractVideosBatch([`${base}/progreso`], { useJavaScript: false });
+    assert.equal(r.videos.length, 3);
+    assert.equal(r.direccionesAnalizadas, 1);
   });
 });
 

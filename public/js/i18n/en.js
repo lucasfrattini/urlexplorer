@@ -461,4 +461,18 @@ export const en = {
   'video.columnas.detectado': 'Found via',
   'video.vista.cajas': 'Grid view',
   'video.vista.lista': 'List view',
+
+  /* ── Video view: live progress (stream) ──────────────────────────── */
+  'video.progreso.direccion': 'Analysing address {actual} of {total}: {url}',
+  'video.progreso.direccionUnica': 'Analysing: {url}',
+  'video.progreso.via.puppeteer': 'Browser-based explorer',
+  'video.progreso.via.cheerio': 'Page HTML',
+  'video.progreso.via.knownPlayers': 'Known players',
+  'video.progreso.via.scriptAnalysis': 'Links in the source code',
+  'video.progreso.estado.pendiente': 'Pending',
+  'video.progreso.estado.curso': 'In progress…',
+  'video.progreso.estado.resuelto': 'Done',
+  'video.progreso.via.sinResultado': 'no result',
+  'video.progreso.via.encontrados.uno': 'found 1 video',
+  'video.progreso.via.encontrados.varios': 'found {n} videos',
 };

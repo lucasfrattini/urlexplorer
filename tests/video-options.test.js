@@ -373,6 +373,99 @@ test('filtrarVideos: un vídeo sin dato sobrevive al rango, pero lo saca el inte
   );
 });
 
+test('estadoInicialProgreso: la primera vía arranca "en curso", el resto "pendiente"', () => {
+  const { estadoInicialProgreso } = opciones;
+
+  const estado = estadoInicialProgreso();
+  assert.strictEqual(estado.direccion, null);
+  assert.deepStrictEqual(
+    estado.vias.map(v => v.estado),
+    ['curso', 'pendiente', 'pendiente', 'pendiente']
+  );
+});
+
+test('aplicarEventoProgreso: "url_start" fija la dirección y reinicia las vías', () => {
+  const { aplicarEventoProgreso, estadoInicialProgreso } = opciones;
+
+  // Un método ya resuelto de una dirección anterior no debe sobrevivir al
+  // pasar a la siguiente
+  const previo = aplicarEventoProgreso(estadoInicialProgreso(), {
+    type: 'method_result',
+    method: 'puppeteer',
+    encontrados: 3,
+  });
+
+  const nuevo = aplicarEventoProgreso(previo, {
+    type: 'url_start',
+    urlActual: 2,
+    urlTotal: 3,
+    url: 'https://ejemplo.com/b',
+  });
+
+  assert.deepStrictEqual(nuevo.direccion, {
+    actual: 2,
+    total: 3,
+    url: 'https://ejemplo.com/b',
+  });
+  assert.deepStrictEqual(
+    nuevo.vias.map(v => v.estado),
+    ['curso', 'pendiente', 'pendiente', 'pendiente']
+  );
+});
+
+test('aplicarEventoProgreso: "method_result" resuelve la vía y adelanta la siguiente', () => {
+  const { aplicarEventoProgreso, estadoInicialProgreso } = opciones;
+
+  let estado = estadoInicialProgreso();
+  estado = aplicarEventoProgreso(estado, {
+    type: 'method_result',
+    method: 'puppeteer',
+    encontrados: 0,
+  });
+
+  assert.deepStrictEqual(estado.vias[0], { via: 'puppeteer', estado: 'resuelto', encontrados: 0 });
+  assert.strictEqual(estado.vias[1].estado, 'curso');
+  assert.strictEqual(estado.vias[2].estado, 'pendiente');
+  assert.strictEqual(estado.vias[3].estado, 'pendiente');
+
+  estado = aplicarEventoProgreso(estado, {
+    type: 'method_result',
+    method: 'scriptAnalysis',
+    encontrados: 2,
+  });
+  // La última vía resuelta no tiene una "siguiente" que adelantar
+  assert.deepStrictEqual(estado.vias[3], {
+    via: 'scriptAnalysis',
+    estado: 'resuelto',
+    encontrados: 2,
+  });
+});
+
+test('aplicarEventoProgreso: pura, nunca muta el estado recibido', () => {
+  const { aplicarEventoProgreso, estadoInicialProgreso } = opciones;
+
+  const original = estadoInicialProgreso();
+  const copiaVias = original.vias.map(v => ({ ...v }));
+
+  aplicarEventoProgreso(original, { type: 'method_result', method: 'puppeteer', encontrados: 1 });
+  assert.deepStrictEqual(original.vias, copiaVias);
+});
+
+test('aplicarEventoProgreso ignora eventos que no le conciernen (url_complete, complete, error)', () => {
+  const { aplicarEventoProgreso, estadoInicialProgreso } = opciones;
+
+  const estado = estadoInicialProgreso();
+  assert.strictEqual(
+    aplicarEventoProgreso(estado, { type: 'url_complete', encontrados: 5 }),
+    estado
+  );
+  assert.strictEqual(aplicarEventoProgreso(estado, { type: 'complete', videos: [] }), estado);
+  assert.strictEqual(
+    aplicarEventoProgreso(estado, { type: 'error', message: 'x', code: 'X' }),
+    estado
+  );
+});
+
 test('filtrarVideos: mismo comportamiento con rango/interruptor de peso', () => {
   const { filtrarVideos } = opciones;
 

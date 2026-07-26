@@ -461,4 +461,18 @@ export const es = {
   'video.columnas.detectado': 'Detectado por',
   'video.vista.cajas': 'Vista en cajas',
   'video.vista.lista': 'Vista en lista',
+
+  /* ── Vista de vídeos: progreso en vivo (stream) ──────────────────── */
+  'video.progreso.direccion': 'Analizando dirección {actual} de {total}: {url}',
+  'video.progreso.direccionUnica': 'Analizando: {url}',
+  'video.progreso.via.puppeteer': 'Explorador con JavaScript',
+  'video.progreso.via.cheerio': 'HTML de la página',
+  'video.progreso.via.knownPlayers': 'Reproductores conocidos',
+  'video.progreso.via.scriptAnalysis': 'Enlaces en el código',
+  'video.progreso.estado.pendiente': 'Pendiente',
+  'video.progreso.estado.curso': 'En curso…',
+  'video.progreso.estado.resuelto': 'Resuelto',
+  'video.progreso.via.sinResultado': 'sin resultado',
+  'video.progreso.via.encontrados.uno': 'encontró 1 vídeo',
+  'video.progreso.via.encontrados.varios': 'encontró {n} vídeos',
 };

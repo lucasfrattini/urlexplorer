@@ -155,7 +155,7 @@ router.get('/scrape/stream', async (req, res) => {
   // Comentario SSE periódico para que proxies no cierren la conexión
   const heartbeat = setInterval(() => {
     if (!clientGone && !res.writableEnded) res.write(': keepalive\n\n');
-  }, 15000);
+  }, config.sse.heartbeatMs);
   heartbeat.unref?.();
 
   req.on('close', () => {

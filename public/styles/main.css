@@ -1445,6 +1445,99 @@ a {
   }
 }
 
+/*
+ * ── Progreso del análisis de vídeo (stream SSE, `views/video.js`) ──────
+ *
+ * Mismo patrón visual que `.progress`/`.phase` de arriba: un estado por vía
+ * (pendiente / en curso / resuelta) en vez de una barra continua, porque
+ * acá lo que importa es CUÁL de las cuatro vías está trabajando, no cuánto
+ * queda. Reusa las mismas variables de color del tema (nada de valores
+ * sueltos) para que funcione igual en tema claro y oscuro.
+ */
+.video-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.video-progress__direccion {
+  font-size: 12.5px;
+  font-weight: 560;
+  color: var(--c-text-muted);
+}
+
+.video-progress__vias {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.video-progress__via {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-surface-2);
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.video-progress__via-nombre {
+  font-size: 13px;
+  font-weight: 570;
+}
+
+.video-progress__via-texto {
+  font-size: 12.5px;
+  color: var(--c-text-muted);
+}
+
+/* Pendiente: todavía no le tocó el turno, se ve atenuada. */
+.video-progress__via--pendiente {
+  opacity: 0.6;
+}
+
+/* En curso: mismo acento que `.phase[data-state='active']`, con un pulso
+ * sutil para que se note cuál vía está trabajando sin depender solo del
+ * color (accesibilidad para quien no distingue bien los colores). */
+.video-progress__via--curso {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+  animation: video-progress-pulso 1.6s ease-in-out infinite;
+}
+
+.video-progress__via--curso .video-progress__via-texto {
+  color: var(--c-accent);
+}
+
+@keyframes video-progress-pulso {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Resuelta: mismo verde que `.phase[data-state='done']`. */
+.video-progress__via--resuelto {
+  border-color: color-mix(in srgb, var(--c-success) 40%, transparent);
+  background: var(--c-success-soft);
+}
+
+.video-progress__via--resuelto .video-progress__via-texto {
+  color: var(--c-success);
+}
+
 /* Consola de hallazgos en vivo */
 .live-feed {
   max-height: 220px;

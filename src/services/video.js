@@ -333,10 +333,18 @@ function dedupeVideos(videos) {
   return [...byUrl.values()];
 }
 
-/** Orquesta los cuatro métodos y devuelve la lista final. */
+/**
+ * Orquesta los cuatro métodos y devuelve la lista final.
+ *
+ * `emit` es un callback OPCIONAL de progreso (no-op por defecto): con
+ * `useJavaScript` puesto o con varias direcciones el análisis tarda, y sin
+ * señal alguna no hay forma de distinguir "va por la tercera vía" de "está
+ * colgado". Es el único sitio que sabe por qué vía va, así que se instrumenta
+ * aquí en vez de reescribir las cuatro.
+ */
 async function extractVideos(
   rawUrl,
-  { getMetadata = false, getThumbnails = false, useJavaScript = true, signal } = {}
+  { getMetadata = false, getThumbnails = false, useJavaScript = true, signal, emit = () => {} } = {}
 ) {
   await assertUrlIsSafe(rawUrl);
 
@@ -344,6 +352,23 @@ async function extractVideos(
   const methods = { puppeteer: false, cheerio: false, knownPlayers: false, scriptAnalysis: false };
   let html = '';
   const videos = [];
+
+  /**
+   * `encontrados` es el DELTA de esa vía, nunca el acumulado.
+   *
+   * `videos` se va acumulando a través de los cuatro bloques, así que mandar
+   * `videos.length` haría que cada vía pareciera haber encontrado también lo
+   * de las anteriores: números crecientes y falsos que ningún test del total
+   * final vería. Se lleva la marca de lo ya contado y se resta.
+   */
+  let yaContados = 0;
+  const emitirVia = method => {
+    const encontrados = videos.length - yaContados;
+    yaContados = videos.length;
+    // Se emite SIEMPRE, incluso con 0: "por esta vía no hay nada" también es
+    // progreso, y un hueco en la secuencia parecería un análisis detenido.
+    emit({ type: 'method_result', method, encontrados });
+  };
 
   // MÉTODO 1 — Puppeteer
   if (useJavaScript && config.browser.enabled) {
@@ -389,6 +414,7 @@ async function extractVideos(
       logger.warn(`Puppeteer falló en ${url}, se usa el método tradicional`, error.message);
     }
   }
+  emitirVia('puppeteer');
 
   // MÉTODO 2 — Cheerio. Se ejecuta si Puppeteer no dio HTML o no encontró nada.
   if (!html || videos.length === 0) {
@@ -401,6 +427,7 @@ async function extractVideos(
       if (!html) throw error;
     }
   }
+  emitirVia('cheerio');
 
   // MÉTODO 3 — players conocidos
   const players = detectKnownPlayers(html);
@@ -418,11 +445,13 @@ async function extractVideos(
       thumbnailUrl: player.thumbnailUrl || null,
     });
   }
+  emitirVia('knownPlayers');
 
   // MÉTODO 4 — regex sobre el HTML
   const scriptVideos = extractVideoUrlsFromContent(html);
   methods.scriptAnalysis = scriptVideos.length > 0;
   videos.push(...scriptVideos);
+  emitirVia('scriptAnalysis');
 
   let unique = dedupeVideos(videos).slice(0, config.video.maxResults);
 
@@ -555,9 +584,18 @@ function mapearGruposVideo(grupos) {
  * `res.on('close')`. Si el cliente cierra el fetch, el signal se propaga a cada
  * `extractVideos` y el bucle deja de arrancar direcciones nuevas: cortar
  * limpio, sin endpoint de cancelación aparte.
+ *
+ * `emit` es opcional (no-op por defecto): sin él el lote se comporta
+ * exactamente igual que antes, que es lo que necesita `POST /video/extract`.
  */
 async function extractVideosBatch(rawUrls, opciones = {}) {
-  const { getMetadata = false, getThumbnails = false, useJavaScript = true, signal } = opciones;
+  const {
+    getMetadata = false,
+    getThumbnails = false,
+    useJavaScript = true,
+    signal,
+    emit = () => {},
+  } = opciones;
 
   // Direcciones limpias, sin vacíos ni repetidas, conservando el orden. Una
   // dirección repetida analizada dos veces solo duplicaría trabajo.
@@ -588,22 +626,59 @@ async function extractVideosBatch(rawUrls, opciones = {}) {
   const todos = [];
   let direccionesAnalizadas = 0;
 
+  const urlTotal = urls.length;
+  // 1-based: la primera dirección es la 1, no la 0. Es lo que se enseña ("2 de
+  // 3"), así que se cuenta como se enseña y no se ajusta en la interfaz.
+  let urlActual = 0;
+
   for (const url of urls) {
     if (signal?.aborted) break;
+    urlActual += 1;
+
+    // Se captura el índice de ESTA dirección: el callback de vías es asíncrono
+    // y `urlActual` sigue avanzando con el bucle.
+    const posicion = urlActual;
+    emit({ type: 'url_start', urlActual: posicion, urlTotal, url });
 
     try {
-      const res = await extractVideos(url, { getMetadata, getThumbnails, useJavaScript, signal });
+      const res = await extractVideos(url, {
+        getMetadata,
+        getThumbnails,
+        useJavaScript,
+        signal,
+        // Cada `method_result` se re-envuelve con la dirección a la que
+        // pertenece: sin eso, en un lote no habría forma de saber de cuál de
+        // las direcciones habla cada vía.
+        emit: evento => emit({ ...evento, url, urlActual: posicion, urlTotal }),
+      });
       // Unión de los métodos: basta que UNA dirección lo usara.
       for (const clave of Object.keys(methods)) {
         methods[clave] = methods[clave] || res.methods[clave];
       }
       todos.push(...res.videos);
       direccionesAnalizadas += 1;
+      emit({
+        type: 'url_complete',
+        urlActual: posicion,
+        urlTotal,
+        url,
+        encontrados: res.videos.length,
+      });
     } catch (error) {
       // Una dirección que falla no tumba el lote: se registra y se sigue. El
       // hueco entre `direccionesAnalizadas` y `direccionesTotal` es la señal
       // visible de que algo no se pudo analizar (nada de descartes mudos).
       logger.warn(`No se pudo analizar ${url} en el lote`, error.message);
+      // También se cierra la dirección que falló: dejar un `url_start` sin su
+      // `url_complete` haría que el progreso pareciera detenido justo ahí.
+      emit({
+        type: 'url_complete',
+        urlActual: posicion,
+        urlTotal,
+        url,
+        encontrados: 0,
+        fallo: true,
+      });
     }
   }
 

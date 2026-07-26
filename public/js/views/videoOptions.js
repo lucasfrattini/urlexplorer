@@ -128,6 +128,69 @@ export function ordenarVideos(videos, { campo = 'orden', direccion = 'asc' } = {
 }
 
 /**
+ * Progreso en vivo del análisis (stream SSE de `GET /api/video/stream`).
+ *
+ * Puro y sin DOM, por la misma razón que el resto de este fichero: es la
+ * parte que puede equivocarse EN SILENCIO —una vía que se queda "pendiente"
+ * para siempre, o un contador que no se reinicia entre direcciones— así que
+ * conviene poder probarla sin construir ningún nodo.
+ *
+ * Las cuatro vías SIEMPRE llegan en este orden para cada dirección (ver
+ * `extractVideos` en `src/services/video.js`), así que el estado avanza de
+ * "pendiente" a "en curso" siguiendo ese mismo orden.
+ */
+export const VIAS_VIDEO = ['puppeteer', 'cheerio', 'knownPlayers', 'scriptAnalysis'];
+
+function viasEnEspera() {
+  return VIAS_VIDEO.map((via, indice) => ({
+    via,
+    estado: indice === 0 ? 'curso' : 'pendiente',
+    encontrados: null,
+  }));
+}
+
+/** Estado inicial del panel: sin dirección todavía, las cuatro vías en espera. */
+export function estadoInicialProgreso() {
+  return { direccion: null, vias: viasEnEspera() };
+}
+
+/**
+ * Aplica UN evento del stream al estado del panel y devuelve un estado
+ * NUEVO (nunca muta el que recibe), para que quien pinte pueda decidir con
+ * un simple `!==` si hace falta repintar.
+ *
+ * `url_complete`, `complete` y `error` no tocan aquí: el hueco entre
+ * direcciones lo cierra el próximo `url_start`, y los otros dos disparan el
+ * pintado final desde quien reciba el evento, no desde este panel.
+ */
+export function aplicarEventoProgreso(estado, event) {
+  if (event?.type === 'url_start') {
+    return {
+      direccion: { actual: event.urlActual, total: event.urlTotal, url: event.url },
+      vias: viasEnEspera(),
+    };
+  }
+
+  if (event?.type === 'method_result') {
+    const indice = VIAS_VIDEO.indexOf(event.method);
+    if (indice === -1) return estado;
+
+    return {
+      ...estado,
+      vias: estado.vias.map((via, i) => {
+        if (i === indice) return { ...via, estado: 'resuelto', encontrados: event.encontrados };
+        // Solo se adelanta la SIGUIENTE vía pendiente: si ya estaba resuelta
+        // (evento repetido o fuera de orden) no se retrocede su estado.
+        if (i === indice + 1 && via.estado === 'pendiente') return { ...via, estado: 'curso' };
+        return via;
+      }),
+    };
+  }
+
+  return estado;
+}
+
+/**
  * Filtra la lista de vídeos visibles: ocultados a mano, plegados bajo un
  * representante, tipo de archivo, término de búsqueda y rangos de
  * duración/peso. Pura y sin estado propio para poder probarla sin construir
