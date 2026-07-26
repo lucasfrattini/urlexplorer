@@ -179,7 +179,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
       click: () => {
         downloadText(filename, filtered.join('\n'));
         toast(t('resultados.descargados', { n: filtered.length }));
-        alternarMenuExportar(false);
+        cerrarMenuExportar();
       },
     },
   });
@@ -251,7 +251,7 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
           const filas = filasExportables();
           downloadText(filename.replace(/\.txt$/, extension), construir(filas), tipo);
           toast(t('resultados.exportados', { n: filas.length, formato }));
-          alternarMenuExportar(false);
+          cerrarMenuExportar();
         },
       },
     });
@@ -275,6 +275,20 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   );
   atributo(listaMenuItem, 'title', 'resultados.lista.title');
 
+  const exportMenuItems = [downloadMenuItem, csvMenuItem, jsonMenuItem, listaMenuItem];
+
+  /** Foco al ítem del menú en `indice`, con vuelta al principio/final. */
+  function enfocarItemExportar(indice) {
+    const total = exportMenuItems.length;
+    exportMenuItems[((indice % total) + total) % total].focus();
+  }
+
+  /** Cierra el menú y devuelve el foco al botón que lo abrió. */
+  function cerrarMenuExportar() {
+    alternarMenuExportar(false);
+    exportToggleButton.focus();
+  }
+
   /**
    * "Exportar ▾": agrupa .txt/.csv/.json/lista en un menú compacto.
    *
@@ -290,17 +304,38 @@ export function createResultList({ emptyTitleKey, emptyTextKey, filename = 'urle
   });
   exportMenu.hidden = true;
 
+  exportMenu.addEventListener('keydown', keyEvent => {
+    if (keyEvent.key === 'Escape') {
+      keyEvent.preventDefault();
+      cerrarMenuExportar();
+      return;
+    }
+    if (keyEvent.key !== 'ArrowDown' && keyEvent.key !== 'ArrowUp') return;
+    keyEvent.preventDefault();
+    const indiceActual = exportMenuItems.indexOf(document.activeElement);
+    enfocarItemExportar(indiceActual + (keyEvent.key === 'ArrowDown' ? 1 : -1));
+  });
+
   const exportToggleButton = el('button', {
     className: 'button button--secondary button--small',
     attrs: { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' },
     on: {
       click: clickEvent => {
         clickEvent.stopPropagation();
+        const abriendo = exportMenu.hidden;
         alternarMenuExportar();
+        if (abriendo) enfocarItemExportar(0);
       },
     },
   });
   texto(exportToggleButton, 'resultados.exportar');
+
+  exportToggleButton.addEventListener('keydown', keyEvent => {
+    if (keyEvent.key !== 'ArrowDown' && keyEvent.key !== 'ArrowUp') return;
+    keyEvent.preventDefault();
+    alternarMenuExportar(true);
+    enfocarItemExportar(keyEvent.key === 'ArrowDown' ? 0 : exportMenuItems.length - 1);
+  });
 
   /** Abre o cierra el menú. Sin argumento, invierte el estado actual. */
   function alternarMenuExportar(forzarAbierto) {
