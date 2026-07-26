@@ -155,6 +155,12 @@ export function createVideoView(container) {
     pintarFilasUrl();
   }
 
+  /** Vacía las filas extra. Mismo patrón que `limpiarFilasExtra()` en explorer.js. */
+  function limpiarFilasExtra() {
+    filasUrlExtra = [];
+    pintarFilasUrl();
+  }
+
   // Quitar la primera fila promueve la siguiente: `urlInput` sigue siendo EL
   // campo de la primera fila, no se destruye.
   const quitarPrimeraBtn = crearBotonQuitarFila(() => {
@@ -205,7 +211,17 @@ export function createVideoView(container) {
     attrs: { type: 'button' },
   });
   texto(cancelButton, 'video.cancelar');
-  show(cancelButton, false);
+  // Se monta dentro de `progresoPanel` (más abajo), no en el `.button-row`
+  // del formulario: su visibilidad la da el propio panel al
+  // mostrarse/ocultarse (`mostrarProgreso()`/`ocultarProgreso()`), así que
+  // aquí NO se oculta a mano — hacerlo dejaría el botón escondido para
+  // siempre en cuanto el panel se muestre.
+
+  const limpiarButton = el('button', {
+    className: 'button button--ghost',
+    attrs: { type: 'button' },
+  });
+  texto(limpiarButton, 'video.limpiar');
 
   /**
    * El botón alterna entre "Analizar" y "Analizando…", así que su rótulo se
@@ -266,7 +282,7 @@ export function createVideoView(container) {
           makeSwitch(thumbInput, 'video.miniatura.label', 'video.miniatura.hint'),
         ],
       }),
-      el('div', { className: 'button-row', children: [submitButton, cancelButton] }),
+      el('div', { className: 'button-row', children: [submitButton, limpiarButton] }),
     ],
   });
 
@@ -716,9 +732,14 @@ export function createVideoView(container) {
 
   const progresoDireccionTexto = el('p', { className: 'field__hint video-progress__direccion' });
   const progresoLista = el('ul', { className: 'video-progress__vias' });
+  // `cancelButton` es el MISMO nodo creado más arriba (con su listener ya
+  // puesto): se monta aquí dentro, no se recrea — mismo patrón de posición
+  // que "Frenar" en `components/progress.js`, aunque la semántica sea
+  // distinta (Cancelar aborta, Frenar no).
+  const progresoBotones = el('div', { className: 'button-row', children: [cancelButton] });
   const progresoPanel = el('div', {
     className: 'video-progress',
-    children: [progresoDireccionTexto, progresoLista],
+    children: [progresoDireccionTexto, progresoLista, progresoBotones],
   });
   show(progresoPanel, false);
 
@@ -1320,7 +1341,11 @@ export function createVideoView(container) {
     agregarUrlBtn.disabled = busy;
     quitarPrimeraBtn.disabled = busy || filasUrlExtra.length === 0;
     for (const nodo of listaFilasExtra.querySelectorAll('input, button')) nodo.disabled = busy;
-    show(cancelButton, busy);
+    // `cancelButton` ya no vive en este `.button-row`: su visibilidad la da
+    // `mostrarProgreso()`/`ocultarProgreso()` al mostrar/ocultar el panel
+    // entero. Y `limpiarButton` se deja fuera A PROPÓSITO: limpiar en mitad
+    // de un análisis es un caso válido (igual que en el Explorador), así que
+    // no se deshabilita aquí.
     refrescarBoton();
   }
 
@@ -1347,6 +1372,55 @@ export function createVideoView(container) {
     streamActual = null;
     setBusy(false);
   }
+
+  /**
+   * Vacía el formulario y devuelve la vista a su estado inicial, haya o no un
+   * análisis en curso. Si lo había, el stream se cierra EN SILENCIO —sin el
+   * toast `video.cancelado`—: "empezar de cero" no es "cancelé algo", mismo
+   * criterio que `stopStream()` (sin `aborted`) en
+   * `limpiarFormularioCompleto()` de `explorer.js`.
+   *
+   * Reinicia exactamente los mismos campos que ya resetea el manejador de
+   * `complete` del stream tras un análisis (más abajo), para no dejar
+   * arrastrando ninguna decisión de agrupado o filtro de la sesión anterior.
+   */
+  function limpiarFormularioVideo() {
+    if (analizando) {
+      streamActual?.close();
+      streamActual = null;
+    }
+
+    urlInput.value = '';
+    limpiarFilasExtra();
+
+    jsInput.checked = false;
+    metadataInput.checked = false;
+    thumbInput.checked = false;
+
+    meta = new Map();
+    order = [];
+    grupos = new Map();
+    duplicadoDe = new Map();
+    desagrupados.clear();
+    expandidos.clear();
+    ocultos = new Set();
+    tandas.length = 0;
+    activeType = 'all';
+    plegarDuplicados = true;
+    agruparToggle.input.checked = true;
+    huboResultado = false;
+    direccionesAnalizadas = 0;
+    direccionesTotal = 0;
+    methodsUsados = {};
+
+    clearAlert();
+    ocultarProgreso();
+    setBusy(false);
+    show(statsCard, false);
+    renderInitialEmpty();
+  }
+
+  limpiarButton.addEventListener('click', limpiarFormularioVideo);
 
   // ── Envío ───────────────────────────────────────────────────────────────
 

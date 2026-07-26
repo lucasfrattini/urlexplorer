@@ -438,6 +438,7 @@ export const es = {
   'video.analizando': 'Analizando…',
   'video.cancelar': 'Cancelar',
   'video.cancelado': 'Análisis cancelado',
+  'video.limpiar': 'Limpiar',
   'video.stats.videos': 'Vídeos',
   'video.stats.formatos': 'Formatos',
   'video.stats.vias': 'Vías con resultados',
