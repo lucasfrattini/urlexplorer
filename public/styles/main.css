@@ -2733,3 +2733,67 @@ a {
 .video-grid__grupo-panel {
   grid-column: 1 / -1;
 }
+
+/* ── Diálogo modal (prompt/confirm propios) ───────────────────────────
+ *
+ * Sustituye a window.prompt()/window.confirm(): esos los pinta el propio
+ * navegador, sin tema y con los rótulos de los botones fuera de es.js/en.js.
+ *
+ * El z-index tiene que ganarle a TODO lo demás del documento, incluidos los
+ * toasts (60): un diálogo tapado por un toast es indistinguible de un
+ * diálogo que no abrió.
+ */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgb(14 17 22 / 45%);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-5);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.dialog__title {
+  font-size: 17px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.dialog__label {
+  font-size: 13.5px;
+  font-weight: 560;
+}
+
+.dialog__text {
+  font-size: 13.5px;
+  color: var(--c-text-muted);
+}
+
+.dialog__input {
+  width: 100%;
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}

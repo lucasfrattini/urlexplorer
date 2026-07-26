@@ -2,6 +2,7 @@ import { el, toast, copyToClipboard, show } from '../dom.js';
 import { getAdminProfiles, saveAdminProfiles } from '../api.js';
 import { isUnlocked, onAdminChange } from '../admin.js';
 import { t, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
+import { promptDialog, confirmDialog } from './dialog.js';
 
 /**
  * Barra de configuraciones guardadas.
@@ -157,7 +158,11 @@ export function createProfileBar({ getConfig, applyConfig }) {
 
   async function saveCurrent() {
     const suggested = select.value || '';
-    const name = window.prompt(t('perfiles.nombrePrompt'), suggested);
+    const name = await promptDialog({
+      titleKey: 'perfiles.guardar',
+      labelKey: 'perfiles.nombrePrompt',
+      defaultValue: suggested,
+    });
     if (name === null) return;
 
     const clean = name.trim();
@@ -168,6 +173,20 @@ export function createProfileBar({ getConfig, applyConfig }) {
 
     const entry = { name: clean, config: getConfig() };
     const existing = profiles.findIndex(item => item.name === clean);
+
+    // Sobrescribir en silencio perdía la configuración anterior con el mismo
+    // riesgo que borrar, pero sin el mismo aviso: mismo peligro, trato
+    // distinto. Se pregunta igual que al borrar.
+    if (existing >= 0) {
+      const confirmado = await confirmDialog({
+        titleKey: 'perfiles.guardar',
+        bodyKey: 'perfiles.confirmarSobrescritura',
+        bodyParams: { nombre: clean },
+        variant: 'danger',
+      });
+      if (!confirmado) return;
+    }
+
     const next = [...profiles];
     if (existing >= 0) next[existing] = { ...next[existing], ...entry };
     else next.push(entry);
@@ -181,7 +200,14 @@ export function createProfileBar({ getConfig, applyConfig }) {
   async function deleteCurrent() {
     const name = select.value;
     if (!name) return;
-    if (!window.confirm(t('perfiles.confirmarBorrado', { nombre: name }))) return;
+
+    const confirmado = await confirmDialog({
+      titleKey: 'perfiles.borrar',
+      bodyKey: 'perfiles.confirmarBorrado',
+      bodyParams: { nombre: name },
+      variant: 'danger',
+    });
+    if (!confirmado) return;
 
     if (await persist(profiles.filter(item => item.name !== name))) {
       refreshSelect('');

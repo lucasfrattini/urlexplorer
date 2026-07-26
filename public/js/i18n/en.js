@@ -44,11 +44,16 @@ export const en = {
   'copiar.fallo': 'Could not copy',
 
   /* ── Admin mode ────────────────────────────────────────────────── */
+  'admin.desbloquear.titulo': 'Unlock saved setups',
   'admin.contrasena': 'Password:',
   'admin.desbloqueadas': 'Saved setups unlocked',
   'admin.bloqueadas': 'Saved setups locked',
   'admin.incorrecta': 'Wrong password',
   'admin.demasiados': 'Too many attempts. Wait a minute.',
+
+  /* ── Modal dialog (own prompt/confirm) ──────────────────────────── */
+  'dialogo.aceptar': 'Accept',
+  'dialogo.cancelar': 'Cancel',
 
   /* ── Saved setups bar ──────────────────────────────────────────── */
   'perfiles.etiqueta': 'Setup',
@@ -63,6 +68,7 @@ export const en = {
   'perfiles.nombrePrompt': 'Name for this setup:',
   'perfiles.nombreVacio': 'The name cannot be empty',
   'perfiles.guardado': '“{nombre}” saved',
+  'perfiles.confirmarSobrescritura': 'A setup named “{nombre}” already exists. Overwrite it?',
   'perfiles.confirmarBorrado': 'Delete the setup “{nombre}”?',
   'perfiles.borrado': '“{nombre}” deleted',
   'perfiles.noGuardado': 'Could not save: {mensaje}',

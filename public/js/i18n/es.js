@@ -44,11 +44,16 @@ export const es = {
   'copiar.fallo': 'No se pudo copiar',
 
   /* ── Modo admin ────────────────────────────────────────────────── */
+  'admin.desbloquear.titulo': 'Desbloquear configuraciones',
   'admin.contrasena': 'Contraseña:',
   'admin.desbloqueadas': 'Configuraciones desbloqueadas',
   'admin.bloqueadas': 'Configuraciones bloqueadas',
   'admin.incorrecta': 'Contraseña incorrecta',
   'admin.demasiados': 'Demasiados intentos. Espera un minuto.',
+
+  /* ── Diálogo modal (prompt/confirm propios) ─────────────────────── */
+  'dialogo.aceptar': 'Aceptar',
+  'dialogo.cancelar': 'Cancelar',
 
   /* ── Barra de configuraciones ──────────────────────────────────── */
   'perfiles.etiqueta': 'Configuración',
@@ -63,6 +68,7 @@ export const es = {
   'perfiles.nombrePrompt': 'Nombre para esta configuración:',
   'perfiles.nombreVacio': 'El nombre no puede estar vacío',
   'perfiles.guardado': '«{nombre}» guardado',
+  'perfiles.confirmarSobrescritura': 'Ya existe una configuración «{nombre}». ¿Sobrescribirla?',
   'perfiles.confirmarBorrado': '¿Borrar la configuración «{nombre}»?',
   'perfiles.borrado': '«{nombre}» borrado',
   'perfiles.noGuardado': 'No se pudo guardar: {mensaje}',

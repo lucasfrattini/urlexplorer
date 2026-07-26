@@ -3,6 +3,7 @@ import { createExplorerView } from './views/explorer.js';
 import { createVideoView } from './views/video.js';
 import { attachSecretGesture, setAdminToken, clearAdminToken, isUnlocked } from './admin.js';
 import { toast } from './dom.js';
+import { promptDialog } from './components/dialog.js';
 import {
   t,
   IDIOMAS,
@@ -157,7 +158,11 @@ function initAdminGesture() {
       return;
     }
 
-    const password = window.prompt(t('admin.contrasena'));
+    const password = await promptDialog({
+      titleKey: 'admin.desbloquear.titulo',
+      labelKey: 'admin.contrasena',
+      inputType: 'password',
+    });
     if (password === null || password.trim() === '') return;
 
     try {
