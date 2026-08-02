@@ -15,9 +15,22 @@ live progress, real cancellation, nothing lost, running on your own server.
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
 ![Docker](https://img.shields.io/badge/docker-compose-informational)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-informational)
-![Tests](https://img.shields.io/badge/tests-413-success)
+![Tests](https://img.shields.io/badge/tests-500-success)
 
 </div>
+
+---
+
+## Contents
+
+- [What it is](#what-it-is) · [Features](#features)
+- **Getting it running** — [Requirements](#requirements) ·
+  [Installation](#installation) · [Updating](#updating) ·
+  [Behind a reverse proxy](#behind-a-reverse-proxy)
+- **Running it** — [Configuration](#configuration) · [Usage](#usage) ·
+  [Data and backups](#data-and-backups) · [Troubleshooting](#troubleshooting)
+- **Working on it** — [API](#api) · [Project layout](#project-layout)
+- [Responsible use](#responsible-use) · [License](#license)
 
 ---
 
@@ -97,7 +110,7 @@ found inside scripts.
 
 - **Docker** with automatic restart and a healthcheck.
 - **SSRF** protection, rate limiting, memory and duration caps.
-- 413 tests, ESLint and Prettier.
+- 500 tests, ESLint and Prettier.
 
 ---
 
@@ -108,6 +121,24 @@ found inside scripts.
 
 Browser mode uses Chromium. The Docker image already includes it; on a local
 install Puppeteer provides it.
+
+**Sizing.** Chromium is what makes this heavy, not the crawler itself.
+
+|                     |                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Idle**            | **~45 MB** (measured on a container up for 7 days)                                                                    |
+| **HTTP-only crawl** | a few hundred MB, driven by `CRAWL_MAX_FILES` — results are held in memory until the run ends                         |
+| **Browser mode**    | budget a few hundred MB _per tab_ in the pool; the default `BROWSER_POOL_SIZE=2` is what the ~1 GB of headroom is for |
+| **Disk**            | ~400 MB for the image, Chromium included. State on disk is one small JSON file.                                       |
+| **`/dev/shm`**      | **1 GB**, set by `shm_size` in `compose.yaml`                                                                         |
+
+Docker's default `/dev/shm` is 64 MB and Chromium hangs on heavy pages with
+that — hence the explicit `shm_size`. Chromium also shuts itself down after
+`BROWSER_IDLE_SHUTDOWN_MS` (60 s), so the browser cost is only paid while
+actually crawling, which is why idle sits at 45 MB.
+
+On a small VPS: add swap, or set `BROWSER_ENABLED=false` and stay on the
+HTTP-only path.
 
 ---
 
@@ -160,6 +191,72 @@ npm run check   # linter + formatting + tests
 
 ---
 
+## Updating
+
+```bash
+cd urlexplorer
+git pull
+docker compose up -d --build     # or: npm install && npm start
+```
+
+Nothing to migrate: the only state on disk is `data/profiles.json`, and its
+format is append-compatible. Your saved configurations survive an update.
+
+What does **not** survive a restart, by design:
+
+- **Paused explorations** (`JOBS_*`) live in memory. A restart discards them.
+- **The thumbnail cache** (`THUMBNAILS_CACHE_*`) is in memory too, so it never
+  writes result images to disk.
+
+Both are deliberate — results carry the names of the sites you explored, and
+keeping them off the disk is the point.
+
+---
+
+## Behind a reverse proxy
+
+If you put nginx, Caddy or Traefik in front (which is how you get HTTPS), there
+is **one variable you must set**, and getting it wrong is not cosmetic:
+
+```env
+TRUST_PROXY=<the proxy's address>
+```
+
+Rate limiting keys off `req.ip`. Express only reads `X-Forwarded-For` when
+`TRUST_PROXY` says that source is trusted — so:
+
+- **Left as `false` behind a proxy:** every request looks like it comes from the
+  proxy. All your users share one rate-limit bucket and throttle each other.
+- **Set to `true`:** Express trusts `X-Forwarded-For` from _anyone_. A client
+  that rotates that header **bypasses rate limiting entirely**, including the
+  brute-force protection on the admin unlock. Never use `true`.
+
+Set it to the proxy's actual address. Note that `loopback` is not the answer
+here if clients also reach the app from localhost.
+
+Minimal nginx example:
+
+```nginx
+location / {
+    proxy_pass         http://127.0.0.1:3001;
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+
+    # Live progress uses SSE: no buffering, and a long read timeout.
+    proxy_buffering    off;
+    proxy_read_timeout 3600s;
+}
+```
+
+`proxy_buffering off` matters: with buffering on, the progress bar stays frozen
+until the exploration finishes. `SSE_HEARTBEAT_MS` (15 s by default) exists so
+that a proxy does not close a connection that has had nothing to send for a
+while.
+
+---
+
 ## Configuration
 
 Everything is set through environment variables. `.env.example` documents every
@@ -167,25 +264,26 @@ option with its default; only `PORT` is required to boot.
 
 The most relevant ones:
 
-| Variable                           | Default   | Purpose                                       |
-| ---------------------------------- | --------- | --------------------------------------------- |
-| `PORT`                             | `3000`    | Server port                                   |
-| `ADMIN_TOKEN`                      | _(empty)_ | Unlocks saved configurations (see below)      |
-| `CRAWL_MAX_PAGES`                  | `50`      | Maximum pages per exploration                 |
-| `CRAWL_MAX_FILES`                  | `5000`    | Cap on files held in memory                   |
-| `CRAWL_MAX_DURATION_MS`            | `600000`  | Maximum duration of one exploration           |
-| `BROWSER_ENABLED`                  | `true`    | Allow browser mode                            |
-| `BROWSER_POOL_SIZE`                | `2`       | Concurrent browser tabs                       |
-| `THUMBNAILS_ENABLED`               | `true`    | Serve thumbnails through `/api/thumbnail`     |
-| `SCROLL_MAX_ROUNDS`                | `50`      | Maximum loads in infinite-scroll mode         |
-| `SCROLL_MAX_DURATION_MS`           | `120000`  | Time cap for the scrolling phase              |
-| `SCROLL_MAX_ELEMENTS`              | `3000`    | Accumulated links at which scrolling stops    |
-| `THROTTLE_MIN_INTERVAL_MS`         | `250`     | Minimum gap between requests to the same host |
-| `THROTTLE_MAX_CONCURRENT_PER_HOST` | `4`       | Concurrent requests per host                  |
-| `SECURITY_BLOCK_PRIVATE_ADDRESSES` | `true`    | SSRF protection                               |
-| `SECURITY_ALLOWED_HOSTS`           | _(empty)_ | Optional host allowlist                       |
-| `RATE_LIMIT_MAX_REQUESTS`          | `30`      | Requests per window                           |
-| `ADMIN_UNLOCK_MAX_ATTEMPTS`        | `5`       | Unlock attempts per minute                    |
+| Variable                           | Default   | Purpose                                                                            |
+| ---------------------------------- | --------- | ---------------------------------------------------------------------------------- |
+| `PORT`                             | `3000`    | Server port                                                                        |
+| `ADMIN_TOKEN`                      | _(empty)_ | Unlocks saved configurations (see below)                                           |
+| `CRAWL_MAX_PAGES`                  | `50`      | Maximum pages per exploration                                                      |
+| `CRAWL_MAX_FILES`                  | `5000`    | Cap on files held in memory                                                        |
+| `CRAWL_MAX_DURATION_MS`            | `600000`  | Maximum duration of one exploration                                                |
+| `BROWSER_ENABLED`                  | `true`    | Allow browser mode                                                                 |
+| `BROWSER_POOL_SIZE`                | `2`       | Concurrent browser tabs                                                            |
+| `THUMBNAILS_ENABLED`               | `true`    | Serve thumbnails through `/api/thumbnail`                                          |
+| `SCROLL_MAX_ROUNDS`                | `50`      | Maximum loads in infinite-scroll mode                                              |
+| `SCROLL_MAX_DURATION_MS`           | `120000`  | Time cap for the scrolling phase                                                   |
+| `SCROLL_MAX_ELEMENTS`              | `3000`    | Accumulated links at which scrolling stops                                         |
+| `THROTTLE_MIN_INTERVAL_MS`         | `250`     | Minimum gap between requests to the same host                                      |
+| `THROTTLE_MAX_CONCURRENT_PER_HOST` | `4`       | Concurrent requests per host                                                       |
+| `SECURITY_BLOCK_PRIVATE_ADDRESSES` | `true`    | SSRF protection                                                                    |
+| `SECURITY_ALLOWED_HOSTS`           | _(empty)_ | Optional host allowlist                                                            |
+| `RATE_LIMIT_MAX_REQUESTS`          | `30`      | Requests per window                                                                |
+| `ADMIN_UNLOCK_MAX_ATTEMPTS`        | `5`       | Unlock attempts per minute                                                         |
+| `TRUST_PROXY`                      | `false`   | Who may set `X-Forwarded-For` — see [above](#behind-a-reverse-proxy). Never `true` |
 
 ### `ADMIN_TOKEN`
 
@@ -303,6 +401,106 @@ much is being filtered out.
 
 Any `GET` that does not start with `/api/` serves the frontend shell. Views are
 routed by hash: `#/explorer`, `#/video`.
+
+---
+
+## Data and backups
+
+**One file matters, and it is small.**
+
+| What                 | Where                | Backed up?                                |
+| -------------------- | -------------------- | ----------------------------------------- |
+| Saved configurations | `data/profiles.json` | **Yes — this is the one**                 |
+| Your settings        | `.env`               | Yes, keep a copy (it holds `ADMIN_TOKEN`) |
+| Paused explorations  | memory               | No, and by design                         |
+| Thumbnail cache      | memory               | No, and by design                         |
+| Results              | never persisted      | —                                         |
+
+```bash
+cp data/profiles.json ~/backups/urlexplorer-$(date +%F).json
+```
+
+That is the whole backup. There is no database, and **results are never written
+to disk** — an exploration lives in the browser tab that ran it. If you want to
+keep results, use the export buttons in the interface.
+
+Restoring is copying the file back and restarting. Keep `.env` somewhere safe
+too: it is not in the repo (correctly), so it is the one thing a fresh clone
+cannot give you back.
+
+---
+
+## Troubleshooting
+
+**Saving a configuration does nothing, and there is no error.**
+The `data/` bind mount is missing. The container runs with `read_only: true`, so
+without `- ./data:/app/data` the write fails silently. Check that the line is in
+your `compose.yaml` and that `data/` exists on the host.
+
+**The admin unlock does not appear / `/api/admin/*` returns 404.**
+That is the documented behaviour when `ADMIN_TOKEN` is empty. With Docker, note
+that Compose reads it from the **host's `.env`** by interpolation
+(`ADMIN_TOKEN: ${ADMIN_TOKEN:-}`), so the variable must be in the `.env` next to
+`compose.yaml`.
+
+**Browser mode hangs or Chromium dies on heavy pages.**
+`/dev/shm` too small. With Docker, `shm_size: '1gb'` is already in
+`compose.yaml`; if you run the image by hand, pass `--shm-size=1g`.
+
+**The progress bar does not move until the run finishes.**
+A proxy is buffering the SSE stream. See
+[Behind a reverse proxy](#behind-a-reverse-proxy).
+
+**Everyone gets rate-limited at once behind a proxy.**
+`TRUST_PROXY` is `false`, so every request looks like it comes from the proxy.
+Same section — and do not "fix" it with `true`.
+
+**A site returns 429 and the crawl slows to a crawl.**
+Working as intended. After `THROTTLE_CIRCUIT_BREAKER_THRESHOLD` consecutive 429s
+that host's minimum interval is multiplied for a cooldown period. Other hosts are
+unaffected. If the site sends `Retry-After`, that wins, capped by
+`HTTP_RETRY_429_MAX_DELAY_MS` so an hour-long value cannot stall the run.
+
+**"It stopped early and the results look incomplete."**
+It hit a safety cap (`CRAWL_MAX_PAGES`, `CRAWL_MAX_DURATION_MS`,
+`SCROLL_MAX_ROUNDS`…). The interface says so explicitly when this happens,
+precisely so that a truncated list is never mistaken for a complete one.
+
+**Nothing resolves / every host is blocked.**
+`SECURITY_BLOCK_PRIVATE_ADDRESSES` is doing its job. Inside Docker, "private"
+includes the host network and the other containers. Only disable it against
+local fixtures.
+
+---
+
+## Project layout
+
+```
+server.js              Entry point — Express wiring only
+src/
+  config/index.js      Every env var, with its default. Single source of truth.
+  routes/              HTTP layer: scrape, video, thumbnail, admin
+  services/            The actual work — scraper, pagination, detector,
+                       jobs (pause/resume), profiles, thumbnails, video
+  lib/                 Reusable pieces: http, browser, throttle, ssrf,
+                       dedupe, pattern, license, media, url…
+  middleware/          adminAuth, rateLimit, errorHandler
+  extensions/          Drop-in point for custom extractors (see its README)
+public/                Frontend — no build step, plain JS
+tests/                 31 files, 500 tests, node:test
+data/                  Runtime state (gitignored)
+```
+
+```bash
+npm test           # 500 tests, ~30 s
+npm run check      # lint + format check + tests — run this before committing
+npm run lint:fix   # autofix
+```
+
+No build step and no framework on the frontend: `public/` is served as-is, and
+views are routed by hash. Adding a config option means adding it to
+`src/config/index.js` **and** to `.env.example` — the second is what makes it
+discoverable.
 
 ---
 
