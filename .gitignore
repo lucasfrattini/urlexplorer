@@ -4,6 +4,9 @@ logs/*.log
 coverage/
 *.local
 CLAUDE.md
+# Complemento de CLAUDE.md: se partio para no cargarlo entero en cada
+# contexto de agente, y hereda su misma exclusion — mismo contenido interno.
+docs/FEATURES.md
 
 # Datos locales del servidor. Contiene los perfiles de sitios guardados:
 # NUNCA se versiona, es lo que mantiene los nombres reales fuera del repositorio.
