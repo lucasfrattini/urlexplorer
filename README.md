@@ -19,6 +19,14 @@ live progress, real cancellation, nothing lost, running on your own server.
 
 </div>
 
+> ⚠️ **Before you use this:** URL Explorer is a generic pagination crawler — it
+> doesn't know or care what site you point it at, and it doesn't bypass
+> logins, paywalls, CAPTCHAs or DRM. It only reads what a site already serves
+> to a normal visitor. Whether it's legal to access, save or redistribute what
+> you find is a question about the site and your jurisdiction, not about this
+> software — that responsibility is entirely yours. Details in
+> [Responsible use](#responsible-use).
+
 ---
 
 ## Contents
@@ -699,15 +707,46 @@ discoverable.
 
 ## Responsible use
 
-This tool sends requests to third-party websites. Use it on sites you are
-allowed to access, respect their terms of service and their `robots.txt`, and
-keep the throttling defaults in place — they exist so that a run does not hammer
-the site you point it at.
+**What this is.** A generic tool for walking paginated listings and collecting
+links — the same thing you do by hand clicking "next page", automated. It sends
+plain HTTP requests (or renders a page with a normal browser, when you turn
+that on) to URLs *you* provide. It ships with no list of targets, does not seek
+out sites on its own, and does not bypass logins, paywalls, CAPTCHAs or any
+other access control. If a site doesn't serve something to an anonymous
+visitor, this tool doesn't see it either.
 
-The license filter can restrict results to material that declares an open
-license (Creative Commons, public domain), based on the metadata the site itself
-publishes. Note that the absence of a license means "all rights reserved", not
-"free to use".
+**Your responsibility, not this tool's.** Whether it's legal to access, save or
+redistribute what you find is a question about the *site* and about *your
+jurisdiction* — a pagination crawler is legally neutral in the same way a
+browser or `curl` is. Running it means you are responsible for:
+
+- Having the right to access the content you point it at.
+- Respecting the target site's terms of service and its `robots.txt`.
+- Complying with copyright law wherever you are and wherever the site is.
+- Not using it to download, copy or redistribute copyrighted material you have
+  no rights to.
+
+Keep the throttling defaults in place, too — they exist so a run doesn't hammer
+the site you point it at, independently of whether you're allowed to be there.
+
+**No content, no hosting, no endorsement.** URL Explorer doesn't host, cache or
+redistribute anything it finds — see [Data and backups](#data-and-backups):
+results live only in the browser tab that produced them, and export is a
+manual, deliberate action from that tab. Nothing it surfaces is curated,
+recommended or vetted by the author, and the author has no visibility into what
+any given self-hosted instance is pointed at.
+
+**The license filter is a convenience, not a legal opinion.** It can restrict
+results to material that *declares* an open license (Creative Commons, public
+domain), based on metadata the target site itself publishes — it can only be as
+accurate as that metadata. The absence of a declared license means "all rights
+reserved" by default, never "free to use", and a mislabeled site can still slip
+through the filter.
+
+**No warranty.** Provided "as is", with no warranty of any kind — see
+[License](#license). Using this against a site you're not authorized to access,
+or to acquire material you have no rights to, is your decision and your
+liability, not the author's.
 
 ---
 
