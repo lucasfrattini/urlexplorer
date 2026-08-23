@@ -1,0 +1,68 @@
+/* Estilos de la página 404. Aparte de main.css porque solo los usa ella, y en
+   su propio fichero porque la CSP (`style-src 'self'`) no permite <style>
+   incrustado en el documento. */
+
+.notfound {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-5) var(--space-7);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+}
+
+.notfound__logo {
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius);
+}
+
+.notfound__code {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-text-subtle);
+}
+
+.notfound__title {
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.notfound__text {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--c-text-muted);
+  line-height: 1.6;
+}
+
+.notfound__home {
+  margin-top: var(--space-5);
+  display: inline-block;
+  padding: 11px 22px;
+  border-radius: var(--radius);
+  background: var(--c-accent);
+  color: var(--c-accent-text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background var(--transition);
+}
+
+.notfound__home:hover {
+  background: var(--c-accent-hover);
+}
+
+.notfound__home:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 3px;
+}

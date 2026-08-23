@@ -67,6 +67,14 @@ function createApp() {
   // usar". Con max-age=0 los navegadores seguian sirviendo modulos ES desde
   // memoria hasta un recargado forzado, asi que tras desplegar se veia la
   // version anterior. Con esto basta con recargar normal.
+  // `/404.html` es un fichero real en `public/`, así que sin esto
+  // `express.static` lo serviría con estado 200: una página de error
+  // anunciándose como página buena, que es justo lo que arregla este bloque.
+  app.get('/404.html', (req, res) => {
+    res.status(404).set('Cache-Control', 'no-cache');
+    return res.sendFile(path.join(PUBLIC_DIR, '404.html'));
+  });
+
   app.use(
     express.static(PUBLIC_DIR, {
       extensions: ['html'],
@@ -76,11 +84,30 @@ function createApp() {
     })
   );
 
-  // SPA: cualquier ruta no-API sirve el shell del front
-  app.get(/^\/(?!api\/).*/, (req, res, next) => {
-    if (req.method !== 'GET') return next();
+  /**
+   * La raíz sirve el shell del front.
+   *
+   * ANTES esto era un comodín `/^\/(?!api\/).*​/` que devolvía el shell con
+   * estado 200 para CUALQUIER ruta inventada. La app no tiene router de
+   * rutas: las dos herramientas viven en la misma URL y se cambian por hash
+   * (`#/explorer`, `#/video`), así que la única ruta válida es `/`. Servir
+   * 200 en `/loquesea` hacía que un enlace roto pareciera una página buena,
+   * tanto para quien lo abre como para un buscador.
+   */
+  app.get('/', (req, res) => {
     res.set('Cache-Control', 'no-cache');
     return res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  });
+
+  /**
+   * Cualquier otra ruta no-API que no haya casado con un fichero estático es
+   * un 404 de verdad: estado 404 y página propia. Las peticiones bajo `/api/`
+   * no entran aquí — esas las contesta `notFoundHandler` en JSON, que es lo
+   * que espera quien las llama.
+   */
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.status(404).set('Cache-Control', 'no-cache');
+    return res.sendFile(path.join(PUBLIC_DIR, '404.html'));
   });
 
   app.use(notFoundHandler);

@@ -1,0 +1,8 @@
+# URL Explorer es 100 % self-hosted: cada instancia la levanta y la opera quien
+# quiere usarla. Este fichero es el defecto sensato para una herramienta interna
+# —que no salga en buscadores— y quien la aloje puede cambiarlo.
+#
+# Ojo: robots.txt es una petición, no un control de acceso. Lo que protege una
+# instancia expuesta es el rate limiting y el token de admin, no esto.
+User-agent: *
+Disallow: /

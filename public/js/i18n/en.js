@@ -26,6 +26,14 @@ export const en = {
   'idioma.en': 'English',
   'idioma.cambiado': 'Language: English',
 
+  /* ── Document head (<title> and meta description) ──────────────── */
+  'head.explorer.titulo': 'Link explorer — URL Explorer',
+  'head.explorer.desc':
+    'Walk the pages of a section, pull out the links matching a pattern and look for files inside each one.',
+  'head.video.titulo': 'Video analysis — URL Explorer',
+  'head.video.desc':
+    'Analyse a single URL in depth and find the videos inside it, with their duration and size.',
+
   /* ── Service status ────────────────────────────────────────────── */
   'salud.comprobando': 'Verifying service…',
   'salud.activo': 'Service up · browser {estado} · max. {paginas} pages per search',

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ruta no encontrada — URL Explorer</title>
+    <meta name="description" content="Esa ruta no existe en URL Explorer." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+
+    <!-- Reutiliza la hoja principal: los tokens de color, el tipo y el tema
+         claro/oscuro salen de ahí, así que esta página cambia con el resto sin
+         mantener una copia de la paleta. -->
+    <link rel="stylesheet" href="/styles/main.css" />
+
+    <link rel="icon" href="/img/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/img/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/img/apple-touch-icon.png" />
+
+    <!-- Los estilos propios van en su fichero, no en un <style> inline: la CSP
+         de la app es `style-src 'self'`, que no admite bloques incrustados. -->
+    <link rel="stylesheet" href="/styles/404.css" />
+  </head>
+  <body>
+    <main class="notfound">
+      <img class="notfound__logo" src="/img/logo.png" alt="" width="48" height="48" />
+      <p class="notfound__code">Error 404</p>
+      <h1 class="notfound__title">Esa ruta no existe.</h1>
+      <p class="notfound__text">
+        URL Explorer tiene una sola pantalla: el explorador y el análisis de vídeo se cambian con
+        las pestañas de arriba, no con una URL propia.
+      </p>
+      <a class="notfound__home" href="/">Volver a la herramienta</a>
+    </main>
+  </body>
+</html>

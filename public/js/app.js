@@ -103,8 +103,24 @@ function initRouter(views) {
     video: document.getElementById('view-video'),
   };
 
+  /**
+   * Fija `<title>` y `<meta name="description">` según la vista activa.
+   *
+   * Las dos herramientas viven en la misma URL con hash (`#/explorer`,
+   * `#/video`), así que sin esto ambas compartían el título estático
+   * "URL Explorer" y una descripción genérica: la pestaña del navegador y el
+   * historial no distinguían en cuál de las dos estabas.
+   */
+  function aplicarCabecera(name) {
+    document.title = t(`head.${name}.titulo`);
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute('content', t(`head.${name}.desc`));
+  }
+
   function activate(name, { updateHash = true } = {}) {
     if (!sections[name]) name = 'explorer';
+
+    aplicarCabecera(name);
 
     for (const tab of tabs) {
       const isActive = tab.dataset.view === name;
@@ -136,6 +152,13 @@ function initRouter(views) {
 
   const initial = window.location.hash.replace('#/', '') || 'explorer';
   activate(initial);
+
+  // El título es texto calculado, así que se rehace al cambiar de idioma: si
+  // no, se quedaría en español con la interfaz ya en inglés.
+  alCambiarIdioma(() => {
+    const actual = window.location.hash.replace('#/', '') || 'explorer';
+    aplicarCabecera(sections[actual] ? actual : 'explorer');
+  });
 }
 
 /* ── Desbloqueo de administración ──────────────────────────────────── */

@@ -26,6 +26,14 @@ export const es = {
   'idioma.en': 'Inglés',
   'idioma.cambiado': 'Idioma: español',
 
+  /* ── Cabecera del documento (<title> y meta description) ───────── */
+  'head.explorer.titulo': 'Explorador de enlaces — URL Explorer',
+  'head.explorer.desc':
+    'Recorre las páginas de una sección, extrae los enlaces que coinciden con un patrón y busca ficheros dentro de cada uno.',
+  'head.video.titulo': 'Análisis de vídeo — URL Explorer',
+  'head.video.desc':
+    'Analiza una única URL a fondo y encuentra los vídeos que hay dentro, con su duración y su tamaño.',
+
   /* ── Estado del servicio ───────────────────────────────────────── */
   'salud.comprobando': 'Verificando el servicio…',
   'salud.activo': 'Servicio activo · navegador {estado} · máx. {paginas} páginas por búsqueda',
