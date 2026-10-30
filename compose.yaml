@@ -9,10 +9,17 @@ services:
     # diferencia de `always`.
     restart: unless-stopped
 
-    # El contenedor escucha en 3000; se publica en el 3001 del host, que es
-    # el puerto donde ya esperas la app.
+    # El contenedor escucha en 3000; se publica en el 3001 del host, o en el
+    # que diga HOST_PORT en el .env.
     ports:
-      - '3001:3000'
+      - '${HOST_PORT:-3001}:3000'
+
+    # Los ajustes del .env (límites, navegador, TRUST_PROXY…). Opcional: sin
+    # .env arranca con los valores por defecto. Lo de `environment:` manda
+    # sobre esto, así que el PORT=3000 y el NODE_ENV del .env no estorban.
+    env_file:
+      - path: .env
+        required: false
 
     environment:
       NODE_ENV: production

@@ -10,7 +10,10 @@ docs/FEATURES.md
 
 # Datos locales del servidor. Contiene los perfiles de sitios guardados:
 # NUNCA se versiona, es lo que mantiene los nombres reales fuera del repositorio.
-data/
+# Solo va la carpeta vacía (.gitkeep): si no existe, Docker la crea como root
+# al montarla y el contenedor, que corre como `node`, no puede guardar.
+data/*
+!data/.gitkeep
 
 # Extensiones por sitio.
 #
