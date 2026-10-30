@@ -7,7 +7,7 @@ import { t, alCambiarIdioma } from '../i18n/index.js';
  * Sustituye a `window.prompt()`/`window.confirm()`. Esos los dibuja el
  * navegador: no respetan el tema claro/oscuro y los rótulos de sus botones
  * ("Aceptar"/"Cancelar") los pone el navegador, fuera del control de
- * `es.js`/`en.js`. Este componente no sabe nada del dominio (admin, perfiles):
+ * `es.js`/`en.js`. Este componente no sabe nada del dominio (perfiles):
  * recibe claves de i18n y devuelve una promesa, igual que hacía la función
  * nativa a la que reemplaza.
  *

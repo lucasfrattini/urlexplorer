@@ -1,6 +1,5 @@
 /** Cliente de la API de URL Explorer. */
 
-import { getAdminToken } from './admin.js';
 import { t } from './i18n/index.js';
 
 const BASE = '/api';
@@ -18,7 +17,7 @@ async function request(path, options = {}) {
   let response;
   try {
     // Las cabeceras se fusionan aparte: con un spread plano, un options.headers
-    // (el token de admin) borraría el Content-Type y el body dejaría de
+    // (cualquier cabecera propia) borraría el Content-Type y el body dejaría de
     // llegar como JSON.
     response = await fetch(`${BASE}${path}`, {
       ...options,
@@ -75,32 +74,14 @@ export function extractVideos(params, { signal } = {}) {
   return request('/video/extract', { method: 'POST', body: JSON.stringify(params), signal });
 }
 
-/* ── Administración ──────────────────────────────────────────────────
- *
- * El token viaja en la cabecera X-Admin-Token, nunca en la query string:
- * una query acaba en los logs del servidor y en el historial del navegador.
- */
+/* ── Configuraciones guardadas ───────────────────────────────────── */
 
-function adminHeaders() {
-  const token = getAdminToken();
-  return token ? { 'X-Admin-Token': token } : {};
+export function getProfiles() {
+  return request('/profiles');
 }
 
-/** Valida una contraseña contra el servidor. No guarda nada por su cuenta. */
-export function adminUnlock(token) {
-  return request('/admin/unlock', { method: 'POST', body: JSON.stringify({ token }) });
-}
-
-export function getAdminProfiles() {
-  return request('/admin/profiles', { headers: adminHeaders() });
-}
-
-export function saveAdminProfiles(profiles) {
-  return request('/admin/profiles', {
-    method: 'PUT',
-    headers: adminHeaders(),
-    body: JSON.stringify({ profiles }),
-  });
+export function saveProfiles(profiles) {
+  return request('/profiles', { method: 'PUT', body: JSON.stringify({ profiles }) });
 }
 
 /**

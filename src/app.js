@@ -19,8 +19,7 @@ function createApp() {
    *
    * NO poner `true` aquí. `true` es "confía en cualquiera", y como `req.ip`
    * sale de esa cabecera y el rate limiting va por `req.ip`, un cliente que
-   * rote la cabecera se salta el límite entero — incluida la protección de
-   * fuerza bruta del desbloqueo de admin. Ver `security.trustProxy`.
+   * rote la cabecera se salta el límite entero. Ver `security.trustProxy`.
    */
   app.set('trust proxy', config.security.trustProxy);
   app.disable('x-powered-by');

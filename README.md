@@ -83,6 +83,9 @@ being one polished tool and one afterthought.
   suggestion, never an imposed configuration.
 - **Parameterized search term** with `{q}`: save a site once and only change the
   keyword.
+- **Saved configurations**: store the form under a name and load it back later,
+  kept on the server so they follow you across devices — or copy a link that
+  opens the app with everything filled in.
 - Link filtering by pattern — plain text or a **regular expression** between
   slashes, `/\/videos\/\d+/`, to tell detail pages apart from section pages —
   and file filtering by the **real extension** of the pathname, not by
@@ -246,8 +249,8 @@ Rate limiting keys off `req.ip`. Express only reads `X-Forwarded-For` when
 - **Left as `false` behind a proxy:** every request looks like it comes from the
   proxy. All your users share one rate-limit bucket and throttle each other.
 - **Set to `true`:** Express trusts `X-Forwarded-For` from _anyone_. A client
-  that rotates that header **bypasses rate limiting entirely**, including the
-  brute-force protection on the admin unlock. Never use `true`.
+  that rotates that header **bypasses rate limiting entirely**. Never use
+  `true`.
 
 Set it to the proxy's actual address. Note that `loopback` is not the answer
 here if clients also reach the app from localhost.
@@ -282,58 +285,37 @@ option with its default; only `PORT` is required to boot.
 
 The most relevant ones:
 
-| Variable                           | Default   | Purpose                                                                            |
-| ---------------------------------- | --------- | ---------------------------------------------------------------------------------- |
-| `PORT`                             | `3000`    | Server port                                                                        |
-| `ADMIN_TOKEN`                      | _(empty)_ | Unlocks saved configurations (see below)                                           |
-| `CRAWL_MAX_PAGES`                  | `50`      | Maximum pages per exploration                                                      |
-| `CRAWL_MAX_FILES`                  | `5000`    | Cap on files held in memory                                                        |
-| `CRAWL_MAX_DURATION_MS`            | `600000`  | Maximum duration of one exploration                                                |
-| `BROWSER_ENABLED`                  | `true`    | Allow browser mode                                                                 |
-| `BROWSER_POOL_SIZE`                | `2`       | Concurrent browser tabs                                                            |
-| `THUMBNAILS_ENABLED`               | `true`    | Serve thumbnails through `/api/thumbnail`                                          |
-| `SCROLL_MAX_ROUNDS`                | `50`      | Maximum loads in infinite-scroll mode                                              |
-| `SCROLL_MAX_DURATION_MS`           | `120000`  | Time cap for the scrolling phase                                                   |
-| `SCROLL_MAX_ELEMENTS`              | `3000`    | Accumulated links at which scrolling stops                                         |
-| `THROTTLE_MIN_INTERVAL_MS`         | `250`     | Minimum gap between requests to the same host                                      |
-| `THROTTLE_MAX_CONCURRENT_PER_HOST` | `4`       | Concurrent requests per host                                                       |
-| `SECURITY_BLOCK_PRIVATE_ADDRESSES` | `true`    | SSRF protection                                                                    |
-| `SECURITY_ALLOWED_HOSTS`           | _(empty)_ | Optional host allowlist                                                            |
-| `RATE_LIMIT_MAX_REQUESTS`          | `30`      | Requests per window                                                                |
-| `ADMIN_UNLOCK_MAX_ATTEMPTS`        | `5`       | Unlock attempts per minute                                                         |
-| `TRUST_PROXY`                      | `false`   | Who may set `X-Forwarded-For` — see [above](#behind-a-reverse-proxy). Never `true` |
+| Variable                           | Default              | Purpose                                                                            |
+| ---------------------------------- | -------------------- | ---------------------------------------------------------------------------------- |
+| `PORT`                             | `3000`               | Server port                                                                        |
+| `CRAWL_MAX_PAGES`                  | `50`                 | Maximum pages per exploration                                                      |
+| `CRAWL_MAX_FILES`                  | `5000`               | Cap on files held in memory                                                        |
+| `CRAWL_MAX_DURATION_MS`            | `600000`             | Maximum duration of one exploration                                                |
+| `BROWSER_ENABLED`                  | `true`               | Allow browser mode                                                                 |
+| `BROWSER_POOL_SIZE`                | `2`                  | Concurrent browser tabs                                                            |
+| `THUMBNAILS_ENABLED`               | `true`               | Serve thumbnails through `/api/thumbnail`                                          |
+| `SCROLL_MAX_ROUNDS`                | `50`                 | Maximum loads in infinite-scroll mode                                              |
+| `SCROLL_MAX_DURATION_MS`           | `120000`             | Time cap for the scrolling phase                                                   |
+| `SCROLL_MAX_ELEMENTS`              | `3000`               | Accumulated links at which scrolling stops                                         |
+| `THROTTLE_MIN_INTERVAL_MS`         | `250`                | Minimum gap between requests to the same host                                      |
+| `THROTTLE_MAX_CONCURRENT_PER_HOST` | `4`                  | Concurrent requests per host                                                       |
+| `SECURITY_BLOCK_PRIVATE_ADDRESSES` | `true`               | SSRF protection                                                                    |
+| `SECURITY_ALLOWED_HOSTS`           | _(empty)_            | Optional host allowlist                                                            |
+| `RATE_LIMIT_MAX_REQUESTS`          | `30`                 | Requests per window                                                                |
+| `PROFILES_PATH`                    | `data/profiles.json` | Where saved configurations are stored                                              |
+| `TRUST_PROXY`                      | `false`              | Who may set `X-Forwarded-For` — see [above](#behind-a-reverse-proxy). Never `true` |
 
-### `ADMIN_TOKEN`
+### Saved configurations
 
-Saved configurations sit behind a manual unlock. It is meant for the case where
-**several people share the same computer**: by default the tool shows up empty,
-with no visible configurations and no way to save one.
+The **Save** button stores the current form under a name, and the selector
+loads it back. Configurations are stored **on the server**, in
+`data/profiles.json`, so they persist across browsers and devices. That
+directory is listed in `.gitignore`, so the sites you configure never reach the
+repository. A fresh install starts with none.
 
-```env
-ADMIN_TOKEN=put-your-own-token-here
-```
-
-Leave it empty and the mode is disabled entirely: the application works
-normally, simply without saved configurations, and the `/api/admin/*` routes
-answer `404` — there is no point advertising a door that is not there.
-
-Configurations are stored **on the server**, in `data/profiles.json`, not in the
-browser. That directory is listed in `.gitignore`, so the sites you configure
-never reach the repository. A fresh install starts with none, which is the
-correct behaviour.
-
-To unlock, **click the header logo five times within two seconds** and enter the
-token. The same gesture locks it again. The unlock lives in `sessionStorage`:
-close the tab and the tool is blank again for whoever sits down next.
-
-This is a gate for everyday use, not a control against a determined attacker:
-anyone sharing the machine can watch you type, or read `sessionStorage` while
-the session is open. What it does guarantee is that configurations are not part
-of the served code, and that saving is validated on the server rather than by
-hiding a button.
-
-> Never put a real token in `.env.example` or in any versioned file. `.env` is
-> in `.gitignore` for exactly this reason.
+There is no login: anyone who can open your instance can see, overwrite and
+delete them. If you expose it beyond your own network, put authentication in
+front (a reverse proxy with basic auth, a VPN).
 
 ### Security
 
@@ -404,18 +386,17 @@ much is being filtered out.
 
 ## API
 
-| Method | Route                 | Purpose                                                                |
-| ------ | --------------------- | ---------------------------------------------------------------------- |
-| GET    | `/api/health`         | Status and active limits                                               |
-| POST   | `/api/scrape`         | Full exploration, single response                                      |
-| GET    | `/api/scrape/stream`  | The same, with SSE progress (`?resume=<jobId>` continues a paused run) |
-| POST   | `/api/scrape/pause`   | Pause a running exploration                                            |
-| POST   | `/api/scrape/detect`  | Propose a configuration for a URL                                      |
-| POST   | `/api/video/extract`  | Analyze a single URL                                                   |
-| GET    | `/api/thumbnail`      | Proxied, cached thumbnail for a result                                 |
-| POST   | `/api/admin/unlock`   | Validate the admin token                                               |
-| GET    | `/api/admin/profiles` | Saved configurations — token required                                  |
-| PUT    | `/api/admin/profiles` | Replace the list — token required                                      |
+| Method | Route                | Purpose                                                                |
+| ------ | -------------------- | ---------------------------------------------------------------------- |
+| GET    | `/api/health`        | Status and active limits                                               |
+| POST   | `/api/scrape`        | Full exploration, single response                                      |
+| GET    | `/api/scrape/stream` | The same, with SSE progress (`?resume=<jobId>` continues a paused run) |
+| POST   | `/api/scrape/pause`  | Pause a running exploration                                            |
+| POST   | `/api/scrape/detect` | Propose a configuration for a URL                                      |
+| POST   | `/api/video/extract` | Analyze a single URL                                                   |
+| GET    | `/api/thumbnail`     | Proxied, cached thumbnail for a result                                 |
+| GET    | `/api/profiles`      | Saved configurations                                                   |
+| PUT    | `/api/profiles`      | Replace the list                                                       |
 
 Any `GET` that does not start with `/api/` serves the frontend shell. Views are
 routed by hash: `#/explorer`, `#/video`.
@@ -426,13 +407,13 @@ routed by hash: `#/explorer`, `#/video`.
 
 **One file matters, and it is small.**
 
-| What                 | Where                | Backed up?                                |
-| -------------------- | -------------------- | ----------------------------------------- |
-| Saved configurations | `data/profiles.json` | **Yes — this is the one**                 |
-| Your settings        | `.env`               | Yes, keep a copy (it holds `ADMIN_TOKEN`) |
-| Paused explorations  | memory               | No, and by design                         |
-| Thumbnail cache      | memory               | No, and by design                         |
-| Results              | never persisted      | —                                         |
+| What                 | Where                | Backed up?                |
+| -------------------- | -------------------- | ------------------------- |
+| Saved configurations | `data/profiles.json` | **Yes — this is the one** |
+| Your settings        | `.env`               | Yes, keep a copy          |
+| Paused explorations  | memory               | No, and by design         |
+| Thumbnail cache      | memory               | No, and by design         |
+| Results              | never persisted      | —                         |
 
 ```bash
 cp data/profiles.json ~/backups/urlexplorer-$(date +%F).json
@@ -454,12 +435,6 @@ cannot give you back.
 The `data/` bind mount is missing. The container runs with `read_only: true`, so
 without `- ./data:/app/data` the write fails silently. Check that the line is in
 your `compose.yaml` and that `data/` exists on the host.
-
-**The admin unlock does not appear / `/api/admin/*` returns 404.**
-That is the documented behaviour when `ADMIN_TOKEN` is empty. With Docker, note
-that Compose reads it from the **host's `.env`** by interpolation
-(`ADMIN_TOKEN: ${ADMIN_TOKEN:-}`), so the variable must be in the `.env` next to
-`compose.yaml`.
 
 **Browser mode hangs or Chromium dies on heavy pages.**
 `/dev/shm` too small. With Docker, `shm_size: '1gb'` is already in
@@ -504,9 +479,9 @@ Browser  ──  public/  (no bundler, no framework, hash-routed views)
 │ server.js      startup and orderly shutdown only (~45 lines)         │
 │ src/app.js     Express app, CSP and headers                          │
 │                                                                      │
-│ middleware/    rateLimit → adminAuth → (route) → errorHandler        │
+│ middleware/    rateLimit → (route) → errorHandler                    │
 │                                                                      │
-│ routes/        scrape · video · thumbnail · admin · index            │
+│ routes/        scrape · video · thumbnail · profiles · index         │
 │   HTTP shape only: parse, validate, stream, map AppError → status    │
 │                          │                                           │
 │ services/      the actual work                                       │
@@ -587,12 +562,12 @@ Filtering on data you do not have can only throw away good results.
 
 ### State: there is almost none, and that is the design
 
-| What | Where it lives | Survives a restart? |
-| --- | --- | --- |
-| Saved configurations | `data/profiles.json` | **Yes** — the only thing on disk |
-| Paused explorations | Memory (`services/jobs.js`), with a TTL and a cap | No |
-| Thumbnail cache | Memory (`services/thumbnails.js`) | No |
-| Results | Nowhere — they live in the browser tab that ran them | No |
+| What                 | Where it lives                                       | Survives a restart?              |
+| -------------------- | ---------------------------------------------------- | -------------------------------- |
+| Saved configurations | `data/profiles.json`                                 | **Yes** — the only thing on disk |
+| Paused explorations  | Memory (`services/jobs.js`), with a TTL and a cap    | No                               |
+| Thumbnail cache      | Memory (`services/thumbnails.js`)                    | No                               |
+| Results              | Nowhere — they live in the browser tab that ran them | No                               |
 
 Paused runs are the **only** server-side state, and they exist for one concrete
 reason: resuming requires remembering which links were still pending, and there
@@ -611,38 +586,32 @@ thumbnails and results off the disk.
 Three mechanisms carry the weight, and each closes a specific hole:
 
 **SSRF validation happens at DNS lookup, not on the URL.** `guardRedirect`
-re-validates every redirect, but with a *synchronous* shape check that cannot
+re-validates every redirect, but with a _synchronous_ shape check that cannot
 resolve DNS — so a perfectly-shaped public host redirecting to one that resolves
 to `127.0.0.1` sails straight through it. The real guard is `secureLookup` in
 `lib/ssrf.js`, installed on the HTTP/HTTPS agents: it validates the IP **at
 connect time**. That is the single point every first request, every redirect and
 every real resolution passes through, so there is no window left — and it also
 closes DNS rebinding, which existed because the URL was resolved once for
-validation and then resolved *again* by the HTTP client.
+validation and then resolved _again_ by the HTTP client.
 
 **`trust proxy` defaults to `false` and must never be `true`.** `true` does not
 mean "I am behind a proxy", it means "trust anybody". Since `req.ip` comes from
 `X-Forwarded-For` and rate limiting keys off `req.ip`, `true` lets a client
 rotate that header and bypass the limit entirely — measured: 0 blocks in 40
-requests, against 10 of 40 from the same IP. The serious part is not
-`/api/health`; it is that the same mechanism is the only brute-force protection
-on `/api/admin/unlock`. That unlock limiter additionally identifies clients by
-the **real socket address**, ignoring the header, because a password-attempt
-counter must not depend on a network setting.
+requests, against 10 of 40 from the same IP.
 
 **Loading an extension means executing code, so nothing untrusted may reach a
 `require`.** The extensions directory is fixed, resolved from `__dirname` and
-deliberately **not** configurable by environment. The loader *enumerates* the
+deliberately **not** configurable by environment. The loader _enumerates_ the
 directory and never builds a filename from a request; there is an allowlist as a
 second barrier; loading happens once at startup with no hot reload. Adding an
 extension means adding reviewed code to the repository, with its commit. If
 user-supplied rules were ever needed, the answer is a declarative format
 interpreted by the core — not executable code.
 
-Two smaller ones worth knowing: without `ADMIN_TOKEN`, `/api/admin/*` answers
-**404 rather than 401**, because a 401 announces that a door exists; and
-`/api/health` mentions neither the admin mode nor which extensions are loaded,
-since an extension's name is a site's name.
+One smaller one worth knowing: `/api/health` does not mention which extensions
+are loaded, since an extension's name is a site's name.
 
 ### Being a good citizen of the sites it crawls
 
@@ -652,7 +621,7 @@ breaker multiplies that host's interval for a cooldown period; a `Retry-After`
 header wins over the computed delay, capped so that an hour-long value cannot
 stall a run. `lib/blocking.js` watches for anti-bot signals in both phases —
 including the ones that arrive inside a rejected 4xx rather than through the
-normal path — and reports them as *suspicion*, never as diagnosis.
+normal path — and reports them as _suspicion_, never as diagnosis.
 
 ### Known limits, stated rather than hidden
 
@@ -677,12 +646,12 @@ normal path — and reports them as *suspicion*, never as diagnosis.
 server.js              Entry point — Express wiring only
 src/
   config/index.js      Every env var, with its default. Single source of truth.
-  routes/              HTTP layer: scrape, video, thumbnail, admin
+  routes/              HTTP layer: scrape, video, thumbnail, profiles
   services/            The actual work — scraper, pagination, detector,
                        jobs (pause/resume), profiles, thumbnails, video
   lib/                 Reusable pieces: http, browser, throttle, ssrf,
                        dedupe, pattern, license, media, relevance, url…
-  middleware/          adminAuth, rateLimit, errorHandler
+  middleware/          rateLimit, errorHandler
   extensions/          Drop-in point for custom extractors (see its README)
 public/                Frontend — no build step, plain JS
   js/views/            explorer, video, and their options panels
@@ -710,14 +679,14 @@ discoverable.
 **What this is.** A generic tool for walking paginated listings and collecting
 links — the same thing you do by hand clicking "next page", automated. It sends
 plain HTTP requests (or renders a page with a normal browser, when you turn
-that on) to URLs *you* provide. It ships with no list of targets, does not seek
+that on) to URLs _you_ provide. It ships with no list of targets, does not seek
 out sites on its own, and does not bypass logins, paywalls, CAPTCHAs or any
 other access control. If a site doesn't serve something to an anonymous
 visitor, this tool doesn't see it either.
 
 **Your responsibility, not this tool's.** Whether it's legal to access, save or
-redistribute what you find is a question about the *site* and about *your
-jurisdiction* — a pagination crawler is legally neutral in the same way a
+redistribute what you find is a question about the _site_ and about _your
+jurisdiction_ — a pagination crawler is legally neutral in the same way a
 browser or `curl` is. Running it means you are responsible for:
 
 - Having the right to access the content you point it at.
@@ -737,7 +706,7 @@ recommended or vetted by the author, and the author has no visibility into what
 any given self-hosted instance is pointed at.
 
 **The license filter is a convenience, not a legal opinion.** It can restrict
-results to material that *declares* an open license (Creative Commons, public
+results to material that _declares_ an open license (Creative Commons, public
 domain), based on metadata the target site itself publishes — it can only be as
 accurate as that metadata. The absence of a declared license means "all rights
 reserved" by default, never "free to use", and a mislabeled site can still slip

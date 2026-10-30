@@ -26,13 +26,6 @@
     <div class="layout">
       <header class="topbar">
         <div class="topbar__brand">
-          <!--
-            OJO: `.topbar__mark` es el objetivo del gesto oculto que desbloquea
-            el modo admin (cinco pulsaciones en menos de dos segundos, ver
-            js/admin.js). La clase debe seguir AQUÍ, en el contenedor: los
-            clics sobre la imagen burbujean hasta él. Si se quita la clase o se
-            mueve al <img>, se pierde la única forma de entrar al modo admin.
-          -->
           <span class="topbar__mark" aria-hidden="true">
             <img class="topbar__logo" src="/img/logo.png" alt="" width="36" height="36" />
           </span>
@@ -63,11 +56,9 @@
         <!--
           Controles de la cabecera, agrupados a la derecha.
 
-          El selector de idioma y el de tema viven JUNTOS y fuera de
-          `.topbar__brand` a propósito: `.topbar__mark` es el objetivo del
-          gesto oculto de admin (cinco clics), así que nada clicable puede
-          acabar dentro de él ni cerca, o los clics se repartirían y el gesto
-          dejaría de dispararse.
+          El selector de idioma y el de tema viven JUNTOS, con su propio
+          contenedor, para que la cabecera no acabe siendo una fila de
+          botones sueltos.
         -->
         <div class="topbar__controls">
           <div

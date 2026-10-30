@@ -51,14 +51,6 @@ export const en = {
   'copiar.urlCopiada': 'URL copied',
   'copiar.fallo': 'Could not copy',
 
-  /* ── Admin mode ────────────────────────────────────────────────── */
-  'admin.desbloquear.titulo': 'Unlock saved setups',
-  'admin.contrasena': 'Password:',
-  'admin.desbloqueadas': 'Saved setups unlocked',
-  'admin.bloqueadas': 'Saved setups locked',
-  'admin.incorrecta': 'Wrong password',
-  'admin.demasiados': 'Too many attempts. Wait a minute.',
-
   /* ── Modal dialog (own prompt/confirm) ──────────────────────────── */
   'dialogo.aceptar': 'Accept',
   'dialogo.cancelar': 'Cancel',

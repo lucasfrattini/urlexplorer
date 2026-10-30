@@ -26,15 +26,9 @@ services:
       # en el tmpfs.
       HOME: /tmp
       BROWSER_USER_DATA_DIR: /tmp/chromium-data
-      # Token del modo admin, tomado del .env del HOST por interpolación de
-      # Compose. Se hace así y no escribiéndolo aquí porque compose.yaml SÍ se
-      # versiona: poner el valor sería publicarlo. El `:-` deja el modo
-      # deshabilitado (rutas /api/admin/* en 404) si no hay .env, que es el
-      # comportamiento correcto para una instalación nueva.
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
 
     volumes:
-      # Configuraciones guardadas del modo admin.
+      # Configuraciones guardadas.
       #
       # Hace falta un montaje por dos motivos, y los dos importan:
       #
@@ -46,7 +40,7 @@ services:
       #      más facilidad de la que parece. Por eso `data` está también en
       #      .dockerignore y solo aparece en tiempo de ejecución.
       #
-      # Sin esto el modo admin arranca sin dar ningún error y no guarda nada.
+      # Sin esto la app arranca sin dar ningún error y no guarda nada.
       - ./data:/app/data
 
     # Chromium usa /dev/shm intensivamente. Los 64 MB por defecto de Docker

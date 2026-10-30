@@ -243,9 +243,6 @@ a {
  *
  * La alternativa —recolorear el logo en oscuro con un filtro CSS— se
  * descartó: cambia los colores de la marca y ensucia el turquesa.
- *
- * NOTA: este elemento es el objetivo del gesto oculto de admin. No quitar la
- * clase ni cambiar el elemento sin mirar js/admin.js.
  */
 .topbar__mark {
   display: grid;
@@ -349,10 +346,7 @@ a {
  * Controles de la derecha: idioma y tema, agrupados.
  *
  * Van juntos y con su propio contenedor para que la cabecera no acabe siendo
- * una fila de botones sueltos según se añadan cosas. Fuera de
- * `.topbar__brand`: ahí vive `.topbar__mark`, que es el objetivo del gesto
- * oculto de admin, y meterle controles clicables al lado repartiría los
- * clics del gesto.
+ * una fila de botones sueltos según se añadan cosas.
  */
 .topbar__controls {
   display: flex;
@@ -2407,20 +2401,15 @@ a {
 }
 
 /*
- * Controles que solo existen con la sesión desbloqueada. Van en su propio
- * contenedor flex para que, al ocultarlos, la barra siga alineando bien lo
- * que queda visible ("Copiar enlace").
+ * Desplegable y botones de las configuraciones guardadas, en su propio
+ * contenedor flex para que "Copiar enlace" quede alineado a su lado.
  */
-.profiles__admin {
+.profiles__saved {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   flex: 1;
-}
-
-.profiles__admin[hidden] {
-  display: none;
 }
 
 .profiles__label {

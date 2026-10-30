@@ -12,8 +12,7 @@ const logger = require('../lib/logger');
  *
  * Antes vivían como una constante en `public/js/components/profiles.js`, es
  * decir: se servían a cualquiera que abriese la aplicación Y estaban en el
- * repositorio. Ahora viven en un fichero JSON fuera del control de versiones
- * al que solo se llega con el token de admin.
+ * repositorio. Ahora viven en un fichero JSON fuera del control de versiones.
  *
  * El fichero puede no existir: una instalación nueva arranca sin perfiles y
  * eso es el comportamiento correcto, no un error.
@@ -40,8 +39,7 @@ const MAX_VALUE_LENGTH = 2048;
 /**
  * Normaliza un perfil recibido del cliente.
  *
- * Se hace en el servidor a propósito: ocultar el botón de guardar en el
- * frontend no es una defensa, así que lo que llega se valida aquí aunque el
+ * Se hace en el servidor a propósito: lo que llega se valida aquí aunque el
  * cliente ya lo haya filtrado.
  */
 function sanitizeProfile(raw) {
@@ -70,7 +68,7 @@ function sanitizeProfile(raw) {
 async function readProfiles() {
   let raw;
   try {
-    raw = await fs.readFile(config.admin.profilesPath, 'utf8');
+    raw = await fs.readFile(config.profiles.path, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT') return [];
     logger.error('No se pudo leer el fichero de perfiles', { error: error.message });
@@ -85,7 +83,7 @@ async function readProfiles() {
     // por "no hay perfiles": si se devolviera vacío, el siguiente guardado
     // sobreescribiría en silencio unos perfiles que sí existían.
     logger.error('El fichero de perfiles no es JSON válido', {
-      path: config.admin.profilesPath,
+      path: config.profiles.path,
     });
     throw new AppError(
       'El fichero de perfiles está corrupto. Revísalo o bórralo para empezar de cero.',
@@ -114,15 +112,15 @@ async function writeProfiles(rawProfiles) {
 
   const profiles = rawProfiles.map(sanitizeProfile).filter(Boolean);
 
-  if (profiles.length > config.admin.maxProfiles) {
+  if (profiles.length > config.profiles.maxProfiles) {
     throw new AppError(
-      `Demasiados perfiles: el máximo es ${config.admin.maxProfiles}`,
+      `Demasiados perfiles: el máximo es ${config.profiles.maxProfiles}`,
       400,
       'TOO_MANY_PROFILES'
     );
   }
 
-  const target = config.admin.profilesPath;
+  const target = config.profiles.path;
   const payload = JSON.stringify({ version: 1, profiles }, null, 2);
 
   try {

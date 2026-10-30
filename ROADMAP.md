@@ -5,7 +5,7 @@
 > Continúa a `IDEAS.md`, que fue el análisis inicial. Lo que allí se propuso y
 > ya está construido no se repite: autodetección de configuración, patrones
 > con expresión regular, tamaño desde la ficha, scroll infinito, sistema de
-> extensiones por sitio y modo admin están hechos. Aquí queda **lo que sigue
+> extensiones por sitio y configuraciones guardadas están hechos. Aquí queda **lo que sigue
 > pendiente de aquel análisis** más **lo que se ha aprendido usando la
 > herramienta y trabajando en su código**, que es de donde salen casi todas
 > las ideas nuevas.
@@ -177,10 +177,10 @@ una extensión es ejecutarla, así que no se puede abrir a nadie más.
 
 **Qué haría.** Un formato declarativo —JSON con selectores y transformaciones—
 interpretado por el núcleo. Sin código ejecutable: se pueden guardar en
-`data/`, editarse desde el modo admin y compartirse sin riesgo.
+`data/`, editarse desde la interfaz y compartirse sin riesgo.
 
 **Módulos.** Nuevo intérprete en `services/`; `services/extensions.js` como
-referencia del contrato; modo admin para editarlas.
+referencia del contrato; UI para editarlas.
 
 **Esfuerzo.** Alto. Una semana.
 
@@ -271,14 +271,14 @@ si se hace al revés.
 
 _(viene de `IDEAS.md` AG-3)_
 
-**Problema.** El modo admin es un gate para que la herramienta aparezca en
-blanco, no un sistema de usuarios. Está dicho abiertamente y es honesto, pero
-limita el uso a una máquina compartida por gente que se conoce.
+**Problema.** No hay usuarios: quien abre la instancia ve y puede cambiar
+todas las configuraciones guardadas. Vale para una instalación propia o de un
+equipo que se conoce, no para abrirla a cualquiera.
 
 **Qué haría.** Usuarios, sesiones, permisos y perfiles por usuario.
 
-**Módulos.** Prácticamente todo el backend; `middleware/adminAuth.js`
-desaparecería en favor de autenticación real.
+**Módulos.** Prácticamente todo el backend: un middleware de autenticación
+nuevo delante de las rutas.
 
 **Esfuerzo.** Muy alto.
 

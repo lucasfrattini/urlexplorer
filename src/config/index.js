@@ -194,9 +194,7 @@ const config = {
      * Estaba en `true`, que significa "confía en CUALQUIERA". Como `req.ip`
      * sale de esa cabecera y el rate limiting va por `req.ip`, cualquier
      * cliente podía mandar una X-Forwarded-For distinta en cada petición y
-     * saltarse el límite por completo — incluido el de 5 intentos por minuto
-     * del desbloqueo de admin, que es lo único que frena la fuerza bruta
-     * contra ADMIN_TOKEN. Medido: 0 bloqueos en 40 peticiones rotando la
+     * saltarse el límite por completo. Medido: 0 bloqueos en 40 peticiones rotando la
      * cabecera, frente a 10 de 40 con la misma IP.
      *
      * Por defecto `false`: no se cree la cabecera a nadie.
@@ -217,25 +215,13 @@ const config = {
     },
   },
 
-  admin: {
-    // Token que desbloquea los perfiles guardados. Vacío ⇒ modo admin
-    // deshabilitado: la aplicación funciona igual pero sin perfiles para
-    // nadie, y los endpoints de admin responden 404 en vez de 401 (no tiene
-    // sentido anunciar una puerta que no existe).
-    token: process.env.ADMIN_TOKEN || '',
-    // Fichero de perfiles, FUERA del control de versiones. Es lo que mantiene
-    // los nombres de los sitios fuera del repositorio.
-    profilesPath:
-      process.env.ADMIN_PROFILES_PATH || path.join(__dirname, '..', '..', 'data', 'profiles.json'),
-    // Rate limiting propio, mucho más estricto que el general: es el único
-    // endpoint donde tiene sentido intentar fuerza bruta.
-    unlockRateLimit: {
-      windowMs: intFromEnv('ADMIN_UNLOCK_WINDOW_MS', 60 * 1000),
-      maxRequests: intFromEnv('ADMIN_UNLOCK_MAX_ATTEMPTS', 5),
-    },
-    // Tope de perfiles y de tamaño del fichero guardado: el body ya está
-    // limitado a 64kb, esto acota además lo que se acepta persistir.
-    maxProfiles: intFromEnv('ADMIN_MAX_PROFILES', 100),
+  profiles: {
+    // Configuraciones guardadas, FUERA del control de versiones: cada
+    // instalación tiene las suyas y no acaban en el repositorio.
+    path: process.env.PROFILES_PATH || path.join(__dirname, '..', '..', 'data', 'profiles.json'),
+    // Tope de perfiles: el body ya está limitado a 64kb, esto acota además
+    // lo que se acepta persistir.
+    maxProfiles: intFromEnv('MAX_PROFILES', 100),
   },
 
   /**

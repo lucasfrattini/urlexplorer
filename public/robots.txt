@@ -3,6 +3,7 @@
 # —que no salga en buscadores— y quien la aloje puede cambiarlo.
 #
 # Ojo: robots.txt es una petición, no un control de acceso. Lo que protege una
-# instancia expuesta es el rate limiting y el token de admin, no esto.
+# instancia expuesta es el rate limiting y lo que pongas delante (un proxy con
+# autenticación, una VPN), no esto.
 User-agent: *
 Disallow: /

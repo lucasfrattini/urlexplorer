@@ -124,8 +124,8 @@ como aproximado cuando venga del HTML.
 los resultados, se pierden veinte minutos de crawl.
 
 **Qué haría.** Guardar las últimas N exploraciones (configuración + resultados)
-y poder reabrirlas. Al principio en el navegador; con el modo admin, en el
-servidor.
+y poder reabrirlas. Al principio en el navegador; después, en el servidor,
+como las configuraciones guardadas.
 
 **Módulos.** Nuevo componente de UI; con backend, nueva ruta y almacenamiento.
 

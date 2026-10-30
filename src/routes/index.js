@@ -5,7 +5,7 @@ const express = require('express');
 const config = require('../config');
 const scrapeRoutes = require('./scrape');
 const videoRoutes = require('./video');
-const adminRoutes = require('./admin');
+const profileRoutes = require('./profiles');
 
 const router = express.Router();
 
@@ -28,9 +28,6 @@ router.get('/health', (req, res) => {
 
 router.use(scrapeRoutes);
 router.use(videoRoutes);
-
-// /health NO anuncia si el modo admin existe: eso delataría que hay una
-// puerta. Con el token sin configurar, sus rutas responden 404.
-router.use(adminRoutes);
+router.use(profileRoutes);
 
 module.exports = router;

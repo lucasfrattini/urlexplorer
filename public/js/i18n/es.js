@@ -51,14 +51,6 @@ export const es = {
   'copiar.urlCopiada': 'URL copiada',
   'copiar.fallo': 'No se pudo copiar',
 
-  /* ── Modo admin ────────────────────────────────────────────────── */
-  'admin.desbloquear.titulo': 'Desbloquear configuraciones',
-  'admin.contrasena': 'Contraseña:',
-  'admin.desbloqueadas': 'Configuraciones desbloqueadas',
-  'admin.bloqueadas': 'Configuraciones bloqueadas',
-  'admin.incorrecta': 'Contraseña incorrecta',
-  'admin.demasiados': 'Demasiados intentos. Espera un minuto.',
-
   /* ── Diálogo modal (prompt/confirm propios) ─────────────────────── */
   'dialogo.aceptar': 'Aceptar',
   'dialogo.cancelar': 'Cancelar',

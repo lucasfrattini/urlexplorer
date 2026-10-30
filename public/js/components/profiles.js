@@ -1,6 +1,5 @@
-import { el, toast, copyToClipboard, show } from '../dom.js';
-import { getAdminProfiles, saveAdminProfiles } from '../api.js';
-import { isUnlocked, onAdminChange } from '../admin.js';
+import { el, toast, copyToClipboard } from '../dom.js';
+import { getProfiles, saveProfiles } from '../api.js';
 import { t, texto, atributo, alCambiarIdioma } from '../i18n/index.js';
 import { promptDialog, confirmDialog } from './dialog.js';
 
@@ -10,11 +9,8 @@ import { promptDialog, confirmDialog } from './dialog.js';
  * Este módulo NO contiene ningún sitio. Antes llevaba una constante con los
  * perfiles preconfigurados, lo que significaba servírselos a cualquiera que
  * abriese la aplicación y, peor, tenerlos en el repositorio. Ahora viven en el
- * servidor (`data/profiles.json`, fuera del control de versiones) y solo se
- * piden cuando la sesión está desbloqueada.
- *
- * Con la sesión bloqueada la barra entera está oculta: sin desplegable y sin
- * botón de guardar. Es el estado por defecto.
+ * servidor (`data/profiles.json`, fuera del control de versiones), así que
+ * cada instalación arranca sin ninguna y tiene solo las que guarde.
  */
 
 /** Campos que forman parte de una configuración compartible. */
@@ -35,9 +31,7 @@ export const CONFIG_KEYS = [
  * Lee una configuración de la query string de la página.
  *
  * Permite abrir la app con todo relleno desde un enlace, que es lo que hace
- * que una configuración se pueda guardar en marcadores o compartir. Funciona
- * con la sesión bloqueada: el enlace lo trae quien lo abre, no revela nada
- * que estuviera guardado en el servidor.
+ * que una configuración se pueda guardar en marcadores o compartir.
  */
 export function configFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -147,7 +141,7 @@ export function createProfileBar({ getConfig, applyConfig }) {
   /** Persiste la lista completa. El servidor revalida lo que llega. */
   async function persist(next) {
     try {
-      const result = await saveAdminProfiles(next);
+      const result = await saveProfiles(next);
       profiles = result.profiles || [];
       return true;
     } catch (error) {
@@ -216,14 +210,8 @@ export function createProfileBar({ getConfig, applyConfig }) {
   }
 
   async function load() {
-    if (!isUnlocked()) {
-      profiles = [];
-      refreshSelect('');
-      return;
-    }
-
     try {
-      const result = await getAdminProfiles();
+      const result = await getProfiles();
       profiles = result.profiles || [];
     } catch (error) {
       profiles = [];
@@ -232,12 +220,8 @@ export function createProfileBar({ getConfig, applyConfig }) {
     refreshSelect();
   }
 
-  // Lo que solo tiene sentido con la sesión desbloqueada. "Copiar enlace" se
-  // queda fuera a propósito: comparte la configuración que el usuario tiene
-  // delante y no revela nada de lo guardado en el servidor, así que sirve
-  // igual con la sesión bloqueada.
-  const adminControls = el('div', {
-    className: 'profiles__admin',
+  const savedControls = el('div', {
+    className: 'profiles__saved',
     children: [
       texto(el('span', { className: 'profiles__label' }), 'perfiles.etiqueta'),
       select,
@@ -248,24 +232,14 @@ export function createProfileBar({ getConfig, applyConfig }) {
 
   const root = el('div', {
     className: 'profiles',
-    children: [adminControls, linkButton, note],
+    children: [savedControls, linkButton, note],
   });
-
-  // Estado por defecto: bloqueado. Solo el desbloqueo lo hace aparecer.
-  show(adminControls, false);
 
   // La opcion "elige una" del desplegable es texto traducido dentro de una
   // lista que se reconstruye: se rehace entera al cambiar de idioma.
   alCambiarIdioma(() => refreshSelect());
 
-  onAdminChange(unlocked => {
-    show(adminControls, unlocked);
-    if (!unlocked) {
-      note.hidden = true;
-      note.textContent = '';
-    }
-    load();
-  });
+  load();
 
   return { root, refresh: load };
 }

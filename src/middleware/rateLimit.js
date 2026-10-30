@@ -15,17 +15,6 @@ function createRateLimiter(options = {}) {
   const windowMs = options.windowMs ?? config.security.rateLimit.windowMs;
   const maxRequests = options.maxRequests ?? config.security.rateLimit.maxRequests;
 
-  /**
-   * Identificar por la dirección REAL del socket, ignorando X-Forwarded-For.
-   *
-   * Defensa en profundidad para el desbloqueo de admin: `req.ip` depende de
-   * `trust proxy`, y si algún día alguien lo pone en `true` para depurar, el
-   * límite de 5 intentos por minuto —lo único que frena la fuerza bruta
-   * contra ADMIN_TOKEN— se vuelve inútil sin que nada avise. El contador de
-   * intentos de contraseña no debe depender de un ajuste de red.
-   */
-  const useSocketAddress = options.useSocketAddress === true;
-
   /** @type {Map<string, number[]>} */
   const hits = new Map();
 
@@ -41,9 +30,7 @@ function createRateLimiter(options = {}) {
   cleanup.unref?.();
 
   return function rateLimit(req, res, next) {
-    const key = useSocketAddress
-      ? req.socket?.remoteAddress || 'unknown'
-      : req.ip || req.socket?.remoteAddress || 'unknown';
+    const key = req.ip || req.socket?.remoteAddress || 'unknown';
     const now = Date.now();
     const cutoff = now - windowMs;
 

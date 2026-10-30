@@ -35,9 +35,6 @@ test('el rate limit NO se salta rotando X-Forwarded-For', async t => {
    * Medido con el código anterior: 0 bloqueos en 40 peticiones rotando la
    * cabecera, frente a 10 de 40 con la misma IP. Es decir: el límite no
    * existía para nadie que supiera mandar una cabecera.
-   *
-   * Importa porque el mismo mecanismo protege /api/admin/unlock, que es lo
-   * único que frena la fuerza bruta contra ADMIN_TOKEN.
    */
   const app = createApp();
   const { url, cerrar } = await levantar(app);
@@ -110,38 +107,4 @@ test('secureLookup deja pasar una IP pública y respeta la firma de dns.lookup',
   });
   assert.strictEqual(typeof sinAll.address, 'string', 'sin all debe devolver una sola dirección');
   assert.ok([4, 6].includes(sinAll.family));
-});
-
-test('el limitador de admin identifica por socket, no por cabecera', async () => {
-  // Defensa en profundidad: aunque trust proxy se configure mal, el contador
-  // de intentos de contraseña no debe poder falsearse.
-  const { createRateLimiter } = require('../src/middleware/rateLimit');
-  const limitador = createRateLimiter({
-    windowMs: 60000,
-    maxRequests: 2,
-    useSocketAddress: true,
-  });
-
-  const peticion = ip => ({
-    ip, // lo que diría X-Forwarded-For si se confiara en ella
-    socket: { remoteAddress: '10.0.0.1' }, // el peer real, siempre el mismo
-    get: () => undefined,
-  });
-  const respuesta = { set: () => {} };
-
-  const resultados = [];
-  for (let i = 0; i < 5; i += 1) {
-    await new Promise(resolve => {
-      limitador(peticion(`9.9.9.${i}`), respuesta, error => {
-        // AppError expone `statusCode`, no `status`
-        resultados.push(error?.statusCode ?? 200);
-        resolve();
-      });
-    });
-  }
-
-  assert.ok(
-    resultados.includes(429),
-    'cambiar la IP declarada no debe reiniciar el contador de intentos'
-  );
 });

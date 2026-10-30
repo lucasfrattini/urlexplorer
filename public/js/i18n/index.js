@@ -79,7 +79,7 @@ function idiomasDelNavegador() {
  *
  * La elección manual manda sobre la detección, pero solo dentro de la
  * sesión: va en `sessionStorage`, nunca en `localStorage` ni en una cookie,
- * igual que el token de admin y el formulario recordado. Varias personas
+ * igual que el formulario recordado. Varias personas
  * comparten este ordenador; al cerrar la pestaña se vuelve a detectar.
  */
 function idiomaInicial() {

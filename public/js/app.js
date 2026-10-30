@@ -1,9 +1,7 @@
-import { getHealth, adminUnlock } from './api.js';
+import { getHealth } from './api.js';
 import { createExplorerView } from './views/explorer.js';
 import { createVideoView } from './views/video.js';
-import { attachSecretGesture, setAdminToken, clearAdminToken, isUnlocked } from './admin.js';
 import { toast } from './dom.js';
-import { promptDialog } from './components/dialog.js';
 import {
   t,
   IDIOMAS,
@@ -161,48 +159,6 @@ function initRouter(views) {
   });
 }
 
-/* ── Desbloqueo de administración ──────────────────────────────────── */
-
-/**
- * Gesto oculto: cinco pulsaciones sobre el logo en menos de dos segundos.
- *
- * Nada en el HTML lo insinúa, así que inspeccionar la página no lo revela.
- * Estando ya desbloqueada la sesión, el mismo gesto vuelve a bloquearla: es
- * la forma de dejar la herramienta en blanco antes de levantarse del sitio
- * sin tener que cerrar la pestaña.
- */
-function initAdminGesture() {
-  const logo = document.querySelector('.topbar__mark');
-
-  attachSecretGesture(logo, async () => {
-    if (isUnlocked()) {
-      clearAdminToken();
-      toast(t('admin.bloqueadas'));
-      return;
-    }
-
-    const password = await promptDialog({
-      titleKey: 'admin.desbloquear.titulo',
-      labelKey: 'admin.contrasena',
-      inputType: 'password',
-    });
-    if (password === null || password.trim() === '') return;
-
-    try {
-      await adminUnlock(password);
-      // Solo se guarda DESPUÉS de que el servidor lo valide: así en
-      // sessionStorage nunca queda un token que no sirve.
-      setAdminToken(password);
-      toast(t('admin.desbloqueadas'));
-    } catch (error) {
-      // Un 404 significa que no hay ADMIN_TOKEN configurado. Se responde lo
-      // mismo que ante una contraseña incorrecta para no confirmar si la
-      // funcionalidad existe siquiera.
-      toast(t(error.status === 429 ? 'admin.demasiados' : 'admin.incorrecta'), 'error');
-    }
-  });
-}
-
 /* ── Estado del servicio ───────────────────────────────────────────── */
 
 async function initHealth() {
@@ -257,7 +213,6 @@ async function main() {
   traducirDocumento();
   initLanguage();
   initTheme();
-  initAdminGesture();
 
   const limits = { ...DEFAULT_LIMITS, ...(await initHealth()) };
 
